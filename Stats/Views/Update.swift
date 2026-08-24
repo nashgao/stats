@@ -299,6 +299,8 @@ private class UpdateView: NSView {
     }
     
     @objc private func install() {
+        guard !isCustomBuild else { return }
+
         updater.install(path: self.path) { error in
             if let error {
                 showAlert("Error update Stats", error, .critical)

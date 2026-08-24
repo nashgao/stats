@@ -177,6 +177,8 @@ extension AppDelegate {
     }
     
     internal func checkForNewVersion(silent: Bool = false) {
+        guard !isCustomBuild else { return }
+
         updater.check { result, error in
             if error != nil {
                 debug("error updater.check(): \(error!.localizedDescription)")

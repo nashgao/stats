@@ -275,7 +275,7 @@ class ApplicationSettings: NSStackView {
         let statsName: NSTextField = TextView(frame: NSRect(x: 0, y: 0, width: view.frame.width, height: 22))
         statsName.alignment = .center
         statsName.font = NSFont.systemFont(ofSize: 20, weight: .regular)
-        statsName.stringValue = "Stats"
+        statsName.stringValue = isCustomBuild ? "Stats Custom" : "Stats"
         statsName.isSelectable = true
         
         let versionNumber = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as! String
@@ -289,10 +289,11 @@ class ApplicationSettings: NSStackView {
         statsVersion.toolTip = "\(localizedString("Build number")) \(buildNumber)"
         
         let updateButton: NSButton = NSButton()
-        updateButton.title = localizedString("Check for update")
+        updateButton.title = isCustomBuild ? "Updates disabled for custom build" : localizedString("Check for update")
         updateButton.bezelStyle = .rounded
         updateButton.target = self
         updateButton.action = #selector(self.updateAction)
+        updateButton.isEnabled = !isCustomBuild
         
         container.addRow(with: [iconView])
         container.addRow(with: [statsName])
@@ -311,6 +312,8 @@ class ApplicationSettings: NSStackView {
     // MARK: - actions
     
     @objc private func updateAction() {
+        guard !isCustomBuild else { return }
+
         updater.check(force: true, completion: { result, error in
             if error != nil {
                 debug("error updater.check(): \(error!.localizedDescription)")

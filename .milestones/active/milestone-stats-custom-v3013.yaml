@@ -1,0 +1,60 @@
+id: "milestone-stats-custom-v3013"
+title: "Stats Custom v3.0.13 Foundation"
+description: "Move the local Stats customization to a pinned v3.0.13 base, reconcile the watts fix, prevent upstream self-replacement, and consolidate to one local branch and worktree."
+priority: "high"
+category: "feature"
+
+success_criteria:
+  - "The repository has exactly one local branch and one worktree."
+  - "The branch is based on upstream v3.0.13 and preserves the required watts-reader behavior without duplicating the upstream wake fix."
+  - "The custom app cannot self-update over itself from the upstream Stats release feed."
+  - "Tests and a local app build pass, followed by a real launch smoke check."
+
+deliverables:
+  - name: "Consolidated custom branch"
+    type: "code"
+    acceptance_criteria:
+      - "Pinned to v3.0.13 before local changes"
+      - "Exactly one local branch and worktree"
+  - name: "Reconciled watts reader"
+    type: "code"
+    acceptance_criteria:
+      - "Uses upstream system-uptime wake handling"
+      - "Retains only distinct validated stale-sample protections"
+  - name: "Protected custom build"
+    type: "code"
+    acceptance_criteria:
+      - "Upstream self-update installation is disabled for the custom app"
+  - name: "Verification evidence"
+    type: "test"
+    acceptance_criteria:
+      - "Relevant tests pass"
+      - "Application builds and launches locally"
+
+risks:
+  - description: "Applying the v3.0.4 working diff directly could overwrite v3.0.13 sensor concurrency and wake fixes."
+    probability: 0.7
+    impact: "high"
+    mitigation: "Port behavior manually against v3.0.13 instead of replacing whole files."
+  - description: "Changing the bundle identity could break the privileged SMC helper signing relationship."
+    probability: 0.6
+    impact: "high"
+    mitigation: "Disable upstream updating first and change identity only if the existing helper/build configuration remains valid."
+
+tasks:
+  - id: "task-001"
+    title: "Consolidate repository onto a v3.0.13 custom branch"
+    status: "completed"
+  - id: "task-002"
+    title: "Port and reconcile watts-reader behavior"
+    status: "completed"
+  - id: "task-003"
+    title: "Disable upstream self-replacement safely"
+    status: "completed"
+  - id: "task-004"
+    title: "Build, test, launch, and verify repository invariants"
+    status: "in_progress"
+
+progress:
+  current_phase: "verify"
+  overall_percentage: 75

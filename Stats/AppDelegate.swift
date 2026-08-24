@@ -23,6 +23,7 @@ import Clock
 import Remote
 
 let updater = Updater(github: "exelban/stats", url: "https://api.mac-stats.com/release/latest")
+let isCustomBuild = true
 var modules: [Module] = [
     CPU(),
     GPU(),
@@ -197,6 +198,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 didReceive response: UNNotificationResponse,
                                 withCompletionHandler completionHandler: @escaping () -> Void) {
+        guard !isCustomBuild else {
+            completionHandler()
+            return
+        }
+
         self.clickInNotification = true
         
         if let uri = response.notification.request.content.userInfo["url"] as? String {
