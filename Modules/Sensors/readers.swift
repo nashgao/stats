@@ -18,7 +18,7 @@ internal class SensorsReader: Reader<Sensors_List> {
     internal var list: Sensors_List = Sensors_List()
     
     private var lastRead: TimeInterval = ProcessInfo.processInfo.systemUptime
-    private let firstRead: TimeInterval = ProcessInfo.processInfo.systemUptime
+    private var totalSystemConsumptionDuration: TimeInterval = 0
     private var lastIOSensorsRead: Date? = nil
     
     private var HIDState: Bool {
@@ -29,6 +29,9 @@ internal class SensorsReader: Reader<Sensors_List> {
     private var channels: CFMutableDictionary? = nil
     private var subscription: IOReportSubscriptionRef? = nil
     private var powers: (CPU: Double, GPU: Double, ANE: Double, RAM: Double, PCI: Double) = (0.0, 0.0, 0.0, 0.0, 0.0)
+    private var stalePowerSampleThreshold: TimeInterval {
+        max((self.interval ?? Double(self.defaultInterval)) * 2, 120)
+    }
     
     init(callback: @escaping (T?) -> Void = {_ in }) {
         self.unknownSensorsState = Store.shared.bool(key: "Sensors_unknown", defaultValue: false)
@@ -231,12 +234,13 @@ internal class SensorsReader: Reader<Sensors_List> {
         if let PSTRSensor = sensors.first(where: { $0.key == "PSTR"}), PSTRSensor.value > 0 {
             let now = ProcessInfo.processInfo.systemUptime
             let sinceLastRead = now - self.lastRead
-            let sinceFirstRead = now - self.firstRead
             
-            if let totalIdx = sensors.firstIndex(where: {$0.key == "Total System Consumption"}), sinceLastRead > 0 {
+            if let totalIdx = sensors.firstIndex(where: {$0.key == "Total System Consumption"}),
+               sinceLastRead > 0 && sinceLastRead <= self.stalePowerSampleThreshold {
+                self.totalSystemConsumptionDuration += sinceLastRead
                 sensors[totalIdx].value += PSTRSensor.value * sinceLastRead / 3600
-                if let avgIdx = sensors.firstIndex(where: {$0.key == "Average System Total"}), sinceFirstRead > 0 {
-                    sensors[avgIdx].value = sensors[totalIdx].value * 3600 / sinceFirstRead
+                if let avgIdx = sensors.firstIndex(where: {$0.key == "Average System Total"}), self.totalSystemConsumptionDuration > 0 {
+                    sensors[avgIdx].value = sensors[totalIdx].value * 3600 / self.totalSystemConsumptionDuration
                 }
             }
             
@@ -600,6 +604,7 @@ extension SensorsReader {
         
         let elapsed = now.timeIntervalSince(lastIOSensorsRead)
         defer { self.lastIOSensorsRead = now }
+        guard elapsed <= self.stalePowerSampleThreshold else { return (0, 0, 0, 0, 0) }
         return (
             Self.appleSiliconPower(currentEnergy: self.powers.CPU, previousEnergy: prevCPU, elapsed: elapsed),
             Self.appleSiliconPower(currentEnergy: self.powers.GPU, previousEnergy: prevGPU, elapsed: elapsed),

@@ -13,7 +13,7 @@ import Cocoa
 import Kit
 
 internal class Settings: NSStackView, Settings_v {
-    private var updateIntervalValue: Int = 3
+    private var updateIntervalValue: Int = 1
     private var hidState: Bool
     private var fanSpeedState: Bool = false
     private var fansSyncState: Bool = false
@@ -29,7 +29,7 @@ internal class Settings: NSStackView, Settings_v {
     private let title: String
     private var list: [Sensor_p] = []
     private var sensorsPrefs: PreferencesSection?
-    private var selectedSensor: String = "Average System Total"
+    private var selectedSensor: String = "PSTR"
     
     public init(_ module: ModuleType) {
         self.title = module.stringValue

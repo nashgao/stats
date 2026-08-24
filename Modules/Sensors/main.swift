@@ -30,7 +30,7 @@ public class Sensors: Module {
         self.popupView = Popup()
         self.portalView = Portal(.sensors)
         self.notificationsView = Notifications(.sensors)
-        self.selectedSensor = Store.shared.string(key: "\(ModuleType.sensors.stringValue)_sensor", defaultValue: "Average System Total")
+        self.selectedSensor = Store.shared.string(key: "\(ModuleType.sensors.stringValue)_sensor", defaultValue: "PSTR")
         
         super.init(
             moduleType: .sensors,
@@ -112,7 +112,17 @@ public class Sensors: Module {
         activeWidgets.forEach { (w: SWidget) in
             switch w.item {
             case let widget as Mini:
-                if let active = value.sensors.first(where: { $0.key == self.selectedSensor }) {
+                var active = value.sensors.first(where: { $0.key == self.selectedSensor })
+                if active == nil {
+                    active = value.sensors.first(where: { $0.key == "PSTR" })
+                }
+                if active == nil {
+                    active = value.sensors.first(where: { $0.key == "Average System Total" })
+                }
+                if active == nil {
+                    active = value.sensors.first(where: { $0.type == .power })
+                }
+                if let active {
                     var value: Double = active.localValue/100
                     var unit: String = active.miniUnit
                     if let fan = active as? Fan, self.fanValueState == .percentage {
