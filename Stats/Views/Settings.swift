@@ -72,6 +72,9 @@ class SettingsWindow: NSWindow, NSWindowDelegate, NSToolbarDelegate {
         
         self.sidebarViewController.addSplitViewItem(sidebarItem)
         self.sidebarViewController.addSplitViewItem(contentItem)
+        if ProcessInfo.processInfo.environment["STATS_SIDEBAR_COLLAPSED"] == "1" {
+            sidebarItem.isCollapsed = true
+        }
         
         contentItem.minimumThickness = Constants.Design.contentMinimumWidth
         
@@ -84,6 +87,12 @@ class SettingsWindow: NSWindow, NSWindowDelegate, NSToolbarDelegate {
         
         self.toolbar = newToolbar
         self.contentViewController = self.sidebarViewController
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(splitViewDidResize),
+            name: NSSplitView.didResizeSubviewsNotification,
+            object: self.sidebarViewController.splitView
+        )
         self.titlebarAppearsTransparent = true
         if #unavailable(macOS 26.0) {
             self.backgroundColor = .clear
@@ -103,7 +112,7 @@ class SettingsWindow: NSWindow, NSWindowDelegate, NSToolbarDelegate {
             frame.size.height = max(frame.height, self.minSize.height)
             self.setFrame(frame, display: false)
         }
-        self.dashboard.adapt(to: self.frame.width)
+        self.adaptDashboardToContentWidth()
         
         let windowController = NSWindowController()
         windowController.window = self
@@ -117,11 +126,18 @@ class SettingsWindow: NSWindow, NSWindowDelegate, NSToolbarDelegate {
             ?? Store.shared.string(key: "settings_selected_destination", defaultValue: "Dashboard")
         let knownDestination = storedDestination == "Dashboard" || storedDestination == "Settings" || modules.contains(where: { $0.config.name == storedDestination })
         self.sidebarView.openMenu(knownDestination ? storedDestination : "Dashboard")
+        self.contentView?.layoutSubtreeIfNeeded()
+        self.adaptDashboardToContentWidth()
     }
     
     deinit {
         NotificationCenter.default.removeObserver(self, name: .openModuleSettings, object: nil)
         NotificationCenter.default.removeObserver(self, name: .toggleModule, object: nil)
+        NotificationCenter.default.removeObserver(
+            self,
+            name: NSSplitView.didResizeSubviewsNotification,
+            object: self.sidebarViewController.splitView
+        )
     }
     
     func windowWillClose(_ notification: Notification) {
@@ -132,7 +148,17 @@ class SettingsWindow: NSWindow, NSWindowDelegate, NSToolbarDelegate {
     }
 
     func windowDidResize(_ notification: Notification) {
-        self.dashboard.adapt(to: self.frame.width)
+        self.adaptDashboardToContentWidth()
+    }
+
+    @objc private func splitViewDidResize(_ notification: Notification) {
+        self.adaptDashboardToContentWidth()
+    }
+
+    private func adaptDashboardToContentWidth() {
+        let contentWidth = self.sidebarViewController.splitViewItems.last?.viewController.view.bounds.width
+            ?? self.mainView.bounds.width
+        self.dashboard.adapt(to: contentWidth)
     }
     
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
@@ -233,7 +259,8 @@ class SettingsWindow: NSWindow, NSWindowDelegate, NSToolbarDelegate {
             }
             
             self.title = localizedString(title)
-            if ProcessInfo.processInfo.environment["STATS_SETTINGS_DESTINATION"] == nil {
+            if ProcessInfo.processInfo.environment["STATS_SETTINGS_DESTINATION"] == nil,
+               ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil {
                 Store.shared.set(key: "settings_selected_destination", value: title)
             }
             
@@ -359,8 +386,6 @@ private class SidebarView: NSStackView {
         self.orientation = .vertical
         self.alignment = .width
         self.spacing = 0
-        self.widthAnchor.constraint(greaterThanOrEqualToConstant: Constants.Design.sidebarMinimumWidth).isActive = true
-        self.widthAnchor.constraint(lessThanOrEqualToConstant: Constants.Design.sidebarMaximumWidth).isActive = true
         
         let spacer = NSView()
         spacer.heightAnchor.constraint(equalToConstant: Constants.Design.space3).isActive = true
@@ -472,9 +497,9 @@ private class SidebarView: NSStackView {
         button.image = image
         button.imagePosition = .imageLeading
         button.imageHugsTitle = true
-        button.font = NSFont.systemFont(ofSize: 12, weight: .regular)
+        button.font = Constants.Design.secondaryFont
         button.horizontalPadding = Constants.Design.space2
-        button.contentTintColor = .secondaryLabelColor
+        button.contentTintColor = Constants.Design.textSecondary
         button.isBordered = false
         button.action = action
         button.target = self
@@ -487,9 +512,9 @@ private class SidebarView: NSStackView {
     
     private func supportView() -> NSViewController {
         let vc: NSViewController = NSViewController(nibName: nil, bundle: nil)
-        let view: NSStackView = NSStackView(frame: NSRect(x: 0, y: 0, width: 220, height: 54))
-        view.spacing = 10
-        view.edgeInsets = NSEdgeInsets(top: 0, left: 15, bottom: 0, right: 0)
+        let view: NSStackView = NSStackView(frame: NSRect(origin: .zero, size: Constants.Design.supportPopoverSize))
+        view.spacing = Constants.Design.space2
+        view.edgeInsets = NSEdgeInsets(top: 0, left: Constants.Design.space4, bottom: 0, right: 0)
         view.orientation = .horizontal
         
         let systemStats = SupportButtonView(name: "System Stats", image: "AppIcon", action: {
@@ -572,7 +597,7 @@ private class MenuItem: NSButtonWithPadding {
         self.imageHugsTitle = true
         self.imageScaling = .scaleProportionallyDown
         self.alignment = .left
-        self.font = NSFont.systemFont(ofSize: 13, weight: .regular)
+        self.font = Constants.Design.bodyFont
         self.horizontalPadding = Constants.Design.space4
         self.target = self
         self.action = #selector(selectDestination)
@@ -638,7 +663,7 @@ private class MenuItem: NSButtonWithPadding {
         self.attributedTitle = NSAttributedString(
             string: localizedString(self.destination),
             attributes: [
-                .font: NSFont.systemFont(ofSize: 13, weight: self.active ? .medium : .regular),
+                .font: self.active ? Constants.Design.bodyEmphasisFont : Constants.Design.bodyFont,
                 .foregroundColor: color
             ]
         )

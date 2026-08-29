@@ -276,7 +276,9 @@ internal class PopupView: NSView {
     }
     
     override func updateLayer() {
-        self.background.layer?.backgroundColor = self.isDarkMode ? .clear : NSColor.white.cgColor
+        self.background.layer?.backgroundColor = self.isDarkMode
+            ? .clear
+            : Constants.Design.surfaceElevated.cgColor
     }
     
     fileprivate func setView(_ view: Popup_p?) {
@@ -425,7 +427,7 @@ internal class HeaderView: NSStackView {
         title.backgroundColor = .clear
         title.canDrawSubviewsIntoLayer = true
         title.alignment = .center
-        title.font = NSFont.systemFont(ofSize: 14, weight: .semibold)
+        title.font = Constants.Design.sectionTitleFont
         title.stringValue = ""
         self.titleView = title
         

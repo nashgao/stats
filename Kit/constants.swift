@@ -42,12 +42,47 @@ public struct Design_c_s {
     public let navigationRowHeight: CGFloat = 36
     public let minimumControlSize: CGFloat = 32
 
+    public let separatorOpacity: CGFloat = 0.55
+    public let hairlineWidth: CGFloat = 1
+    public let trendLineWidth: CGFloat = 2
+
+    public let metricTrendHeight: CGFloat = 38
+    public let metricCardHeight: CGFloat = 148
+    public let metricCardMinimumWidth: CGFloat = 220
+    public let healthRibbonItemHeight: CGFloat = 52
+    public let healthRibbonHeight: CGFloat = 128
+    public let healthRibbonColumns: Int = 3
+    public let deviceIconSize: CGFloat = 58
+    public let supportPopoverSize = CGSize(width: 220, height: 56)
+
     public let sidebarWidth: CGFloat = 184
     public let sidebarMinimumWidth: CGFloat = 168
     public let sidebarMaximumWidth: CGFloat = 240
     public let contentMinimumWidth: CGFloat = 560
+    public let dashboardTwoColumnMinimumWidth: CGFloat = 656
+    public let dashboardThreeColumnMinimumWidth: CGFloat = 900
     public let settingsDefaultSize = CGSize(width: 900, height: 620)
     public let settingsMinimumSize = CGSize(width: 760, height: 520)
+
+    public var surfaceSecondary: NSColor { .underPageBackgroundColor }
+    public var surfaceElevated: NSColor { .windowBackgroundColor }
+    public var textSecondary: NSColor { .secondaryLabelColor }
+    public var separatorSubtle: NSColor { .separatorColor }
+    public var accentPrimary: NSColor { .controlAccentColor }
+    public var statusHealthy: NSColor { .systemGreen }
+    public var statusAttention: NSColor { .systemOrange }
+    public var statusCritical: NSColor { .systemRed }
+
+    public var healthHeadlineFont: NSFont { .systemFont(ofSize: 24, weight: .semibold) }
+    public var metricValueFont: NSFont { .monospacedDigitSystemFont(ofSize: 20, weight: .semibold) }
+    public var compactMetricValueFont: NSFont { .monospacedDigitSystemFont(ofSize: 14, weight: .semibold) }
+    public var sectionTitleFont: NSFont { .systemFont(ofSize: 15, weight: .semibold) }
+    public var bodyFont: NSFont { .systemFont(ofSize: 13, weight: .regular) }
+    public var bodyEmphasisFont: NSFont { .systemFont(ofSize: 13, weight: .medium) }
+    public var secondaryFont: NSFont { .systemFont(ofSize: 12, weight: .regular) }
+    public var secondaryEmphasisFont: NSFont { .systemFont(ofSize: 12, weight: .medium) }
+    public var captionFont: NSFont { .systemFont(ofSize: 11, weight: .medium) }
+    public var captionRegularFont: NSFont { .systemFont(ofSize: 11, weight: .regular) }
 }
 
 public struct Widget_c_s {

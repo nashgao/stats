@@ -65,6 +65,23 @@ class KitTests: XCTestCase {
             buttons.contains { $0.accessibilityLabel() == label && $0.focusRingType == .default }
         })
 
+        let dashboardButton = try XCTUnwrap(navigation.first { $0.accessibilityLabel() == "Dashboard" })
+        window.makeFirstResponder(dashboardButton)
+        let arrowDown = try XCTUnwrap(NSEvent.keyEvent(
+            with: .keyDown,
+            location: .zero,
+            modifierFlags: [],
+            timestamp: 0,
+            windowNumber: window.windowNumber,
+            context: nil,
+            characters: "",
+            charactersIgnoringModifiers: "",
+            isARepeat: false,
+            keyCode: 125
+        ))
+        dashboardButton.keyDown(with: arrowDown)
+        XCTAssertEqual(window.title, localizedString("Settings"))
+
         window.open(module: "Settings")
         window.contentView?.layoutSubtreeIfNeeded()
         XCTAssertTrue(window.toolbar?.items.contains(where: { $0.itemIdentifier == .toggleSidebar }) == true)
@@ -75,6 +92,54 @@ class KitTests: XCTestCase {
             assertVisible(button, in: contentView)
         }
         assertVisible(try XCTUnwrap(navigation.first { $0.accessibilityLabel() == "Settings" }), in: contentView)
+    }
+
+    @MainActor
+    func testSettingsSidebar_collapseReclaimsDashboardWidth() throws {
+        func descendants(of view: NSView) -> [NSView] {
+            view.subviews + view.subviews.flatMap(descendants)
+        }
+
+        let window = SettingsWindow()
+        defer { window.close() }
+        window.setFrame(
+            NSRect(origin: window.frame.origin, size: Constants.Design.settingsDefaultSize),
+            display: false
+        )
+        window.open(module: "Dashboard")
+        window.contentView?.layoutSubtreeIfNeeded()
+
+        let splitController = try XCTUnwrap(window.contentViewController as? NSSplitViewController)
+        let sidebarItem = try XCTUnwrap(splitController.splitViewItems.first)
+        let contentItem = try XCTUnwrap(splitController.splitViewItems.last)
+        let dashboard = try XCTUnwrap(
+            descendants(of: contentItem.viewController.view).first { $0 is Dashboard } as? Dashboard
+        )
+        let expandedContentWidth = contentItem.viewController.view.bounds.width
+        XCTAssertEqual(dashboard.cardColumnCount, 2)
+
+        sidebarItem.isCollapsed = true
+        splitController.view.layoutSubtreeIfNeeded()
+        window.contentView?.layoutSubtreeIfNeeded()
+        dashboard.layoutSubtreeIfNeeded()
+
+        let collapsedContentWidth = contentItem.viewController.view.bounds.width
+        XCTAssertGreaterThan(
+            collapsedContentWidth,
+            expandedContentWidth + Constants.Design.sidebarMinimumWidth - Constants.Design.space2
+        )
+        XCTAssertEqual(contentItem.viewController.view.frame.minX, splitController.splitView.bounds.minX, accuracy: 1)
+        XCTAssertEqual(collapsedContentWidth, splitController.splitView.bounds.width, accuracy: 1)
+        XCTAssertEqual(dashboard.frame.minX, contentItem.viewController.view.bounds.minX, accuracy: 1)
+        XCTAssertEqual(dashboard.bounds.width, collapsedContentWidth, accuracy: 1)
+        let dashboardScrollView = try XCTUnwrap(
+            descendants(of: dashboard).first { $0 is ScrollableStackView } as? ScrollableStackView
+        )
+        XCTAssertEqual(dashboardScrollView.frame.minX, dashboard.bounds.minX, accuracy: 1)
+        XCTAssertEqual(dashboardScrollView.bounds.width, dashboard.bounds.width, accuracy: 1)
+        XCTAssertEqual(dashboardScrollView.stackView.frame.minX, dashboardScrollView.bounds.minX, accuracy: 1)
+        XCTAssertEqual(dashboardScrollView.stackView.bounds.width, dashboardScrollView.bounds.width, accuracy: 1)
+        XCTAssertEqual(dashboard.cardColumnCount, 3)
     }
 
     @MainActor

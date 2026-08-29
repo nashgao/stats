@@ -89,6 +89,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     
     func applicationDidFinishLaunching(_ aNotification: Notification) {
         let startingPoint = self.launchStart ?? Date()
+
+        switch ProcessInfo.processInfo.environment["STATS_APPEARANCE"]?.lowercased() {
+        case "light": NSApp.appearance = NSAppearance(named: .aqua)
+        case "dark": NSApp.appearance = NSAppearance(named: .darkAqua)
+        default: break
+        }
         
         self.suppressStatusBarTilingConstraintUpdates()
         self.parseArguments()

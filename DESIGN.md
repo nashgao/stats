@@ -25,13 +25,13 @@ The primary journey is: glance at health -> identify a changing subsystem -> ins
 
 ## 2. Color
 
-All roles resolve through semantic `NSColor`; views do not introduce raw RGB or hex values.
+All roles resolve through semantic `NSColor`; views do not introduce raw RGB or hex values. The executable source of truth for implemented color, type, spacing, geometry, and breakpoint roles is `Constants.Design` in `Kit/constants.swift`.
 
 | Role | Token | AppKit mapping | Usage |
 |---|---|---|---|
 | Window material | `surfaceWindow` | `NSVisualEffectView.Material.contentBackground` | Main content plane |
 | Sidebar material | `surfaceSidebar` | native sidebar visual-effect material | Navigation plane |
-| Surface secondary | `surfaceSecondary` | `.controlBackgroundColor` | Metric groups and settings sections |
+| Surface secondary | `surfaceSecondary` | `.underPageBackgroundColor` | Metric groups and settings sections |
 | Surface elevated | `surfaceElevated` | `.windowBackgroundColor` with native vibrancy | Popups and elevated summaries |
 | Surface hover | `surfaceHover` | `.quaternaryLabelColor` at semantic hover opacity | Pointer hover |
 | Text primary | `textPrimary` | `.labelColor` | Titles, values, body |
@@ -95,11 +95,13 @@ All intentional spacing derives from a 4-point base.
 
 ### Window states
 
-- **Compact**: 760-839 pt wide. Sidebar 168 pt; main content is one column; labels wrap; only the main content scrolls.
-- **Default**: 840-1099 pt wide. Sidebar 184 pt; Dashboard supports two metric columns.
-- **Expanded**: 1100 pt and wider. Sidebar 200 pt; Dashboard supports three metric columns and persistent secondary detail.
+Dashboard breakpoints are evaluated from the live content viewport, never the outer window frame. This keeps cards correct while the sidebar is resized or collapsed.
+
+- **Compact**: under 656 pt of content. Sidebar may be 168 pt; main content is one column; labels wrap; only the main content scrolls.
+- **Default**: 656-899 pt of content. A 900 pt window with the standard 184 pt sidebar produces two metric columns.
+- **Expanded**: 900 pt of content and wider. A 1100 pt window with its sidebar or a 900 pt window with the sidebar collapsed produces three metric columns.
 - Minimum height is 520 pt. Header, sidebar, and window toolbar stay fixed; main content owns vertical scrolling.
-- Sidebar can collapse when the window becomes compact, using the standard macOS sidebar command.
+- Sidebar can collapse using the standard macOS sidebar command; the content view immediately reclaims its width and recomputes Dashboard columns.
 
 ### Popup states
 

@@ -58,10 +58,10 @@ private enum TelemetryHealth: Int, Comparable {
 
     var color: NSColor {
         switch self {
-        case .waiting, .unavailable: return .secondaryLabelColor
-        case .nominal: return .systemGreen
-        case .warning: return .systemOrange
-        case .critical: return .systemRed
+        case .waiting, .unavailable: return Constants.Design.textSecondary
+        case .nominal: return Constants.Design.statusHealthy
+        case .warning: return Constants.Design.statusAttention
+        case .critical: return Constants.Design.statusCritical
         }
     }
 }
@@ -127,8 +127,8 @@ private final class TelemetryTrendView: NSView {
         let guide = NSBezierPath()
         guide.move(to: NSPoint(x: graphRect.minX, y: graphRect.midY))
         guide.line(to: NSPoint(x: graphRect.maxX, y: graphRect.midY))
-        guide.lineWidth = 1
-        NSColor.separatorColor.withAlphaComponent(0.55).setStroke()
+        guide.lineWidth = Constants.Design.hairlineWidth
+        Constants.Design.separatorSubtle.withAlphaComponent(Constants.Design.separatorOpacity).setStroke()
         guide.stroke()
 
         let maximum: Double
@@ -155,10 +155,10 @@ private final class TelemetryTrendView: NSView {
                 path.line(to: point)
             }
         }
-        path.lineWidth = 2
+        path.lineWidth = Constants.Design.trendLineWidth
         path.lineCapStyle = .round
         path.lineJoinStyle = .round
-        NSColor.controlAccentColor.setStroke()
+        Constants.Design.accentPrimary.setStroke()
         path.stroke()
     }
 }
@@ -177,7 +177,7 @@ private final class TelemetryMetricCard: NSView {
 
         self.translatesAutoresizingMaskIntoConstraints = false
         self.wantsLayer = true
-        self.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
+        self.layer?.backgroundColor = Constants.Design.surfaceSecondary.cgColor
         self.layer?.cornerRadius = Constants.Design.sectionRadius
         self.setAccessibilityElement(true)
         self.setAccessibilityRole(.group)
@@ -186,15 +186,18 @@ private final class TelemetryMetricCard: NSView {
             systemSymbolName: metric.symbolName,
             accessibilityDescription: metric.title
         ) ?? NSImage())
-        icon.contentTintColor = .secondaryLabelColor
-        icon.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 13, weight: .medium)
+        icon.contentTintColor = Constants.Design.textSecondary
+        icon.symbolConfiguration = NSImage.SymbolConfiguration(
+            pointSize: Constants.Design.bodyEmphasisFont.pointSize,
+            weight: .medium
+        )
         icon.widthAnchor.constraint(equalToConstant: Constants.Design.space5).isActive = true
 
         let titleField = TextView()
-        titleField.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        titleField.font = Constants.Design.bodyEmphasisFont
         titleField.stringValue = metric.title
 
-        self.statusField.font = NSFont.systemFont(ofSize: 11, weight: .medium)
+        self.statusField.font = Constants.Design.captionFont
         self.statusField.textColor = TelemetryHealth.waiting.color
         self.statusField.stringValue = TelemetryHealth.waiting.label
         self.statusField.alignment = .right
@@ -204,10 +207,10 @@ private final class TelemetryMetricCard: NSView {
         header.alignment = .centerY
         header.spacing = Constants.Design.space1
 
-        self.valueField.font = NSFont.monospacedDigitSystemFont(ofSize: 25, weight: .semibold)
+        self.valueField.font = Constants.Design.metricValueFont
         self.valueField.stringValue = "—"
-        self.detailField.font = NSFont.systemFont(ofSize: 12, weight: .regular)
-        self.detailField.textColor = .secondaryLabelColor
+        self.detailField.font = Constants.Design.secondaryFont
+        self.detailField.textColor = Constants.Design.textSecondary
         self.detailField.stringValue = localizedString("Waiting for data")
         self.detailField.lineBreakMode = .byTruncatingMiddle
 
@@ -233,9 +236,9 @@ private final class TelemetryMetricCard: NSView {
             self.valueField.widthAnchor.constraint(equalTo: self.widthAnchor, constant: -Constants.Design.space8),
             self.detailField.widthAnchor.constraint(equalTo: self.widthAnchor, constant: -Constants.Design.space8),
             self.trend.widthAnchor.constraint(equalTo: self.widthAnchor, constant: -Constants.Design.space8),
-            self.trend.heightAnchor.constraint(equalToConstant: 38),
-            self.heightAnchor.constraint(equalToConstant: 148),
-            self.widthAnchor.constraint(greaterThanOrEqualToConstant: 220)
+            self.trend.heightAnchor.constraint(equalToConstant: Constants.Design.metricTrendHeight),
+            self.heightAnchor.constraint(equalToConstant: Constants.Design.metricCardHeight),
+            self.widthAnchor.constraint(greaterThanOrEqualToConstant: Constants.Design.metricCardMinimumWidth)
         ])
 
         self.setAccessibilityLabel("\(metric.title), \(localizedString("Waiting for data"))")
@@ -246,7 +249,7 @@ private final class TelemetryMetricCard: NSView {
     }
 
     override func updateLayer() {
-        self.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
+        self.layer?.backgroundColor = Constants.Design.surfaceSecondary.cgColor
     }
 
     func update(_ sample: TelemetrySample) {
@@ -279,12 +282,15 @@ private final class HealthRibbonItem: NSView {
             systemSymbolName: metric.symbolName,
             accessibilityDescription: metric.title
         ) ?? NSImage())
-        icon.contentTintColor = .secondaryLabelColor
-        icon.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 11, weight: .medium)
+        icon.contentTintColor = Constants.Design.textSecondary
+        icon.symbolConfiguration = NSImage.SymbolConfiguration(
+            pointSize: Constants.Design.captionFont.pointSize,
+            weight: .medium
+        )
         icon.widthAnchor.constraint(equalToConstant: Constants.Design.space4).isActive = true
 
         let titleField = TextView()
-        titleField.font = NSFont.systemFont(ofSize: 11, weight: .medium)
+        titleField.font = Constants.Design.captionFont
         titleField.stringValue = metric.title
         titleField.lineBreakMode = .byTruncatingTail
 
@@ -293,9 +299,9 @@ private final class HealthRibbonItem: NSView {
         titleRow.alignment = .centerY
         titleRow.spacing = Constants.Design.space1
 
-        self.valueField.font = NSFont.monospacedDigitSystemFont(ofSize: 14, weight: .semibold)
+        self.valueField.font = Constants.Design.compactMetricValueFont
         self.valueField.stringValue = "—"
-        self.statusField.font = NSFont.systemFont(ofSize: 10, weight: .medium)
+        self.statusField.font = Constants.Design.captionFont
         self.statusField.textColor = TelemetryHealth.waiting.color
         self.statusField.stringValue = TelemetryHealth.waiting.label
 
@@ -303,13 +309,13 @@ private final class HealthRibbonItem: NSView {
         stack.translatesAutoresizingMaskIntoConstraints = false
         stack.orientation = .vertical
         stack.alignment = .leading
-        stack.spacing = 2
+        stack.spacing = Constants.Design.space1
         self.addSubview(stack)
         NSLayoutConstraint.activate([
             stack.leadingAnchor.constraint(equalTo: self.leadingAnchor),
             stack.trailingAnchor.constraint(lessThanOrEqualTo: self.trailingAnchor),
             stack.centerYAnchor.constraint(equalTo: self.centerYAnchor),
-            self.heightAnchor.constraint(equalToConstant: 52)
+            self.heightAnchor.constraint(equalToConstant: Constants.Design.healthRibbonItemHeight)
         ])
 
         self.setAccessibilityLabel("\(metric.title), \(localizedString("Waiting for data"))")
@@ -347,14 +353,14 @@ private final class HealthRibbon: NSView {
         super.init(frame: .zero)
         self.translatesAutoresizingMaskIntoConstraints = false
         self.wantsLayer = true
-        self.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
+        self.layer?.backgroundColor = Constants.Design.surfaceSecondary.cgColor
         self.layer?.cornerRadius = Constants.Design.sectionRadius
 
         var rows: [[NSView]] = [[], []]
         for (index, metric) in self.metrics.enumerated() {
             let item = HealthRibbonItem(metric: metric)
             self.items[metric] = item
-            rows[index / 3].append(item)
+            rows[index / Constants.Design.healthRibbonColumns].append(item)
         }
 
         let grid = NSGridView(views: rows)
@@ -367,7 +373,7 @@ private final class HealthRibbon: NSView {
             grid.column(at: index).xPlacement = .fill
         }
         for index in 0..<grid.numberOfRows {
-            grid.row(at: index).height = 52
+            grid.row(at: index).height = Constants.Design.healthRibbonItemHeight
         }
         if let firstItem = self.items[self.metrics[0]] {
             for metric in self.metrics.dropFirst() {
@@ -380,7 +386,7 @@ private final class HealthRibbon: NSView {
             grid.trailingAnchor.constraint(equalTo: self.trailingAnchor, constant: -Constants.Design.space3),
             grid.topAnchor.constraint(equalTo: self.topAnchor, constant: Constants.Design.space2),
             grid.bottomAnchor.constraint(equalTo: self.bottomAnchor, constant: -Constants.Design.space2),
-            self.heightAnchor.constraint(equalToConstant: 128)
+            self.heightAnchor.constraint(equalToConstant: Constants.Design.healthRibbonHeight)
         ])
     }
 
@@ -389,7 +395,7 @@ private final class HealthRibbon: NSView {
     }
 
     override func updateLayer() {
-        self.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
+        self.layer?.backgroundColor = Constants.Design.surfaceSecondary.cgColor
     }
 
     func update(_ sample: TelemetrySample) {
@@ -416,7 +422,7 @@ class Dashboard: NSStackView {
     private let detailsButton = NSButton()
     private let hardwareSection = NSStackView()
     private var samples: [TelemetryMetric: TelemetrySample] = [:]
-    private var cardColumnCount = 0
+    internal private(set) var cardColumnCount = 0
 
     private let timeFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -431,6 +437,7 @@ class Dashboard: NSStackView {
         self.alignment = .width
 
         let scrollView = ScrollableStackView(orientation: .vertical)
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.stackView.alignment = .width
         scrollView.stackView.edgeInsets = NSEdgeInsets(
             top: Constants.Design.space3,
@@ -466,6 +473,7 @@ class Dashboard: NSStackView {
         addContent(self.hardwareSection)
 
         self.addArrangedSubview(scrollView)
+        scrollView.widthAnchor.constraint(equalTo: self.widthAnchor).isActive = true
         self.updateUptime()
 
         NotificationCenter.default.addObserver(
@@ -502,47 +510,54 @@ class Dashboard: NSStackView {
         NotificationCenter.default.removeObserver(self)
     }
 
-    internal func adapt(to windowWidth: CGFloat) {
-        let columns = windowWidth >= 1100 ? 3 : (windowWidth >= 840 ? 2 : 1)
+    override func layout() {
+        super.layout()
+        self.adapt(to: self.bounds.width)
+    }
+
+    internal func adapt(to contentWidth: CGFloat) {
+        let columns = contentWidth >= Constants.Design.dashboardThreeColumnMinimumWidth
+            ? 3
+            : (contentWidth >= Constants.Design.dashboardTwoColumnMinimumWidth ? 2 : 1)
         self.updateCardLayout(columns: columns)
     }
 
     private func heroView() -> NSView {
         let deviceImage = NSImageView(image: SystemKit.shared.device.model.icon)
         deviceImage.imageScaling = .scaleProportionallyDown
-        deviceImage.widthAnchor.constraint(equalToConstant: 58).isActive = true
-        deviceImage.heightAnchor.constraint(equalToConstant: 58).isActive = true
+        deviceImage.widthAnchor.constraint(equalToConstant: Constants.Design.deviceIconSize).isActive = true
+        deviceImage.heightAnchor.constraint(equalToConstant: Constants.Design.deviceIconSize).isActive = true
 
-        self.headlineField.font = NSFont.systemFont(ofSize: 20, weight: .semibold)
+        self.headlineField.font = Constants.Design.healthHeadlineFont
         self.headlineField.stringValue = localizedString("System health")
-        self.healthStatusField.font = NSFont.systemFont(ofSize: 13, weight: .medium)
-        self.healthStatusField.textColor = .secondaryLabelColor
+        self.healthStatusField.font = Constants.Design.bodyEmphasisFont
+        self.healthStatusField.textColor = Constants.Design.textSecondary
         self.healthStatusField.stringValue = localizedString("Waiting for live samples")
 
         let osName = SystemKit.shared.device.os?.name ?? localizedString("Unknown")
         let osVersion = SystemKit.shared.device.os?.version.getFullVersion() ?? ""
         let identityField = TextView()
-        identityField.font = NSFont.systemFont(ofSize: 12, weight: .regular)
-        identityField.textColor = .secondaryLabelColor
+        identityField.font = Constants.Design.secondaryFont
+        identityField.textColor = Constants.Design.textSecondary
         identityField.stringValue = "\(SystemKit.shared.device.model.name) · macOS \(osName) \(osVersion)"
         identityField.lineBreakMode = .byTruncatingTail
 
         let labels = NSStackView(views: [self.headlineField, self.healthStatusField, identityField])
         labels.orientation = .vertical
         labels.alignment = .leading
-        labels.spacing = 2
+        labels.spacing = Constants.Design.space1
 
-        self.uptimeSummaryField.font = NSFont.systemFont(ofSize: 12, weight: .medium)
+        self.uptimeSummaryField.font = Constants.Design.secondaryEmphasisFont
         self.uptimeSummaryField.alignment = .right
-        self.lastUpdateField.font = NSFont.systemFont(ofSize: 11, weight: .regular)
-        self.lastUpdateField.textColor = .secondaryLabelColor
+        self.lastUpdateField.font = Constants.Design.captionRegularFont
+        self.lastUpdateField.textColor = Constants.Design.textSecondary
         self.lastUpdateField.alignment = .right
         self.lastUpdateField.stringValue = localizedString("No live sample yet")
 
         let timing = NSStackView(views: [self.uptimeSummaryField, self.lastUpdateField])
         timing.orientation = .vertical
         timing.alignment = .trailing
-        timing.spacing = 2
+        timing.spacing = Constants.Design.space1
 
         let view = NSStackView(views: [deviceImage, labels, NSView(), timing])
         view.orientation = .horizontal
@@ -559,18 +574,18 @@ class Dashboard: NSStackView {
 
     private func sectionTitle(_ title: String, subtitle: String? = nil) -> NSView {
         let titleField = TextView()
-        titleField.font = NSFont.systemFont(ofSize: 13, weight: .semibold)
+        titleField.font = Constants.Design.sectionTitleFont
         titleField.stringValue = title
 
         guard let subtitle else { return titleField }
         let subtitleField = TextView()
-        subtitleField.font = NSFont.systemFont(ofSize: 11, weight: .regular)
-        subtitleField.textColor = .secondaryLabelColor
+        subtitleField.font = Constants.Design.captionRegularFont
+        subtitleField.textColor = Constants.Design.textSecondary
         subtitleField.stringValue = subtitle
         let stack = NSStackView(views: [titleField, subtitleField])
         stack.orientation = .vertical
         stack.alignment = .leading
-        stack.spacing = 1
+        stack.spacing = Constants.Design.space1
         return stack
     }
 
@@ -629,7 +644,7 @@ class Dashboard: NSStackView {
             accessibilityDescription: localizedString("Collapsed")
         )
         self.detailsButton.imagePosition = .imageLeading
-        self.detailsButton.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        self.detailsButton.font = Constants.Design.bodyEmphasisFont
         self.detailsButton.alignment = .left
         self.detailsButton.target = self
         self.detailsButton.action = #selector(toggleHardwareDetails)
@@ -638,7 +653,7 @@ class Dashboard: NSStackView {
         self.detailsButton.setAccessibilityValue(localizedString("Collapsed"))
         self.detailsButton.heightAnchor.constraint(equalToConstant: Constants.Design.minimumControlSize).isActive = true
 
-        self.uptimeField.font = NSFont.systemFont(ofSize: 13, weight: .regular)
+        self.uptimeField.font = Constants.Design.bodyFont
         self.uptimeField.alignment = .right
 
         self.hardwareSection.orientation = .vertical
@@ -724,7 +739,7 @@ class Dashboard: NSStackView {
     private func updateOverallHealth() {
         let currentHealth = self.healthRibbon.highestHealth
         if self.healthRibbon.hasWaitingMetrics && currentHealth <= .nominal {
-            self.healthStatusField.textColor = .secondaryLabelColor
+            self.healthStatusField.textColor = Constants.Design.textSecondary
             self.healthStatusField.stringValue = localizedString("Live metrics updating")
         } else {
             self.healthStatusField.textColor = currentHealth.color

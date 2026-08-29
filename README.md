@@ -54,6 +54,26 @@ Legacy upstream builds for older systems can be found [here](https://mac-stats.c
 Stats is supported on macOS 12 (Monterey) and newer.
 Beta versions of macOS are not supported - only stable releases.
 
+## Development QA
+
+The custom build exposes environment-only launch controls for deterministic local UI verification. They do not alter normal launches:
+
+```bash
+# Dashboard in light appearance
+open -n --env STATS_SETTINGS_DESTINATION=Dashboard --env STATS_APPEARANCE=light /path/to/Stats.app
+
+# Application settings with the sidebar collapsed
+open -n --env STATS_SETTINGS_DESTINATION=Settings --env STATS_SIDEBAR_COLLAPSED=1 /path/to/Stats.app
+
+# A constrained module popup
+open -n --env STATS_POPUP_MODULE=CPU /path/to/Stats.app
+
+# The open menu-bar preset selector
+open -n --env STATS_SETTINGS_DESTINATION=Settings --env STATS_OPEN_PRESET_MENU=1 /path/to/Stats.app
+```
+
+Use a disposable `XCTestConfigurationFilePath` environment value when running captures alongside the installed app so chart storage is isolated from the live database.
+
 ## Features
 Stats is an application that allows you to monitor your macOS system.
 
