@@ -100,11 +100,11 @@ tasks:
     status: "completed"
   - id: "task-009"
     title: "Move visible branding, support, issues, releases, and updates under fork ownership"
-    status: "in_progress"
+    status: "completed"
   - id: "task-010"
     title: "Add visual and accessibility regression coverage and complete runtime QA"
-    status: "pending"
+    status: "in_progress"
 
 progress:
-  current_phase: "ownership"
-  overall_percentage: 76
+  current_phase: "verification"
+  overall_percentage: 88
