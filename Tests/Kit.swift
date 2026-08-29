@@ -11,8 +11,72 @@
 
 import XCTest
 import Kit
+@testable import Stats
 
 class KitTests: XCTestCase {
+    @MainActor
+    func testSettingsWindow_initializesWithAdaptiveMinimumSize() throws {
+        let window = SettingsWindow()
+        defer { window.close() }
+
+        XCTAssertGreaterThanOrEqual(window.frame.width, Constants.Design.settingsMinimumSize.width)
+        XCTAssertGreaterThanOrEqual(window.frame.height, Constants.Design.settingsMinimumSize.height)
+    }
+
+    @MainActor
+    func testSettingsSidebar_usesFocusableLabeledRows() throws {
+        func descendants(of view: NSView) -> [NSView] {
+            view.subviews + view.subviews.flatMap(descendants)
+        }
+
+        func assertVisible(_ view: NSView, in contentView: NSView, file: StaticString = #filePath, line: UInt = #line) {
+            let frame = view.convert(view.bounds, to: contentView)
+            XCTAssertGreaterThan(frame.width, 0, file: file, line: line)
+            XCTAssertGreaterThan(frame.height, 0, file: file, line: line)
+            XCTAssertGreaterThanOrEqual(frame.minX, contentView.bounds.minX, file: file, line: line)
+            XCTAssertGreaterThanOrEqual(frame.minY, contentView.bounds.minY, file: file, line: line)
+            XCTAssertLessThanOrEqual(frame.maxX, contentView.bounds.maxX, file: file, line: line)
+            XCTAssertLessThanOrEqual(frame.maxY, contentView.bounds.maxY, file: file, line: line)
+        }
+
+        let window = SettingsWindow()
+        defer { window.close() }
+        window.open(module: "Dashboard")
+        window.contentView?.layoutSubtreeIfNeeded()
+
+        let buttons = descendants(of: try XCTUnwrap(window.contentView)).compactMap { $0 as? NSButton }
+        let navigation = buttons
+            .filter { ["Dashboard", "Settings"].contains($0.accessibilityLabel()) }
+
+        XCTAssertEqual(Set(navigation.compactMap { $0.accessibilityLabel() }), Set(["Dashboard", "Settings"]))
+        XCTAssertTrue(navigation.allSatisfy { $0.focusRingType == .default })
+        navigation.forEach { button in
+            let stack = button.superview as? NSStackView
+            XCTAssertNotNil(stack)
+            XCTAssertEqual(
+                button.frame.width,
+                (stack?.bounds.width ?? 0) - Constants.Design.space4,
+                accuracy: 1,
+                "\(button.accessibilityLabel() ?? "Navigation item") should fill the sidebar row"
+            )
+            XCTAssertEqual(button.frame.minX, Constants.Design.space2, accuracy: 1)
+        }
+        XCTAssertTrue(["Pause the Stats", "More actions"].allSatisfy { label in
+            buttons.contains { $0.accessibilityLabel() == label && $0.focusRingType == .default }
+        })
+
+        window.open(module: "Settings")
+        window.contentView?.layoutSubtreeIfNeeded()
+        XCTAssertTrue(window.toolbar?.items.contains(where: { $0.itemIdentifier == .toggleSidebar }) == true)
+        let contentView = try XCTUnwrap(window.contentView)
+        for label in ["Pause the Stats", "More actions"] {
+            let button = try XCTUnwrap(buttons.first { $0.accessibilityLabel() == label })
+            XCTAssertFalse(button.isHidden)
+            assertVisible(button, in: contentView)
+        }
+        assertVisible(try XCTUnwrap(navigation.first { $0.accessibilityLabel() == "Settings" }), in: contentView)
+    }
+
     func testIsNewestVersion_release() throws {
         XCTAssertFalse(isNewestVersion(currentVersion: "v2.11.0", latestVersion: "v2.11.0"))
         XCTAssertTrue(isNewestVersion(currentVersion: "v2.11.0", latestVersion: "v2.11.1"))

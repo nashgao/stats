@@ -18,13 +18,24 @@ public extension NSToolbarItem.Identifier {
 }
 
 class SettingsWindow: NSWindow, NSWindowDelegate, NSToolbarDelegate {
-    private static let size: CGSize = CGSize(width: 720, height: 480)
+    private static let size: CGSize = Constants.Design.settingsDefaultSize
     private static let frameAutosaveName = "eu.exelban.Stats.Settings.WindowFrame"
     
     internal var onClose: (() -> Void)?
     
-    private let mainView: MainView = MainView(frame: NSRect(x: 0, y: 0, width: 540, height: 480))
-    private let sidebarView: SidebarView = SidebarView(frame: NSRect(x: 0, y: 0, width: 180, height: 480))
+    private let mainView = MainView(frame: NSRect(
+        x: 0,
+        y: 0,
+        width: SettingsWindow.size.width - Constants.Design.sidebarWidth,
+        height: SettingsWindow.size.height
+    ))
+    private let sidebarView = SidebarView(frame: NSRect(
+        x: 0,
+        y: 0,
+        width: Constants.Design.sidebarWidth,
+        height: SettingsWindow.size.height
+    ))
+    private let sidebarViewController = NSSplitViewController()
     
     private var dashboard: NSView = Dashboard()
     private var settings: ApplicationSettings = ApplicationSettings()
@@ -46,8 +57,6 @@ class SettingsWindow: NSWindow, NSWindowDelegate, NSToolbarDelegate {
             defer: false
         )
         
-        let sidebarViewController = NSSplitViewController()
-        
         let sidebarVC: NSViewController = NSViewController(nibName: nil, bundle: nil)
         sidebarVC.view = self.sidebarView
         let mainVC: NSViewController = NSViewController(nibName: nil, bundle: nil)
@@ -56,13 +65,15 @@ class SettingsWindow: NSWindow, NSWindowDelegate, NSToolbarDelegate {
         let sidebarItem = NSSplitViewItem(sidebarWithViewController: sidebarVC)
         let contentItem = NSSplitViewItem(viewController: mainVC)
         
-        sidebarItem.canCollapse = false
+        sidebarItem.canCollapse = true
+        sidebarItem.minimumThickness = Constants.Design.sidebarMinimumWidth
+        sidebarItem.maximumThickness = Constants.Design.sidebarMaximumWidth
         contentItem.canCollapse = false
         
-        sidebarViewController.addSplitViewItem(sidebarItem)
-        sidebarViewController.addSplitViewItem(contentItem)
+        self.sidebarViewController.addSplitViewItem(sidebarItem)
+        self.sidebarViewController.addSplitViewItem(contentItem)
         
-        contentItem.minimumThickness = 540
+        contentItem.minimumThickness = Constants.Design.contentMinimumWidth
         
         let newToolbar = NSToolbar(identifier: "eu.exelban.Stats.Settings.Toolbar")
         newToolbar.allowsUserCustomization = false
@@ -72,7 +83,7 @@ class SettingsWindow: NSWindow, NSWindowDelegate, NSToolbarDelegate {
         newToolbar.delegate = self
         
         self.toolbar = newToolbar
-        self.contentViewController = sidebarViewController
+        self.contentViewController = self.sidebarViewController
         self.titlebarAppearsTransparent = true
         if #unavailable(macOS 26.0) {
             self.backgroundColor = .clear
@@ -85,7 +96,13 @@ class SettingsWindow: NSWindow, NSWindowDelegate, NSToolbarDelegate {
             self.positionCenter()
         }
         self.setIsVisible(false)
-        self.minSize = NSSize(width: SettingsWindow.size.width, height: SettingsWindow.size.height-Constants.Popup.headerHeight)
+        self.minSize = Constants.Design.settingsMinimumSize
+        if self.frame.width < self.minSize.width || self.frame.height < self.minSize.height {
+            var frame = self.frame
+            frame.size.width = max(frame.width, self.minSize.width)
+            frame.size.height = max(frame.height, self.minSize.height)
+            self.setFrame(frame, display: false)
+        }
         
         let windowController = NSWindowController()
         windowController.window = self
@@ -95,7 +112,9 @@ class SettingsWindow: NSWindow, NSWindowDelegate, NSToolbarDelegate {
         NotificationCenter.default.addObserver(self, selector: #selector(externalModuleToggle), name: .toggleModule, object: nil)
         
         self.sidebarView.setModules(modules)
-        self.sidebarView.openMenu("Dashboard")
+        let storedDestination = Store.shared.string(key: "settings_selected_destination", defaultValue: "Dashboard")
+        let knownDestination = storedDestination == "Dashboard" || storedDestination == "Settings" || modules.contains(where: { $0.config.name == storedDestination })
+        self.sidebarView.openMenu(knownDestination ? storedDestination : "Dashboard")
     }
     
     deinit {
@@ -161,10 +180,10 @@ class SettingsWindow: NSWindow, NSWindowDelegate, NSToolbarDelegate {
     }
     
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        return [.flexibleSpace, .previewButton, .toggleButton]
+        return [.toggleSidebar, .flexibleSpace, .previewButton, .toggleButton]
     }
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        return [.flexibleSpace, .previewButton, .toggleButton]
+        return [.toggleSidebar, .flexibleSpace, .previewButton, .toggleButton]
     }
     
     internal func open(module: String? = nil) {
@@ -208,6 +227,7 @@ class SettingsWindow: NSWindow, NSWindowDelegate, NSToolbarDelegate {
             }
             
             self.title = localizedString(title)
+            Store.shared.set(key: "settings_selected_destination", value: title)
             
             self.mainView.setView(view)
             self.sidebarView.openMenu(title)
@@ -302,6 +322,7 @@ private class SidebarView: NSStackView {
     private let scrollView: ScrollableStackView
     
     private let supportPopover = NSPopover()
+    private let moreMenu = NSMenu()
     private var pauseButton: NSButton? = nil
     
     private var pauseState: Bool {
@@ -309,51 +330,86 @@ private class SidebarView: NSStackView {
         set { Store.shared.set(key: "pause", value: newValue) }
     }
     
-    private var dashboardIcon: NSImage { NSImage(systemSymbolName: "circle.grid.3x3.fill", accessibilityDescription: nil)! }
+    private var dashboardIcon: NSImage { NSImage(systemSymbolName: "circle.grid.3x3.fill", accessibilityDescription: localizedString("Dashboard"))! }
     private var settingsIcon: NSImage { iconFromSymbol(name: "gear", scale: .large) }
-    private var bugIcon: NSImage { iconFromSymbol(name: "ladybug", scale: .large) }
-    private var supportIcon: NSImage { iconFromSymbol(name: "heart.fill", scale: .large) }
     private var pauseIcon: NSImage { iconFromSymbol(name: "pause.fill", scale: .large) }
     private var resumeIcon: NSImage { iconFromSymbol(name: "play.fill", scale: .large) }
-    private var closeIcon: NSImage { iconFromSymbol(name: "power", scale: .large) }
+    private var moreIcon: NSImage { iconFromSymbol(name: "ellipsis.circle", scale: .large) }
     
     override init(frame: NSRect) {
         self.scrollView = ScrollableStackView(frame: NSRect(x: 0, y: 0, width: frame.width, height: frame.height))
         self.scrollView.stackView.spacing = 0
-        self.scrollView.stackView.edgeInsets = NSEdgeInsets(top: 0, left: 8, bottom: 0, right: 8)
+        self.scrollView.stackView.alignment = .width
+        self.scrollView.stackView.edgeInsets = NSEdgeInsets(
+            top: 0,
+            left: Constants.Design.space2,
+            bottom: 0,
+            right: Constants.Design.space2
+        )
         
         super.init(frame: frame)
         self.orientation = .vertical
+        self.alignment = .width
         self.spacing = 0
-        self.widthAnchor.constraint(equalToConstant: frame.width).isActive = true
+        self.widthAnchor.constraint(greaterThanOrEqualToConstant: Constants.Design.sidebarMinimumWidth).isActive = true
+        self.widthAnchor.constraint(lessThanOrEqualToConstant: Constants.Design.sidebarMaximumWidth).isActive = true
         
         let spacer = NSView()
-        spacer.heightAnchor.constraint(equalToConstant: 10).isActive = true
+        spacer.heightAnchor.constraint(equalToConstant: Constants.Design.space3).isActive = true
         
-        self.scrollView.stackView.addArrangedSubview(MenuItem(icon: self.dashboardIcon, title: "Dashboard"))
+        self.addMenuItem(MenuItem(icon: self.dashboardIcon, title: "Dashboard"))
+        self.addMenuItem(MenuItem(icon: self.settingsIcon, title: "Settings"))
         self.scrollView.stackView.addArrangedSubview(spacer)
         
         self.supportPopover.behavior = .transient
         self.supportPopover.contentViewController = self.supportView()
         
-        let additionalButtons: NSStackView = NSStackView(frame: NSRect(x: 0, y: 0, width: frame.width, height: 45))
-        additionalButtons.heightAnchor.constraint(equalToConstant: 45).isActive = true
+        let footerHeight = Constants.Design.space6 * 2
+        let additionalButtons: NSStackView = NSStackView(frame: NSRect(x: 0, y: 0, width: frame.width, height: footerHeight))
+        additionalButtons.heightAnchor.constraint(equalToConstant: footerHeight).isActive = true
         additionalButtons.orientation = .horizontal
         additionalButtons.distribution = .fillEqually
         additionalButtons.alignment = .centerY
         additionalButtons.spacing = 0
-        
-        let pauseButton = self.makeButton(title: localizedString("Pause the Stats"), image: self.pauseState ? self.resumeIcon : self.pauseIcon, action: #selector(togglePause))
+        additionalButtons.setContentHuggingPriority(.required, for: .vertical)
+        additionalButtons.setContentCompressionResistancePriority(.required, for: .vertical)
+        self.scrollView.setContentHuggingPriority(.defaultLow, for: .vertical)
+        self.scrollView.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
+
+        let pauseButton = self.makeActionButton(
+            title: localizedString(self.pauseState ? "Resume" : "Pause"),
+            toolTip: localizedString(self.pauseState ? "Resume the Stats" : "Pause the Stats"),
+            image: self.pauseState ? self.resumeIcon : self.pauseIcon,
+            action: #selector(togglePause)
+        )
         self.pauseButton = pauseButton
+
+        let support = NSMenuItem(title: localizedString("Support upstream Stats"), action: #selector(donateFromMenu), keyEquivalent: "")
+        support.target = self
+        let report = NSMenuItem(title: localizedString("Report a bug"), action: #selector(reportBug), keyEquivalent: "")
+        report.target = self
+        let quit = NSMenuItem(title: localizedString("Quit Stats Custom"), action: #selector(closeApp), keyEquivalent: "q")
+        quit.keyEquivalentModifierMask = [.command]
+        quit.target = self
+        self.moreMenu.addItem(support)
+        self.moreMenu.addItem(report)
+        self.moreMenu.addItem(.separator())
+        self.moreMenu.addItem(quit)
         
-        additionalButtons.addArrangedSubview(self.makeButton(title: localizedString("Settings"), image: self.settingsIcon, action: #selector(openSettings)))
-        additionalButtons.addArrangedSubview(self.makeButton(title: localizedString("Support the application"), image: self.supportIcon, action: #selector(donate)))
-        additionalButtons.addArrangedSubview(self.makeButton(title: localizedString("Report a bug"), image: self.bugIcon, action: #selector(reportBug)))
         additionalButtons.addArrangedSubview(pauseButton)
-        additionalButtons.addArrangedSubview(self.makeButton(title: localizedString("Close application"), image: self.closeIcon, action: #selector(closeApp)))
+        additionalButtons.addArrangedSubview(self.makeActionButton(
+            title: localizedString("More"),
+            toolTip: localizedString("More actions"),
+            image: self.moreIcon,
+            action: #selector(showMore)
+        ))
         
         self.addArrangedSubview(self.scrollView)
         self.addArrangedSubview(additionalButtons)
+        NSLayoutConstraint.activate([
+            self.scrollView.widthAnchor.constraint(equalTo: self.widthAnchor),
+            additionalButtons.widthAnchor.constraint(equalTo: self.widthAnchor)
+        ])
         
         NotificationCenter.default.addObserver(self, selector: #selector(listenForPause), name: .pause, object: nil)
     }
@@ -369,8 +425,9 @@ private class SidebarView: NSStackView {
     fileprivate func openMenu(_ title: String) {
         self.scrollView.stackView.subviews.forEach({ (m: NSView) in
             if let menu = m as? MenuItem {
-                if menu.title == title {
+                if menu.destination == title {
                     menu.activate()
+                    menu.scrollToVisible(menu.bounds)
                 } else {
                     menu.reset()
                 }
@@ -381,34 +438,41 @@ private class SidebarView: NSStackView {
     fileprivate func setModules(_ list: [Module]) {
         list.reversed().forEach { (m: Module) in
             if !m.available { return }
-            let menu: NSView = MenuItem(icon: m.config.icon, title: m.config.name)
-            self.scrollView.stackView.insertArrangedSubview(menu, at: 2)
+            self.addMenuItem(MenuItem(icon: m.config.icon, title: m.config.name), at: 3)
         }
     }
+
+    private func addMenuItem(_ menu: MenuItem, at index: Int? = nil) {
+        if let index {
+            self.scrollView.stackView.insertArrangedSubview(menu, at: index)
+        } else {
+            self.scrollView.stackView.addArrangedSubview(menu)
+        }
+        menu.widthAnchor.constraint(
+            equalTo: self.scrollView.stackView.widthAnchor,
+            constant: -Constants.Design.space4
+        ).isActive = true
+    }
     
-    private func makeButton(title: String, image: NSImage, action: Selector) -> NSButton {
-        let button = NSButton()
+    private func makeActionButton(title: String, toolTip: String, image: NSImage, action: Selector) -> NSButton {
+        let button = NSButtonWithPadding()
         button.title = title
-        button.toolTip = title
+        button.toolTip = toolTip
         button.bezelStyle = .regularSquare
         button.translatesAutoresizingMaskIntoConstraints = false
         button.imageScaling = .scaleNone
         button.image = image
+        button.imagePosition = .imageLeading
+        button.imageHugsTitle = true
+        button.font = NSFont.systemFont(ofSize: 12, weight: .regular)
+        button.horizontalPadding = Constants.Design.space2
         button.contentTintColor = .secondaryLabelColor
         button.isBordered = false
         button.action = action
         button.target = self
-        button.focusRingType = .none
-        button.widthAnchor.constraint(equalToConstant: 33).isActive = true
-        
-        let rect = NSRect(x: 0, y: 0, width: 33, height: 45)
-        let trackingArea = NSTrackingArea(
-            rect: rect,
-            options: [NSTrackingArea.Options.activeAlways, NSTrackingArea.Options.mouseEnteredAndExited, NSTrackingArea.Options.activeInActiveApp],
-            owner: self,
-            userInfo: ["button": title]
-        )
-        self.addTrackingArea(trackingArea)
+        button.focusRingType = .default
+        button.setAccessibilityLabel(toolTip)
+        button.heightAnchor.constraint(equalToConstant: Constants.Design.minimumControlSize).isActive = true
         
         return button
     }
@@ -446,80 +510,80 @@ private class SidebarView: NSStackView {
         return vc
     }
     
-    @objc private func openSettings() {
-        NotificationCenter.default.post(name: .openModuleSettings, object: nil, userInfo: ["module": "Settings"])
-    }
-    
     @objc private func reportBug() {
-        NSWorkspace.shared.open(URL(string: "https://github.com/exelban/stats/issues/new?template=bug_report.md")!)
+        NSWorkspace.shared.open(URL(string: "https://github.com/nashgao/stats/issues/new")!)
     }
     
-    @objc private func donate(_ sender: NSButton) {
-        self.supportPopover.show(relativeTo: sender.bounds, of: sender, preferredEdge: NSRectEdge.minY)
+    @objc private func donateFromMenu() {
+        guard let view = self.pauseButton?.superview else { return }
+        self.supportPopover.show(relativeTo: view.bounds, of: view, preferredEdge: .minY)
     }
     
-    @objc private func closeApp(_ sender: NSButton) {
+    @objc private func closeApp(_ sender: Any) {
         NSApp.terminate(sender)
+    }
+
+    @objc private func showMore(_ sender: NSButton) {
+        self.moreMenu.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.maxY), in: sender)
     }
     
     @objc private func togglePause() {
         self.pauseState = !self.pauseState
+        self.pauseButton?.title = localizedString(self.pauseState ? "Resume" : "Pause")
         self.pauseButton?.toolTip = localizedString(self.pauseState ? "Resume the Stats" : "Pause the Stats")
+        self.pauseButton?.setAccessibilityLabel(localizedString(self.pauseState ? "Resume the Stats" : "Pause the Stats"))
         self.pauseButton?.image = self.pauseState ? self.resumeIcon : self.pauseIcon
         NotificationCenter.default.post(name: .pause, object: nil, userInfo: ["state": self.pauseState])
     }
     
     @objc func listenForPause() {
+        self.pauseButton?.title = localizedString(self.pauseState ? "Resume" : "Pause")
         self.pauseButton?.toolTip = localizedString(self.pauseState ? "Resume the Stats" : "Pause the Stats")
+        self.pauseButton?.setAccessibilityLabel(localizedString(self.pauseState ? "Resume the Stats" : "Pause the Stats"))
         self.pauseButton?.image = self.pauseState ? self.resumeIcon : self.pauseIcon
     }
 }
 
-private class MenuItem: NSView {
-    fileprivate let title: String
+private class MenuItem: NSButtonWithPadding {
+    fileprivate let destination: String
     
     private var active: Bool = false
-    private var imageView: NSImageView? = nil
-    private var titleView: NSTextField? = nil
     
     init(icon: NSImage?, title: String) {
-        self.title = title
+        self.destination = title
         
         super.init(frame: NSRect.zero)
         
+        self.translatesAutoresizingMaskIntoConstraints = false
         self.wantsLayer = true
-        self.layer?.cornerRadius = 5
+        self.layer?.cornerRadius = Constants.Design.space2
+        self.bezelStyle = .regularSquare
+        self.isBordered = false
+        self.image = icon
+        self.imagePosition = .imageLeading
+        self.imageHugsTitle = true
+        self.imageScaling = .scaleProportionallyDown
+        self.alignment = .left
+        self.font = NSFont.systemFont(ofSize: 13, weight: .regular)
+        self.horizontalPadding = Constants.Design.space4
+        self.target = self
+        self.action = #selector(selectDestination)
+        self.focusRingType = .default
+        self.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        self.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         
-        var toolTip = ""
         if title == "Settings" {
-            toolTip = localizedString("Open application settings")
+            self.toolTip = localizedString("Open application settings")
         } else if title == "Dashboard" {
-            toolTip = localizedString("Open dashboard")
+            self.toolTip = localizedString("Open dashboard")
         } else {
-            toolTip = localizedString("Open \(title) settings")
+            self.toolTip = localizedString("Open \(title) settings")
         }
-        self.toolTip = toolTip
-        
-        let imageView = NSImageView()
-        if icon != nil {
-            imageView.image = icon!
-        }
-        imageView.frame = NSRect(x: 8, y: (32 - 18)/2, width: 18, height: 18)
-        imageView.wantsLayer = true
-        imageView.contentTintColor = .labelColor
-        self.imageView = imageView
-        
-        let titleView = TextView(frame: NSRect(x: 34, y: ((32 - 16)/2) + 1, width: 100, height: 16))
-        titleView.textColor = .labelColor
-        titleView.font = NSFont.systemFont(ofSize: 13, weight: .regular)
-        titleView.stringValue = localizedString(title)
-        self.titleView = titleView
-        
-        self.addSubview(imageView)
-        self.addSubview(titleView)
+        self.setAccessibilityLabel(localizedString(title))
+        self.updateAppearance()
         
         NSLayoutConstraint.activate([
-            self.heightAnchor.constraint(equalToConstant: 32)
+            self.heightAnchor.constraint(equalToConstant: Constants.Design.navigationRowHeight)
         ])
     }
     
@@ -527,26 +591,49 @@ private class MenuItem: NSView {
         fatalError("init(coder:) has not been implemented")
     }
     
-    override func mouseDown(with: NSEvent) {
+    @objc private func selectDestination() {
         self.activate()
+    }
+
+    override func keyDown(with event: NSEvent) {
+        guard event.keyCode == 125 || event.keyCode == 126,
+              let stack = self.superview as? NSStackView else {
+            super.keyDown(with: event)
+            return
+        }
+        let items = stack.arrangedSubviews.compactMap { $0 as? MenuItem }
+        guard let index = items.firstIndex(of: self) else { return }
+        let offset = event.keyCode == 125 ? 1 : -1
+        let destinationIndex = min(max(index + offset, 0), items.count - 1)
+        let item = items[destinationIndex]
+        self.window?.makeFirstResponder(item)
+        item.activate()
     }
     
     fileprivate func activate() {
         guard !self.active else { return }
         self.active = true
         
-        NotificationCenter.default.post(name: .openModuleSettings, object: nil, userInfo: ["module": self.title])
-        
-        self.layer?.backgroundColor = NSColor.selectedContentBackgroundColor.cgColor
-        self.imageView?.contentTintColor = .white
-        self.titleView?.textColor = .white
+        NotificationCenter.default.post(name: .openModuleSettings, object: nil, userInfo: ["module": self.destination])
+        self.updateAppearance()
     }
     
     fileprivate func reset() {
-        self.layer?.backgroundColor = .clear
-        self.imageView?.contentTintColor = .labelColor
-        self.titleView?.textColor = .labelColor
         self.active = false
+        self.updateAppearance()
+    }
+
+    private func updateAppearance() {
+        let color: NSColor = self.active ? .alternateSelectedControlTextColor : .labelColor
+        self.layer?.backgroundColor = self.active ? NSColor.selectedContentBackgroundColor.cgColor : NSColor.clear.cgColor
+        self.contentTintColor = color
+        self.attributedTitle = NSAttributedString(
+            string: localizedString(self.destination),
+            attributes: [
+                .font: NSFont.systemFont(ofSize: 13, weight: self.active ? .medium : .regular),
+                .foregroundColor: color
+            ]
+        )
     }
 }
 
@@ -583,7 +670,7 @@ private class SettingsPreviewButton: NSStackView {
         button.isBordered = false
         button.action = #selector(self.action)
         button.target = self
-        button.focusRingType = .none
+        button.focusRingType = .default
         button.widthAnchor.constraint(equalToConstant: Constants.Widget.height).isActive = true
         self.button = button
         

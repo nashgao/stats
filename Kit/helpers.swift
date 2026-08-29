@@ -1576,15 +1576,15 @@ public class PreferencesSection: NSStackView {
         
         self.container.orientation = .vertical
         self.container.wantsLayer = true
-        self.container.layer?.backgroundColor = NSColor.quaternaryLabelColor.withAlphaComponent(0.025).cgColor
-        self.container.layer?.cornerRadius = Constants.Settings.margin
+        self.container.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
+        self.container.layer?.cornerRadius = Constants.Design.sectionRadius
         self.container.edgeInsets = NSEdgeInsets(
-            top: Constants.Settings.margin/1.25,
-            left: Constants.Settings.margin,
-            bottom: Constants.Settings.margin/1.25,
-            right: Constants.Settings.margin
+            top: Constants.Design.space2,
+            left: Constants.Design.space3,
+            bottom: Constants.Design.space2,
+            right: Constants.Design.space3
         )
-        self.container.spacing = Constants.Settings.margin/1.25
+        self.container.spacing = Constants.Design.space2
         self.addArrangedSubview(self.container)
         
         for item in components {
@@ -1597,23 +1597,23 @@ public class PreferencesSection: NSStackView {
     }
     
     public override func updateLayer() {
-        self.container.layer?.backgroundColor = NSColor.quaternaryLabelColor.withAlphaComponent(0.025).cgColor
+        self.container.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
     }
     
     private func addHeader(title: String, subtitle: String) {
         let view = NSStackView()
-        view.heightAnchor.constraint(equalToConstant: 26).isActive = true
+        view.heightAnchor.constraint(equalToConstant: Constants.Design.space6 + Constants.Design.space1).isActive = true
         
         let space = NSView()
         space.widthAnchor.constraint(equalToConstant: 4).isActive = true
         
         let firstField: NSTextField = TextView()
-        firstField.font = NSFont.systemFont(ofSize: 12, weight: .medium)
+        firstField.font = NSFont.systemFont(ofSize: 13, weight: .medium)
         firstField.stringValue = title
         
         let secondField: NSTextField = TextView()
-        secondField.font = NSFont.systemFont(ofSize: 11, weight: .regular)
-        secondField.textColor = .placeholderTextColor
+        secondField.font = NSFont.systemFont(ofSize: 12, weight: .regular)
+        secondField.textColor = .secondaryLabelColor
         secondField.stringValue = subtitle
         self.subtitleField = secondField
         
@@ -1686,7 +1686,7 @@ private class PreferencesSeparator: NSView {
     public init() {
         super.init(frame: .zero)
         self.wantsLayer = true
-        self.layer?.backgroundColor = NSColor.separatorColor.withAlphaComponent(0.05).cgColor
+        self.layer?.backgroundColor = NSColor.separatorColor.cgColor
         self.heightAnchor.constraint(equalToConstant: 1).isActive = true
         self.identifier = NSUserInterfaceItemIdentifier("PreferencesSeparator")
     }
@@ -1696,7 +1696,7 @@ private class PreferencesSeparator: NSView {
     }
     
     public override func updateLayer() {
-        self.layer?.backgroundColor = NSColor.separatorColor.withAlphaComponent(0.05).cgColor
+        self.layer?.backgroundColor = NSColor.separatorColor.cgColor
     }
 }
 
@@ -1711,7 +1711,12 @@ public class PreferencesRow: NSStackView {
         self.orientation = .horizontal
         self.distribution = .fill
         self.alignment = .centerY
-        self.edgeInsets = NSEdgeInsets(top: Constants.Settings.margin/2, left: 0, bottom: (Constants.Settings.margin/2) - 1, right: 0)
+        self.edgeInsets = NSEdgeInsets(
+            top: Constants.Design.space2,
+            left: 0,
+            bottom: Constants.Design.space2,
+            right: 0
+        )
         self.spacing = 0
         if let id {
             self.identifier = NSUserInterfaceItemIdentifier(id)
@@ -1723,8 +1728,10 @@ public class PreferencesRow: NSStackView {
             helpBtn.bezelStyle = .helpButton
             helpBtn.controlSize = .small
             helpBtn.title = ""
+            helpBtn.toolTip = localizedString("Help")
             helpBtn.action = #selector(self.help)
             helpBtn.target = self
+            helpBtn.setAccessibilityLabel(localizedString("Help"))
             let space = NSView()
             space.widthAnchor.constraint(equalToConstant: 5).isActive = true
             self.addArrangedSubview(space)
@@ -1750,7 +1757,7 @@ public class PreferencesRow: NSStackView {
         
         if let title {
             let field: NSTextField = TextView()
-            field.font = NSFont.systemFont(ofSize: 12, weight: .regular)
+            field.font = NSFont.systemFont(ofSize: 13, weight: .regular)
             field.stringValue = title
             view.addArrangedSubview(field)
         }

@@ -447,7 +447,7 @@ private class SColorSelectView: NSStackView {
     }
 }
 
-public class NSButtonWithPadding: NSButton {
+open class NSButtonWithPadding: NSButton {
     public var horizontalPadding: CGFloat = 0
     public var verticalPadding: CGFloat = 0
     

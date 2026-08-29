@@ -28,6 +28,27 @@ public struct Settings_c_s {
     public let margin: CGFloat = 10
 }
 
+public struct Design_c_s {
+    public let space1: CGFloat = 4
+    public let space2: CGFloat = 8
+    public let space3: CGFloat = 12
+    public let space4: CGFloat = 16
+    public let space5: CGFloat = 20
+    public let space6: CGFloat = 24
+    public let space8: CGFloat = 32
+
+    public let sectionRadius: CGFloat = 10
+    public let navigationRowHeight: CGFloat = 36
+    public let minimumControlSize: CGFloat = 32
+
+    public let sidebarWidth: CGFloat = 184
+    public let sidebarMinimumWidth: CGFloat = 168
+    public let sidebarMaximumWidth: CGFloat = 240
+    public let contentMinimumWidth: CGFloat = 560
+    public let settingsDefaultSize = CGSize(width: 900, height: 620)
+    public let settingsMinimumSize = CGSize(width: 760, height: 520)
+}
+
 public struct Widget_c_s {
     public let width: CGFloat = 32
     public var height: CGFloat {
@@ -46,6 +67,7 @@ public struct Constants {
     public static let Popup: Popup_c_s = Popup_c_s()
     public static let Settings: Settings_c_s = Settings_c_s()
     public static let Widget: Widget_c_s = Widget_c_s()
+    public static let Design: Design_c_s = Design_c_s()
     
     public static let defaultProcessIcon = NSWorkspace.shared.icon(forFile: "/bin/bash")
 }
