@@ -3,6 +3,24 @@ title: "Stats Custom Native Telemetry"
 description: "Preserve the verified v3.0.13 custom foundation, then deliver a cohesive Apple-native telemetry experience with live hierarchy, shared design tokens, accessible navigation, consistent popups and menu-bar presets, fork-owned product surfaces, and visual regression coverage."
 priority: "high"
 category: "feature"
+status: "completed"
+completed_at: "2026-08-29T19:18:21Z"
+
+timeline:
+  estimated_start: null
+  estimated_end: null
+  estimated_hours: null
+  actual_start: "2026-08-24T04:03:55Z"
+  actual_end: "2026-08-29T19:18:21Z"
+  actual_hours: 3.40
+  active_redesign_start: "2026-08-29T12:29:16Z"
+  active_redesign_elapsed_hours: 6.74
+  foundation_to_completion_elapsed_days: 5.64
+  variance_hours: null
+  variance_percentage: null
+  efficiency_ratio: null
+  schedule_variance_days: null
+  metrics_note: "Actual hours are the active goal timer at archival. Earlier foundation effort was not timed; commit spans are observational and are not treated as labor time. No initial estimate was recorded, so variance and efficiency are not calculable."
 
 success_criteria:
   - "The repository has exactly one local branch and one worktree."
@@ -103,8 +121,30 @@ tasks:
     status: "completed"
   - id: "task-010"
     title: "Add visual and accessibility regression coverage and complete runtime QA"
-    status: "in_progress"
+    status: "completed"
 
 progress:
-  current_phase: "verification"
-  overall_percentage: 88
+  current_phase: "completed"
+  overall_percentage: 100
+  phase_history:
+    - phase: "verification"
+      started_at: "2026-08-29T18:40:10Z"
+      completed_at: "2026-08-29T19:18:21Z"
+      duration_hours: 0.64
+
+completion_evidence:
+  commit: "ecd18905aec9913bf44bb33a0d1d540506cf7967"
+  repository_invariants: "master equals origin/master with exactly one local branch and one worktree"
+  tests: "16 of 16 tests passed in a fresh DerivedData tree"
+  lint: "SwiftLint strict completed with 0 violations across 119 files"
+  build: "Clean Debug app build succeeded under Xcode 26.6"
+  signing: "Ad-hoc local signature passed codesign --verify --deep --strict"
+  runtime: "Clean signed artifact launched and rendered live Dashboard telemetry"
+  visual_qa: "Exact-current light, dark, collapsed, localized Settings, preset-menu, and CPU-popup states passed final review"
+  independent_gates:
+    - "Native Telemetry design fidelity: PASS"
+    - "Accessibility and runtime integrity: PASS"
+  accepted_residuals:
+    - "Local ad-hoc signing cannot authenticate to the installed upstream SMC helper"
+    - "No signed, notarized distribution artifact is published"
+    - "Xcode 26.6 emits seven AppIntents metadata warnings for targets without AppIntents dependencies"
