@@ -10,7 +10,7 @@
 //
 
 import XCTest
-import Kit
+@testable import Kit
 @testable import Stats
 
 class KitTests: XCTestCase {
@@ -120,6 +120,80 @@ class KitTests: XCTestCase {
         )
         XCTAssertEqual(details.state, .off)
         XCTAssertEqual(details.accessibilityValue() as? String, localizedString("Collapsed"))
+    }
+
+    @MainActor
+    func testPopupShell_hasAccessibleActionsAndKeyboardShortcuts() throws {
+        func descendants(of view: NSView) -> [NSView] {
+            view.subviews + view.subviews.flatMap(descendants)
+        }
+
+        let header = HeaderView(
+            frame: NSRect(
+                x: 0,
+                y: 0,
+                width: Constants.Popup.width + (Constants.Popup.margins * 2),
+                height: Constants.Popup.headerHeight
+            ),
+            module: .CPU
+        )
+        let buttons = descendants(of: header).compactMap { $0 as? NSButton }
+
+        XCTAssertEqual(header.frame.width, Constants.Popup.width + (Constants.Popup.margins * 2))
+        XCTAssertTrue(["Open Activity Monitor", "Open module settings"].allSatisfy { label in
+            buttons.contains {
+                $0.accessibilityLabel() == localizedString(label) && $0.focusRingType == .default
+            }
+        })
+
+        let escape = try XCTUnwrap(NSEvent.keyEvent(
+            with: .keyDown,
+            location: .zero,
+            modifierFlags: [],
+            timestamp: 0,
+            windowNumber: 0,
+            context: nil,
+            characters: "\u{1B}",
+            charactersIgnoringModifiers: "\u{1B}",
+            isARepeat: false,
+            keyCode: 53
+        ))
+        XCTAssertEqual(popupKeyAction(for: escape), .close)
+
+        let commandComma = try XCTUnwrap(NSEvent.keyEvent(
+            with: .keyDown,
+            location: .zero,
+            modifierFlags: [.command],
+            timestamp: 0,
+            windowNumber: 0,
+            context: nil,
+            characters: ",",
+            charactersIgnoringModifiers: ",",
+            isARepeat: false,
+            keyCode: 43
+        ))
+        XCTAssertEqual(popupKeyAction(for: commandComma), .settings)
+    }
+
+    func testMenuBarPresets_matchNativeTelemetryContract() throws {
+        XCTAssertEqual(
+            menuBarPresets.map(\.name),
+            ["Essential", "Performance", "Power & Thermals", "Network", "Custom"]
+        )
+        XCTAssertTrue(menuBarPresets.allSatisfy { preset in
+            let modules = preset.items.map { $0.module.rawValue }
+            return !modules.isEmpty && Set(modules).count == modules.count
+        })
+
+        let essential = try XCTUnwrap(menuBarPresets.first { $0.name == "Essential" })
+        XCTAssertEqual(
+            Set(essential.items.map { $0.module.rawValue }),
+            Set([ModuleType.CPU.rawValue, ModuleType.RAM.rawValue, ModuleType.battery.rawValue])
+        )
+        let network = try XCTUnwrap(menuBarPresets.first { $0.name == "Network" })
+        XCTAssertEqual(network.items.count, 1)
+        XCTAssertEqual(network.items[0].module.rawValue, ModuleType.network.rawValue)
+        XCTAssertEqual(network.items[0].widget.rawValue, widget_t.speed.rawValue)
     }
 
     func testIsNewestVersion_release() throws {

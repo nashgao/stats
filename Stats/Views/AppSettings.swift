@@ -56,6 +56,7 @@ class ApplicationSettings: NSStackView {
     }
     
     private var updateSelector: NSPopUpButton?
+    private var menuBarPresetSelector: NSPopUpButton?
     private var startAtLoginBtn: NSSwitch?
     private var remoteControlBtn: NSSwitch?
     private var remoteUpdatesBtn: NSSwitch?
@@ -92,6 +93,12 @@ class ApplicationSettings: NSStackView {
         
         scrollView.stackView.addArrangedSubview(self.informationView())
         
+        let selectedPreset = Store.shared.string(key: "menu_bar_preset", defaultValue: "Custom")
+        self.menuBarPresetSelector = selectView(
+            action: #selector(self.toggleMenuBarPreset),
+            items: menuBarPresets.map { KeyValue_t(key: $0.name, value: $0.name) },
+            selected: selectedPreset
+        )
         self.updateSelector = selectView(
             action: #selector(self.toggleUpdateInterval),
             items: AppUpdateIntervals,
@@ -103,6 +110,7 @@ class ApplicationSettings: NSStackView {
         )
         
         scrollView.stackView.addArrangedSubview(PreferencesSection([
+            PreferencesRow(localizedString("Menu bar preset"), component: self.menuBarPresetSelector!),
             PreferencesRow(localizedString("Check for updates"), component: self.updateSelector!),
             PreferencesRow(localizedString("Temperature"), component: selectView(
                 action: #selector(self.toggleTemperatureUnits),
@@ -254,6 +262,17 @@ class ApplicationSettings: NSStackView {
             }
         }
         self.updateSelector?.selectItem(at: idx)
+
+        let presetName = Store.shared.string(key: "menu_bar_preset", defaultValue: "Custom")
+        if let items = self.menuBarPresetSelector?.menu?.items,
+           let index = items.firstIndex(where: { $0.representedObject as? String == presetName }) {
+            self.menuBarPresetSelector?.selectItem(at: index)
+        }
+        if ProcessInfo.processInfo.environment["STATS_OPEN_PRESET_MENU"] == "1" {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                self?.menuBarPresetSelector?.performClick(nil)
+            }
+        }
     }
     
     private func informationView() -> NSView {
@@ -340,6 +359,12 @@ class ApplicationSettings: NSStackView {
     @objc private func toggleUpdateInterval(_ sender: NSMenuItem) {
         guard let key = sender.representedObject as? String else { return }
         Store.shared.set(key: "update-interval", value: key)
+    }
+
+    @objc private func toggleMenuBarPreset(_ sender: NSMenuItem) {
+        guard let name = sender.representedObject as? String,
+              let preset = menuBarPresets.first(where: { $0.name == name }) else { return }
+        applyMenuBarPreset(preset)
     }
     
     @objc private func toggleTemperatureUnits(_ sender: NSMenuItem) {

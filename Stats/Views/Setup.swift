@@ -14,6 +14,88 @@ import Kit
 
 private let setupSize: CGSize = CGSize(width: 700, height: 440)
 
+internal struct MenuBarPreset {
+    let name: String
+    let items: [(module: ModuleType, widget: widget_t)]
+}
+
+internal let menuBarPresets: [MenuBarPreset] = [
+    MenuBarPreset(name: "Essential", items: [
+        (.CPU, .mini),
+        (.RAM, .mini),
+        (.battery, .battery)
+    ]),
+    MenuBarPreset(name: "Performance", items: [
+        (.CPU, .lineChart),
+        (.GPU, .mini),
+        (.RAM, .barChart),
+        (.disk, .barChart)
+    ]),
+    MenuBarPreset(name: "Power & Thermals", items: [
+        (.CPU, .mini),
+        (.sensors, .label),
+        (.battery, .battery)
+    ]),
+    MenuBarPreset(name: "Network", items: [
+        (.network, .speed)
+    ]),
+    MenuBarPreset(name: "Custom", items: [
+        (.CPU, .lineChart),
+        (.GPU, .mini),
+        (.RAM, .barChart),
+        (.disk, .barChart),
+        (.sensors, .label),
+        (.network, .speed),
+        (.battery, .battery)
+    ])
+]
+
+internal let menuBarPresetModules: [ModuleType] = [
+    .CPU, .GPU, .RAM, .disk, .sensors, .network, .battery, .bluetooth, .clock
+]
+
+internal func applyMenuBarPreset(_ preset: MenuBarPreset) {
+    var widgets: [ModuleType: widget_t] = [:]
+    preset.items.forEach { widgets[$0.module] = $0.widget }
+    Store.shared.set(key: "menu_bar_preset", value: preset.name)
+
+    for module in menuBarPresetModules {
+        let name = module.stringValue
+        if let widget = widgets[module] {
+            Store.shared.set(key: "\(name)_state", value: true)
+            Store.shared.set(key: "\(name)_widget", value: widget.rawValue)
+        } else {
+            Store.shared.set(key: "\(name)_state", value: false)
+        }
+    }
+
+    let mounted = (NSApp.delegate as? AppDelegate)?.modulesMounted ?? false
+    let names = menuBarPresetModules.map { $0.stringValue }
+    modules.forEach { module in
+        let name = module.config.name
+        guard let index = names.firstIndex(of: name) else { return }
+        let widget = widgets[menuBarPresetModules[index]]
+        if !mounted {
+            module.enabled = widget != nil && module.available
+            return
+        }
+        if let widget {
+            module.menuBar.widgets.forEach { $0.toggle($0.type == widget) }
+            NotificationCenter.default.post(
+                name: .toggleModule,
+                object: nil,
+                userInfo: ["module": name, "state": true]
+            )
+        } else {
+            NotificationCenter.default.post(
+                name: .toggleModule,
+                object: nil,
+                userInfo: ["module": name, "state": false]
+            )
+        }
+    }
+}
+
 internal class SetupWindow: NSWindow, NSWindowDelegate {
     internal var finishHandler: () -> Void = {}
     internal var onClose: (() -> Void)?
@@ -222,36 +304,8 @@ private class SetupView_welcome: NSStackView {
 }
 
 private class SetupView_preset: NSStackView {
-    private let presets: [(name: String, items: [(module: ModuleType, widget: widget_t)])] = [
-        (name: "Default", items: [
-            (.CPU, .mini),
-            (.RAM, .mini),
-            (.disk, .mini),
-            (.network, .speed),
-            (.battery, .battery)
-        ]),
-        (name: "Basic", items: [
-            (.CPU, .mini),
-            (.RAM, .mini)
-        ]),
-        (name: "Recommended", items: [
-            (.CPU, .mini),
-            (.RAM, .barChart),
-            (.disk, .barChart),
-            (.network, .speed)
-        ]),
-        (name: "Extended", items: [
-            (.CPU, .lineChart),
-            (.GPU, .mini),
-            (.RAM, .barChart),
-            (.disk, .barChart),
-            (.sensors, .label),
-            (.network, .speed),
-            (.battery, .battery)
-        ])
-    ]
+    private let presets = menuBarPresets
     
-    private let allModules: [ModuleType] = [.CPU, .GPU, .RAM, .disk, .sensors, .network, .battery, .bluetooth, .clock]
     private var radios: [NSButton] = []
     private var bars: [NSView] = []
     
@@ -276,6 +330,7 @@ private class SetupView_preset: NSStackView {
         container.row(at: 0).height = 70
         
         self.addArrangedSubview(container)
+        self.select(0)
     }
     
     required init?(coder: NSCoder) {
@@ -297,13 +352,13 @@ private class SetupView_preset: NSStackView {
         container.addArrangedSubview(message)
         
         for (i, preset) in self.presets.enumerated() {
-            container.addArrangedSubview(self.option(index: i, state: preset.name == "Default", preset: preset))
+            container.addArrangedSubview(self.option(index: i, state: i == 0, preset: preset))
         }
         
         return container
     }
     
-    private func option(index: Int, state: Bool, preset: (name: String, items: [(module: ModuleType, widget: widget_t)])) -> NSView {
+    private func option(index: Int, state: Bool, preset: MenuBarPreset) -> NSView {
         let row = NSStackView()
         row.orientation = .horizontal
         row.spacing = 10
@@ -320,11 +375,12 @@ private class SetupView_preset: NSStackView {
         button.target = self
         button.tag = index
         button.translatesAutoresizingMaskIntoConstraints = false
-        button.widthAnchor.constraint(equalToConstant: 120).isActive = true
+        button.widthAnchor.constraint(equalToConstant: 160).isActive = true
         self.radios.append(button)
         
         let images = preset.items.compactMap { self.widgetImage(module: $0.module, type: $0.widget) }
         let bar = self.menuBarPreview(images)
+        bar.setAccessibilityElement(false)
         bar.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(self.boxClicked)))
         self.bars.append(bar)
         self.setSelected(bar, state)
@@ -350,10 +406,10 @@ private class SetupView_preset: NSStackView {
     private func menuBarPreview(_ images: [NSImage]) -> NSView {
         let bar = NSView()
         bar.wantsLayer = true
-        bar.layer?.cornerRadius = 6
+        bar.layer?.cornerRadius = Constants.Popup.radius
         bar.layer?.cornerCurve = .continuous
         bar.layer?.masksToBounds = true
-        bar.layer?.backgroundColor = NSColor(white: 0.5, alpha: 0.14).cgColor
+        bar.layer?.backgroundColor = NSColor.quaternaryLabelColor.withAlphaComponent(0.14).cgColor
         bar.translatesAutoresizingMaskIntoConstraints = false
         bar.setContentHuggingPriority(.required, for: .horizontal)
         
@@ -399,39 +455,7 @@ private class SetupView_preset: NSStackView {
         self.radios.enumerated().forEach { $1.state = $0 == index ? .on : .off }
         self.bars.enumerated().forEach { self.setSelected($1, $0 == index) }
         
-        var widgets: [ModuleType: widget_t] = [:]
-        self.presets[index].items.forEach { widgets[$0.module] = $0.widget }
-        
-        for module in self.allModules {
-            let name = module.stringValue
-            if let widget = widgets[module] {
-                Store.shared.set(key: "\(name)_state", value: true)
-                Store.shared.set(key: "\(name)_widget", value: widget.rawValue)
-            } else {
-                Store.shared.set(key: "\(name)_state", value: false)
-            }
-        }
-        
-        let mounted = (NSApp.delegate as? AppDelegate)?.modulesMounted ?? false
-        let names = self.allModules.map { $0.stringValue }
-        
-        modules.forEach { module in
-            let name = module.config.name
-            guard let index = names.firstIndex(of: name) else { return }
-            let widget = widgets[self.allModules[index]]
-            
-            if !mounted {
-                module.enabled = widget != nil && module.available
-                return
-            }
-            
-            if let widget = widget {
-                module.menuBar.widgets.forEach { $0.toggle($0.type == widget) }
-                NotificationCenter.default.post(name: .toggleModule, object: nil, userInfo: ["module": name, "state": true])
-            } else {
-                NotificationCenter.default.post(name: .toggleModule, object: nil, userInfo: ["module": name, "state": false])
-            }
-        }
+        applyMenuBarPreset(self.presets[index])
     }
 }
 

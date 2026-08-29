@@ -80,7 +80,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         self.setup {
             modules.reversed().forEach{ $0.mount() }
             self.modulesMounted = true
-            if let destination = ProcessInfo.processInfo.environment["STATS_SETTINGS_DESTINATION"] {
+            if let module = ProcessInfo.processInfo.environment["STATS_POPUP_MODULE"] {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                    let screen = NSScreen.main?.frame ?? .zero
+                    NotificationCenter.default.post(
+                        name: .togglePopup,
+                        object: nil,
+                        userInfo: [
+                            "module": module,
+                            "origin": CGPoint(x: screen.midX, y: screen.maxY - Constants.Widget.height),
+                            "center": CGFloat.zero
+                        ]
+                    )
+                }
+            } else if let destination = ProcessInfo.processInfo.environment["STATS_SETTINGS_DESTINATION"] {
                 self.ensureSettingsWindow().open(module: destination)
             } else {
                 self.showSettingsIfNoActiveWidgets()

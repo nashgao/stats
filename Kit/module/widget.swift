@@ -584,7 +584,8 @@ public class MenuBarView: NSView {
         var x: CGFloat = Constants.Widget.spacing
         list.forEach { (type: widget_t) in
             if let view = self.subviews.first(where: { $0.identifier == NSUserInterfaceItemIdentifier(type.rawValue) }) {
-                view.setFrameOrigin(NSPoint(x: x, y: view.frame.origin.y))
+                let y = floor((Constants.Widget.height - view.frame.height) / 2)
+                view.setFrameOrigin(NSPoint(x: x, y: y))
                 x = view.frame.origin.x + view.frame.width + Constants.Widget.spacing
             }
         }
