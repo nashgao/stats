@@ -105,6 +105,20 @@ public class Sensors: Module {
         self.popupView.usageCallback(value.sensors)
         self.portalView.usageCallback(value.sensors)
         self.notificationsView.usageCallback(value.sensors)
+
+        if let hottest = value.sensors
+            .filter({ $0.type == .temperature && $0.state && $0.value.isFinite })
+            .max(by: { $0.value < $1.value }) {
+            NotificationCenter.default.post(
+                name: .telemetrySample,
+                object: TelemetrySample(
+                    metric: .temperature,
+                    value: hottest.value,
+                    displayValue: hottest.formattedValue,
+                    detail: hottest.name
+                )
+            )
+        }
         
         let activeWidgets = self.menuBar.widgets.filter{ $0.isActive }
         self.sensorsReader?.sleepMode(state: activeWidgets.contains(where: {$0.item is Label}) && activeWidgets.count == 1)

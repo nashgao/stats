@@ -37,6 +37,43 @@ public struct ColorValue: Equatable {
     // swiftlint:enable function_name_whitespace
 }
 
+public enum TelemetryMetric: String, CaseIterable, Sendable {
+    case cpu
+    case memory
+    case disk
+    case network
+    case battery
+    case temperature
+}
+
+public struct TelemetrySample: Sendable {
+    public let metric: TelemetryMetric
+    public let value: Double
+    public let secondaryValue: Double?
+    public let displayValue: String
+    public let detail: String
+    public let isAvailable: Bool
+    public let timestamp: Date
+
+    public init(
+        metric: TelemetryMetric,
+        value: Double,
+        secondaryValue: Double? = nil,
+        displayValue: String,
+        detail: String = "",
+        isAvailable: Bool = true,
+        timestamp: Date = Date()
+    ) {
+        self.metric = metric
+        self.value = value
+        self.secondaryValue = secondaryValue
+        self.displayValue = displayValue
+        self.detail = detail
+        self.isAvailable = isAvailable
+        self.timestamp = timestamp
+    }
+}
+
 public enum AppUpdateInterval: String {
     case silent = "Silent"
     case atStart = "At start"
@@ -319,6 +356,7 @@ public extension Notification.Name {
     static let remoteAuthenticated = Notification.Name("remoteAuthenticated")
     static let remoteUpdate = Notification.Name("remoteUpdate")
     static let openWindow = Notification.Name("openWindow")
+    static let telemetrySample = Notification.Name("telemetrySample")
 }
 
 public var isARM: Bool {

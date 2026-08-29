@@ -200,6 +200,17 @@ public class CPU: Module {
         self.portalView.callback(value)
         self.notificationsView.loadCallback(value)
         self.previewView.loadCallback(value)
+
+        let cpuUsage = min(max(value.totalUsage, 0), 1)
+        NotificationCenter.default.post(
+            name: .telemetrySample,
+            object: TelemetrySample(
+                metric: .cpu,
+                value: cpuUsage,
+                displayValue: "\(Int((cpuUsage * 100).rounded()))%",
+                detail: "\(localizedString("System")) \(Int((value.systemLoad * 100).rounded()))% · \(localizedString("User")) \(Int((value.userLoad * 100).rounded()))%"
+            )
+        )
         
         self.menuBar.widgets.filter{ $0.isActive }.forEach { [self] (w: SWidget) in
             switch w.item {

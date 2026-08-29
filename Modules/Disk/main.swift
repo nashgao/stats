@@ -314,6 +314,18 @@ public class Disk: Module {
         
         self.portalView.utilizationCallback(d)
         self.notificationsView.utilizationCallback(d.percentage)
+
+        let usedDisk = DiskSize(d.size - d.free).getReadableMemory()
+        let totalDisk = DiskSize(d.size).getReadableMemory()
+        NotificationCenter.default.post(
+            name: .telemetrySample,
+            object: TelemetrySample(
+                metric: .disk,
+                value: min(max(d.percentage, 0), 1),
+                displayValue: "\(Int((d.percentage * 100).rounded()))%",
+                detail: "\(usedDisk) / \(totalDisk)"
+            )
+        )
         
         self.menuBar.widgets.filter{ $0.isActive }.forEach { (w: SWidget) in
             switch w.item {

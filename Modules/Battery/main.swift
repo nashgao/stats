@@ -109,6 +109,21 @@ public class Battery: Module {
         self.popupView.usageCallback(value)
         self.portalView.loadCallback(value)
         self.notificationsView.usageCallback(value)
+
+        let batteryLevel = min(max(abs(value.level), 0), 1)
+        let batteryState = value.isCharging
+            ? localizedString("Charging")
+            : localizedString(value.isBatteryPowered ? "On battery" : "Power adapter")
+        NotificationCenter.default.post(
+            name: .telemetrySample,
+            object: TelemetrySample(
+                metric: .battery,
+                value: batteryLevel,
+                secondaryValue: value.isBatteryPowered ? 0 : 1,
+                displayValue: "\(Int((batteryLevel * 100).rounded()))%",
+                detail: batteryState
+            )
+        )
         
         self.menuBar.widgets.filter{ $0.isActive }.forEach { (w: SWidget) in
             switch w.item {

@@ -153,6 +153,18 @@ public class RAM: Module {
         self.portalView.callback(value)
         self.notificationsView.loadCallback(value)
         self.previewView.loadCallback(value)
+
+        let usedMemory = Units(bytes: Int64(value.used)).getReadableMemory(style: .memory)
+        let totalMemory = Units(bytes: Int64(value.total)).getReadableMemory(style: .memory)
+        NotificationCenter.default.post(
+            name: .telemetrySample,
+            object: TelemetrySample(
+                metric: .memory,
+                value: min(max(value.usage, 0), 1),
+                displayValue: "\(Int((value.usage * 100).rounded()))%",
+                detail: "\(usedMemory) / \(totalMemory)"
+            )
+        )
         
         let total: Double = value.total == 0 ? 1 : value.total
         self.menuBar.widgets.filter{ $0.isActive }.forEach { (w: SWidget) in

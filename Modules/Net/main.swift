@@ -251,6 +251,20 @@ public class Network: Module {
         self.portalView.usageCallback(value)
         self.notificationsView.usageCallback(value)
         self.previewView.usageCallback(value)
+
+        let liveDownload = max(value.bandwidth.download, 0)
+        let liveUpload = max(value.bandwidth.upload, 0)
+        NotificationCenter.default.post(
+            name: .telemetrySample,
+            object: TelemetrySample(
+                metric: .network,
+                value: Double(liveDownload),
+                secondaryValue: Double(liveUpload),
+                displayValue: "↓ \(Units(bytes: liveDownload).getReadableSpeed())",
+                detail: "↑ \(Units(bytes: liveUpload).getReadableSpeed())",
+                isAvailable: value.status
+            )
+        )
         
         var upload: Int64 = value.bandwidth.upload
         var download: Int64 = value.bandwidth.download
