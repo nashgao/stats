@@ -659,85 +659,47 @@ public func syncShell(_ args: String) -> String {
 }
 
 public func isNewestVersion(currentVersion: String, latestVersion: String) -> Bool {
-    let currentNumber = currentVersion.replacingOccurrences(of: "v", with: "")
-    let latestNumber = latestVersion.replacingOccurrences(of: "v", with: "")
-    
-    let currentArray = currentNumber.condenseWhitespace().split(separator: ".")
-    let latestArray = latestNumber.condenseWhitespace().split(separator: ".")
-    
-    var current = Version(major: Int(currentArray[0]) ?? 0, minor: Int(currentArray[1]) ?? 0, patch: Int(currentArray[2]) ?? 0)
-    var latest = Version(major: Int(latestArray[0]) ?? 0, minor: Int(latestArray[1]) ?? 0, patch: Int(latestArray[2]) ?? 0)
-    
-    if let patch = currentArray.last, patch.contains("-") {
-        let arr = patch.split(separator: "-")
-        if let patchNumber = arr.first {
-            current.patch = Int(patchNumber) ?? 0
+    func parse(_ value: String) -> Version? {
+        var normalized = value.condenseWhitespace().trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if normalized.hasPrefix("v") {
+            normalized.removeFirst()
         }
-        if let beta = arr.last {
-            current.beta = Int(beta.replacingOccurrences(of: "beta", with: "")) ?? 0
+        guard !normalized.isEmpty else { return nil }
+
+        let prerelease = normalized.split(separator: "-", maxSplits: 1, omittingEmptySubsequences: false)
+        let components = prerelease[0].split(separator: ".", omittingEmptySubsequences: false)
+        guard (1...3).contains(components.count),
+              let major = Int(components[0]),
+              components.count < 2 || Int(components[1]) != nil,
+              components.count < 3 || Int(components[2]) != nil else {
+            return nil
         }
+
+        var version = Version(
+            major: major,
+            minor: components.count > 1 ? Int(components[1])! : 0,
+            patch: components.count > 2 ? Int(components[2])! : 0
+        )
+        if prerelease.count == 2 {
+            let value = prerelease[1]
+            guard value.hasPrefix("beta"), let beta = Int(value.dropFirst(4)) else { return nil }
+            version.beta = beta
+        }
+        return version
     }
-    
-    if let patch = latestArray.last, patch.contains("-") {
-        let arr = patch.split(separator: "-")
-        if let patchNumber = arr.first {
-            latest.patch = Int(patchNumber) ?? 0
-        }
-        if let beta = arr.last {
-            latest.beta = Int(beta.replacingOccurrences(of: "beta", with: "")) ?? 0
-        }
+
+    guard let current = parse(currentVersion), let latest = parse(latestVersion) else { return false }
+    guard current.beta != nil || latest.beta == nil else { return false }
+
+    if latest.major != current.major { return latest.major > current.major }
+    if latest.minor != current.minor { return latest.minor > current.minor }
+    if latest.patch != current.patch { return latest.patch > current.patch }
+
+    switch (current.beta, latest.beta) {
+    case (.some, .none): return true
+    case let (.some(currentBeta), .some(latestBeta)): return latestBeta > currentBeta
+    default: return false
     }
-    
-    // current is not beta + latest is not beta
-    if current.beta == nil && latest.beta == nil {
-        if latest.major > current.major {
-            return true
-        }
-        
-        if latest.minor > current.minor && latest.major >= current.major {
-            return true
-        }
-        
-        if latest.patch > current.patch && latest.minor >= current.minor && latest.major >= current.major {
-            return true
-        }
-    }
-    
-    // current version is beta + last version is not beta
-    if current.beta != nil && latest.beta == nil {
-        if latest.major > current.major {
-            return true
-        }
-        
-        if latest.minor > current.minor && latest.major >= current.major {
-            return true
-        }
-        
-        if latest.patch >= current.patch && latest.minor >= current.minor && latest.major >= current.major {
-            return true
-        }
-    }
-    
-    // current version is beta + last version is beta
-    if current.beta != nil && latest.beta != nil {
-        if latest.major > current.major {
-            return true
-        }
-        
-        if latest.minor > current.minor && latest.major >= current.major {
-            return true
-        }
-        
-        if latest.patch >= current.patch && latest.minor >= current.minor && latest.major >= current.major {
-            return true
-        }
-        
-        if latest.beta! > current.beta! && latest.patch >= current.patch && latest.minor >= current.minor && latest.major >= current.major {
-            return true
-        }
-    }
-    
-    return false
 }
 
 public func showNotification(title: String, subtitle: String? = nil, userInfo: [AnyHashable: Any] = [:], delegate: UNUserNotificationCenterDelegate? = nil) -> String {
