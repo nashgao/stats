@@ -229,4 +229,3 @@ Strategy: **native material plus tonal shift**.
 |---|---|---|---|
 | Legacy fixed frames remain outside migrated shared shells | `Modules/*/popup.swift`, widget drawing code | Incremental migration avoids destabilizing readers and specialized visualizations | Task 008 removes or documents remaining constraints |
 | Distribution signing does not yet authenticate the fork to the privileged SMC helper | project signing + helper requirement | Local ad-hoc UI QA cannot satisfy the upstream Team ID requirement | Task 009 defines fork-owned signing/helper migration before distribution |
-
