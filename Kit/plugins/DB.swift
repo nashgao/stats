@@ -32,8 +32,14 @@ public class DB {
     
     init() {
         let fileManager = FileManager.default
-        let supportPath = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!.appendingPathComponent("Stats")
-        let tmpPath = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("Stats")
+        let isTesting = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+        let processID = ProcessInfo.processInfo.processIdentifier
+        let supportPath = isTesting
+            ? fileManager.temporaryDirectory.appendingPathComponent("Stats-tests-\(processID)")
+            : fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!.appendingPathComponent("Stats")
+        let tmpPath = fileManager.temporaryDirectory.appendingPathComponent(
+            isTesting ? "Stats-tests-\(processID)-fallback" : "Stats"
+        )
         
         try? fileManager.createDirectory(at: supportPath, withIntermediateDirectories: true, attributes: nil)
         try? fileManager.createDirectory(at: tmpPath, withIntermediateDirectories: true, attributes: nil)
