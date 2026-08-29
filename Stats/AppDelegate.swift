@@ -80,7 +80,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         self.setup {
             modules.reversed().forEach{ $0.mount() }
             self.modulesMounted = true
-            self.showSettingsIfNoActiveWidgets()
+            if let destination = ProcessInfo.processInfo.environment["STATS_SETTINGS_DESTINATION"] {
+                self.ensureSettingsWindow().open(module: destination)
+            } else {
+                self.showSettingsIfNoActiveWidgets()
+            }
         }
         self.defaultValues()
         self.icon()

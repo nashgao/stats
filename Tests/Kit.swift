@@ -77,6 +77,51 @@ class KitTests: XCTestCase {
         assertVisible(try XCTUnwrap(navigation.first { $0.accessibilityLabel() == "Settings" }), in: contentView)
     }
 
+    @MainActor
+    func testDashboard_rendersLiveTelemetrySample() throws {
+        func descendants(of view: NSView) -> [NSView] {
+            view.subviews + view.subviews.flatMap(descendants)
+        }
+
+        let dashboard = Dashboard()
+
+        NotificationCenter.default.post(
+            name: .telemetrySample,
+            object: TelemetrySample(
+                metric: .cpu,
+                value: 0.42,
+                displayValue: "42%",
+                detail: "System 12% · User 30%"
+            )
+        )
+        dashboard.layoutSubtreeIfNeeded()
+
+        let fields = descendants(of: dashboard).compactMap { $0 as? NSTextField }
+        XCTAssertTrue(fields.contains { $0.stringValue == "42%" })
+        XCTAssertTrue(fields.contains { $0.stringValue == "System 12% · User 30%" })
+        XCTAssertTrue(fields.contains { $0.stringValue == localizedString("Live metrics updating") })
+
+        let remainingHealthSamples = [
+            TelemetrySample(metric: .memory, value: 0.54, displayValue: "54%"),
+            TelemetrySample(metric: .disk, value: 0.63, displayValue: "63%"),
+            TelemetrySample(metric: .network, value: 0, displayValue: "↓ 0 KB/s"),
+            TelemetrySample(metric: .temperature, value: 62, displayValue: "62°C"),
+            TelemetrySample(metric: .battery, value: 0.8, displayValue: "80%")
+        ]
+        remainingHealthSamples.forEach {
+            NotificationCenter.default.post(name: .telemetrySample, object: $0)
+        }
+        XCTAssertTrue(fields.contains { $0.stringValue == localizedString("All monitored systems nominal") })
+
+        let details = try XCTUnwrap(
+            descendants(of: dashboard)
+                .compactMap { $0 as? NSButton }
+                .first { $0.accessibilityLabel() == localizedString("Hardware details") }
+        )
+        XCTAssertEqual(details.state, .off)
+        XCTAssertEqual(details.accessibilityValue() as? String, localizedString("Collapsed"))
+    }
+
     func testIsNewestVersion_release() throws {
         XCTAssertFalse(isNewestVersion(currentVersion: "v2.11.0", latestVersion: "v2.11.0"))
         XCTAssertTrue(isNewestVersion(currentVersion: "v2.11.0", latestVersion: "v2.11.1"))

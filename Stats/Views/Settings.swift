@@ -37,7 +37,7 @@ class SettingsWindow: NSWindow, NSWindowDelegate, NSToolbarDelegate {
     ))
     private let sidebarViewController = NSSplitViewController()
     
-    private var dashboard: NSView = Dashboard()
+    private let dashboard = Dashboard()
     private var settings: ApplicationSettings = ApplicationSettings()
     
     private var toggleButton: NSControl? = nil
@@ -103,6 +103,7 @@ class SettingsWindow: NSWindow, NSWindowDelegate, NSToolbarDelegate {
             frame.size.height = max(frame.height, self.minSize.height)
             self.setFrame(frame, display: false)
         }
+        self.dashboard.adapt(to: self.frame.width)
         
         let windowController = NSWindowController()
         windowController.window = self
@@ -112,7 +113,8 @@ class SettingsWindow: NSWindow, NSWindowDelegate, NSToolbarDelegate {
         NotificationCenter.default.addObserver(self, selector: #selector(externalModuleToggle), name: .toggleModule, object: nil)
         
         self.sidebarView.setModules(modules)
-        let storedDestination = Store.shared.string(key: "settings_selected_destination", defaultValue: "Dashboard")
+        let storedDestination = ProcessInfo.processInfo.environment["STATS_SETTINGS_DESTINATION"]
+            ?? Store.shared.string(key: "settings_selected_destination", defaultValue: "Dashboard")
         let knownDestination = storedDestination == "Dashboard" || storedDestination == "Settings" || modules.contains(where: { $0.config.name == storedDestination })
         self.sidebarView.openMenu(knownDestination ? storedDestination : "Dashboard")
     }
@@ -127,6 +129,10 @@ class SettingsWindow: NSWindow, NSWindowDelegate, NSToolbarDelegate {
         DispatchQueue.main.async {
             onClose?()
         }
+    }
+
+    func windowDidResize(_ notification: Notification) {
+        self.dashboard.adapt(to: self.frame.width)
     }
     
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
@@ -227,7 +233,9 @@ class SettingsWindow: NSWindow, NSWindowDelegate, NSToolbarDelegate {
             }
             
             self.title = localizedString(title)
-            Store.shared.set(key: "settings_selected_destination", value: title)
+            if ProcessInfo.processInfo.environment["STATS_SETTINGS_DESTINATION"] == nil {
+                Store.shared.set(key: "settings_selected_destination", value: title)
+            }
             
             self.mainView.setView(view)
             self.sidebarView.openMenu(title)
