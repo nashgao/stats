@@ -97,14 +97,14 @@ tasks:
     status: "completed"
   - id: "task-008"
     title: "Standardize popup anatomy and menu-bar presets"
-    status: "in_progress"
+    status: "completed"
   - id: "task-009"
     title: "Move visible branding, support, issues, releases, and updates under fork ownership"
-    status: "pending"
+    status: "in_progress"
   - id: "task-010"
     title: "Add visual and accessibility regression coverage and complete runtime QA"
     status: "pending"
 
 progress:
-  current_phase: "popups"
-  overall_percentage: 64
+  current_phase: "ownership"
+  overall_percentage: 76
