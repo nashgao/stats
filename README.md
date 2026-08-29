@@ -1,4 +1,4 @@
-# Stats
+# Stats Custom
 
 <a href="https://github.com/exelban/stats/releases"><p align="center"><img src="https://github.com/exelban/stats/raw/master/Stats/Supporting%20Files/Assets.xcassets/AppIcon.appiconset/icon_256x256.png" width="120"></p></a>
 
@@ -6,6 +6,12 @@
 [![Stats](https://serhiy.s3.eu-central-1.amazonaws.com/Github_repo/stats/popups%3Fv2.3.2.png?v3)](https://github.com/exelban/stats/releases)
 
 macOS system monitor in your menu bar
+
+## About this fork
+
+Stats Custom is an independently maintained, modified version of [Stats](https://github.com/exelban/stats) by Serhiy Mytrovtsiy. It is not affiliated with or endorsed by the original project.
+
+The original project and this fork are distributed under the [MIT License](LICENSE). The original copyright and permission notice are retained. Until this fork publishes its own release, the installation links below refer to the upstream Stats application.
 
 ## Installation
 ### Manual
@@ -161,4 +167,4 @@ The best ways to support the project are reporting bugs, improving translations,
 You can help by adding a new language or improving the existing translation.
 
 ## License
-[MIT License](https://github.com/exelban/stats/blob/master/LICENSE)
+[MIT License](LICENSE)
