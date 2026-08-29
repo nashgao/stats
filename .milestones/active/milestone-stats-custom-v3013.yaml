@@ -94,10 +94,10 @@ tasks:
     status: "completed"
   - id: "task-007"
     title: "Replace static Dashboard with live system-health overview"
-    status: "in_progress"
+    status: "completed"
   - id: "task-008"
     title: "Standardize popup anatomy and menu-bar presets"
-    status: "pending"
+    status: "in_progress"
   - id: "task-009"
     title: "Move visible branding, support, issues, releases, and updates under fork ownership"
     status: "pending"
@@ -106,5 +106,5 @@ tasks:
     status: "pending"
 
 progress:
-  current_phase: "dashboard"
-  overall_percentage: 48
+  current_phase: "popups"
+  overall_percentage: 64
