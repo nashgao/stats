@@ -1,6 +1,6 @@
 id: "milestone-stats-custom-v3013"
-title: "Stats Custom v3.0.13 Foundation"
-description: "Move the local Stats customization to a pinned v3.0.13 base, reconcile the watts fix, prevent upstream self-replacement, and consolidate to one local branch and worktree."
+title: "Stats Custom Native Telemetry"
+description: "Preserve the verified v3.0.13 custom foundation, then deliver a cohesive Apple-native telemetry experience with live hierarchy, shared design tokens, accessible navigation, consistent popups and menu-bar presets, fork-owned product surfaces, and visual regression coverage."
 priority: "high"
 category: "feature"
 
@@ -9,6 +9,12 @@ success_criteria:
   - "The branch is based on upstream v3.0.13 and preserves the required watts-reader behavior without duplicating the upstream wake fix."
   - "The custom app cannot self-update over itself from the upstream Stats release feed."
   - "Tests and a local app build pass, followed by a real launch smoke check."
+  - "A root DESIGN.md defines the Native Telemetry contract and every redesigned primitive maps to it."
+  - "Dashboard prioritizes live system health and trends; static hardware inventory is subordinate."
+  - "Settings navigation is keyboard and VoiceOver operable, visibly focused, resizable, and localization-safe."
+  - "Module popups and menu-bar widgets use coherent shared anatomy, hierarchy, numeric alignment, and non-color-only semantics."
+  - "Visible support, issue, release, and update surfaces are owned by this fork or explicitly credited upstream."
+  - "Fresh visual, accessibility, build, test, and runtime evidence passes on the custom build."
 
 deliverables:
   - name: "Consolidated custom branch"
@@ -30,6 +36,24 @@ deliverables:
     acceptance_criteria:
       - "Relevant tests pass"
       - "Application builds and launches locally"
+  - name: "Native Telemetry design system"
+    type: "documentation"
+    acceptance_criteria:
+      - "DESIGN.md defines tokens, primitives, states, motion, adaptive behavior, and accessibility constraints"
+      - "Shared AppKit primitives consume the documented semantic roles"
+  - name: "Redesigned application shell"
+    type: "code"
+    acceptance_criteria:
+      - "Live Dashboard, accessible sidebar, adaptive Settings, standardized popup shell, and menu-bar presets are implemented"
+  - name: "Fork-owned product experience"
+    type: "code"
+    acceptance_criteria:
+      - "Visible identity and external destinations no longer misrepresent upstream ownership"
+  - name: "Visual and accessibility regression gate"
+    type: "test"
+    acceptance_criteria:
+      - "Representative UI states have deterministic screenshot or interaction coverage"
+      - "Custom build passes visual QA and keyboard/accessibility checks"
 
 risks:
   - description: "Applying the v3.0.4 working diff directly could overwrite v3.0.13 sensor concurrency and wake fixes."
@@ -40,6 +64,14 @@ risks:
     probability: 0.6
     impact: "high"
     mitigation: "Disable upstream updating first and change identity only if the existing helper/build configuration remains valid."
+  - description: "A full SwiftUI rewrite would expand scope and destabilize proven monitoring behavior."
+    probability: 0.8
+    impact: "high"
+    mitigation: "Keep AppKit and upgrade shared primitives incrementally."
+  - description: "Ad-hoc debug signing cannot authenticate to the installed upstream-signed SMC helper."
+    probability: 1.0
+    impact: "medium"
+    mitigation: "Separate UI baseline QA from helper installation and define a fork-owned signing/helper migration before distribution."
 
 tasks:
   - id: "task-001"
@@ -53,8 +85,26 @@ tasks:
     status: "completed"
   - id: "task-004"
     title: "Build, test, launch, and verify repository invariants"
+    status: "completed"
+  - id: "task-005"
+    title: "Define Native Telemetry design system and baseline evidence"
     status: "in_progress"
+  - id: "task-006"
+    title: "Implement shared tokens, accessible navigation, and adaptive settings shell"
+    status: "pending"
+  - id: "task-007"
+    title: "Replace static Dashboard with live system-health overview"
+    status: "pending"
+  - id: "task-008"
+    title: "Standardize popup anatomy and menu-bar presets"
+    status: "pending"
+  - id: "task-009"
+    title: "Move visible branding, support, issues, releases, and updates under fork ownership"
+    status: "pending"
+  - id: "task-010"
+    title: "Add visual and accessibility regression coverage and complete runtime QA"
+    status: "pending"
 
 progress:
-  current_phase: "verify"
-  overall_percentage: 75
+  current_phase: "design"
+  overall_percentage: 32
