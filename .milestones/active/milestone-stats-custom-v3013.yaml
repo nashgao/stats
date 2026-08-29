@@ -88,13 +88,13 @@ tasks:
     status: "completed"
   - id: "task-005"
     title: "Define Native Telemetry design system and baseline evidence"
-    status: "in_progress"
+    status: "completed"
   - id: "task-006"
     title: "Implement shared tokens, accessible navigation, and adaptive settings shell"
-    status: "pending"
+    status: "completed"
   - id: "task-007"
     title: "Replace static Dashboard with live system-health overview"
-    status: "pending"
+    status: "in_progress"
   - id: "task-008"
     title: "Standardize popup anatomy and menu-bar presets"
     status: "pending"
@@ -106,5 +106,5 @@ tasks:
     status: "pending"
 
 progress:
-  current_phase: "design"
-  overall_percentage: 32
+  current_phase: "dashboard"
+  overall_percentage: 48
