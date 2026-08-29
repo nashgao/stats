@@ -669,8 +669,15 @@ private class SetupView_end: NSStackView {
         support.addArrangedSubview(paypal)
         support.addArrangedSubview(koFi)
         support.addArrangedSubview(patreon)
+
+        let supportTitle = TextView()
+        supportTitle.alignment = .center
+        supportTitle.font = NSFont.systemFont(ofSize: 12, weight: .medium)
+        supportTitle.textColor = .secondaryLabelColor
+        supportTitle.stringValue = localizedString("Support upstream Stats")
         
         content.addArrangedSubview(message)
+        content.addArrangedSubview(supportTitle)
         content.addArrangedSubview(support)
         
         container.addRow(with: [title])

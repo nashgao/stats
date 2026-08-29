@@ -30,7 +30,7 @@ internal class SupportWindow: NSWindow, NSWindowDelegate {
             defer: true
         )
         
-        self.title = "Support Stats"
+        self.title = isCustomBuild ? "Support upstream Stats" : "Support Stats"
         self.titleVisibility = .hidden
         self.contentViewController = self.viewController
         self.titlebarAppearsTransparent = true
@@ -106,8 +106,14 @@ private class SupportView: NSStackView {
         textField.font = NSFont.systemFont(ofSize: 14)
         textField.stringValue = localizedString("Support text")
         textField.isSelectable = false
+        let attributionField = TextView()
+        attributionField.alignment = .center
+        attributionField.font = NSFont.systemFont(ofSize: 12, weight: .medium)
+        attributionField.textColor = .secondaryLabelColor
+        attributionField.stringValue = localizedString(isCustomBuild ? "Support upstream Stats" : "Support Stats")
         container.addArrangedSubview(NSView())
         container.addArrangedSubview(textField)
+        container.addArrangedSubview(attributionField)
         container.addArrangedSubview(NSView())
         
         let support: NSStackView = NSStackView(frame: NSRect(x: 0, y: 0, width: 160, height: 60))

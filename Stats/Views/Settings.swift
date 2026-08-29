@@ -519,7 +519,7 @@ private class SidebarView: NSStackView {
     }
     
     @objc private func reportBug() {
-        NSWorkspace.shared.open(URL(string: "https://github.com/nashgao/stats/issues/new")!)
+        NSWorkspace.shared.open(StatsLinks.newIssue)
     }
     
     @objc private func donateFromMenu() {

@@ -1,9 +1,6 @@
 # Stats Custom
 
-<a href="https://github.com/exelban/stats/releases"><p align="center"><img src="https://github.com/exelban/stats/raw/master/Stats/Supporting%20Files/Assets.xcassets/AppIcon.appiconset/icon_256x256.png" width="120"></p></a>
-
-[![Stats](https://serhiy.s3.eu-central-1.amazonaws.com/Github_repo/stats/menus%3Fv2.3.2.png?v1)](https://github.com/exelban/stats/releases)
-[![Stats](https://serhiy.s3.eu-central-1.amazonaws.com/Github_repo/stats/popups%3Fv2.3.2.png?v3)](https://github.com/exelban/stats/releases)
+<a href="https://github.com/nashgao/stats"><p align="center"><img src="https://github.com/nashgao/stats/raw/master/Stats/Supporting%20Files/Assets.xcassets/AppIcon.appiconset/icon_256x256.png" width="120"></p></a>
 
 macOS system monitor in your menu bar
 
@@ -11,15 +8,25 @@ macOS system monitor in your menu bar
 
 Stats Custom is an independently maintained, modified version of [Stats](https://github.com/exelban/stats) by Serhiy Mytrovtsiy. It is not affiliated with or endorsed by the original project.
 
-The original project and this fork are distributed under the [MIT License](LICENSE). The original copyright and permission notice are retained. Until this fork publishes its own release, the installation links below refer to the upstream Stats application.
+The original project and this fork are distributed under the [MIT License](LICENSE). The original copyright and permission notice are retained.
 
 ## Installation
-### Manual
-You can download the latest version [here](https://github.com/exelban/stats/releases/latest/download/Stats.dmg).
-This will download a file called `Stats.dmg`. Open it and move the app to the application folder.
+### Stats Custom
+Stats Custom does not yet publish a signed DMG. Build it locally with the verified Xcode 26.6 toolchain:
+
+```bash
+git clone https://github.com/nashgao/stats.git
+cd stats
+open Stats.xcodeproj
+```
+
+Select the **Stats** scheme in Xcode and run the app. Future packaged builds will be published on this fork's [Releases page](https://github.com/nashgao/stats/releases).
+
+### Upstream binary
+If you want the original upstream application instead of Stats Custom, download it from the [upstream Stats releases](https://github.com/exelban/stats/releases/latest). That binary is maintained by the original project and does not contain this fork's changes.
 
 ### Homebrew
-To install it using Homebrew, open the Terminal app and type:
+Homebrew currently installs the upstream Stats application, not Stats Custom:
 ```bash
 brew install stats
 ```
@@ -37,11 +44,11 @@ The script quits Stats and removes:
 
 If the app has already been moved to the Trash, the script can be run directly from the repository:
 ```bash
-curl -fsSL https://raw.githubusercontent.com/exelban/stats/master/Kit/scripts/uninstall.sh | sh
+curl -fsSL https://raw.githubusercontent.com/nashgao/stats/master/Kit/scripts/uninstall.sh | sh
 ```
 
 ### Legacy version
-Legacy version for older systems could be found [here](https://mac-stats.com/downloads).
+Legacy upstream builds for older systems can be found [here](https://mac-stats.com/downloads).
 
 ## Requirements
 Stats is supported on macOS 12 (Monterey) and newer.
@@ -94,36 +101,22 @@ For example, a CPU is typically divided into two clusters: efficiency and perfor
 Additionally, with each new SoC, Apple changes the sensor keys. As a result, it takes time to determine which SMC values correspond to the appropriate sensors. If anyone knows how to accurately match the sensors for Apple Silicon, please contact me.
 
 ### App crash – what to do?
-First, ensure that you are using the latest version of Stats. There is a high chance that a fix preventing the crash has already been released. If you are already running the latest version, check the open issues. Only if none of the existing issues address your problem should you open a new issue.
-
-### Why my issue was closed without any response?
-Most probably because it's a duplicated issue and there is an answer to the question, report, or proposition. Please use a search by closed issues to get an answer.
-So, if your issue was closed without any response, most probably it already has a response.
+Check this fork's [open and closed issues](https://github.com/nashgao/stats/issues) first. If the problem is not already tracked, open a [new Stats Custom issue](https://github.com/nashgao/stats/issues/new) with the macOS version, app version, and reproduction steps.
 
 ### External API
-Stats does not collect any telemetry or analytics. The only external requests it makes are to the following APIs:
+Stats Custom does not collect any telemetry or analytics. Its current optional external request is:
 
-- https://api.mac-stats.com – For update checks and retrieving the public IP address
-- https://api.github.com – Fallback for update checks
+- https://api.mac-stats.com – Retrieving the public IP address in the Network module
 
-Both of these APIs are used to check for updates. Additionally, an external request is required to obtain the public IP address. I do not want to use any third-party providers for retrieving the public IP address, so I use my own server for this purpose.
+Automatic update checks and installation are disabled in custom builds. The source is configured to use `https://api.github.com/repos/nashgao/stats/releases/latest` if a future signed distribution enables the updater, but the current custom build does not contact that release endpoint. An external request is still required to obtain the public IP address when that Network feature is enabled.
 
 If you have concerns about these requests, you have a few options:
 
 - propose a PR that allows these features to work without an external server
-- block both of these servers using any network filtering app (if you're reading this, you're likely using something like Little Snitch, so you can easily do this). In this case do not expect to receive any updates or see your public IP in the network module.
+- block either endpoint using a network filtering app. In that case, do not expect the corresponding release check or public-IP feature to work.
 
 ### How to contribute to the project?
-If you want to develop a new feature, or you've found something that doesn't work, the first step is to open an issue so the feature or problem can be discussed. Pull requests should only be opened for existing issues and after discussion; otherwise, they may be closed automatically. There are a few cases where this can be skipped: language changes, and contributors who have already made significant contributions and whose implementations align well with the project.
-
-## Open source, but not open contribution
-Stats is an open-source project: the full source code is available under the MIT license, and you are free to read it, learn from it, fork it, and build your own version of the app.
-
-However, it is not an open-contribution project. Stats is developed and maintained by a single person, and keeping the project stable and coherent takes priority over accepting every proposed change. Reviewing external code, testing it across different Macs and macOS versions, and maintaining it afterward often takes more time than writing it in the first place.
-
-For that reason, unsolicited pull requests are generally not accepted and may be closed without review. If you want to change or add something, please open an issue first so it can be discussed. The exceptions are translations and language fixes, which are always welcome, and contributions from people who have already made significant contributions to the project.
-
-The best ways to support the project are reporting bugs, improving translations, and proposing ideas through issues.
+Open an issue in [nashgao/stats](https://github.com/nashgao/stats/issues) before starting a substantial change so scope and verification can be aligned. Pull requests should preserve the MIT attribution, the custom-update safety boundary, and the single-source Native Telemetry design contract in [DESIGN.md](DESIGN.md).
 
 ## Supported languages
 - English

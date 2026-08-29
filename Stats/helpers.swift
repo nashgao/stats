@@ -238,6 +238,7 @@ extension AppDelegate {
     }
     
     public func checkIfShouldShowSupportWindow() {
+        guard !isCustomBuild else { return }
         if !Store.shared.exist(key: "setupProcess") && !Store.shared.exist(key: "runAtLoginInitialized") {
             return
         }
@@ -276,6 +277,10 @@ extension AppDelegate {
     }
     
     public func tryToShowSupportWindow(interaction: Bool = false) {
+        guard !isCustomBuild else {
+            Store.shared.set(key: "support_pending", value: false)
+            return
+        }
         guard Store.shared.bool(key: "support_pending", defaultValue: false) else { return }
         
         if SystemStats.shared.auth.hasCredentials() {

@@ -196,6 +196,18 @@ class KitTests: XCTestCase {
         XCTAssertEqual(network.items[0].widget.rawValue, widget_t.speed.rawValue)
     }
 
+    func testForkLinks_resolveToOwnedGitHubSurfaces() {
+        XCTAssertEqual(StatsLinks.repositoryURL.host, "github.com")
+        XCTAssertEqual(StatsLinks.repositoryURL.path, "/nashgao/stats")
+        XCTAssertEqual(StatsLinks.releaseAPI.host, "api.github.com")
+        XCTAssertEqual(StatsLinks.releaseAPI.path, "/repos/nashgao/stats/releases/latest")
+        XCTAssertEqual(StatsLinks.newIssue.path, "/nashgao/stats/issues/new")
+        XCTAssertEqual(
+            StatsLinks.release(tag: "v3.0.13").path,
+            "/nashgao/stats/releases/tag/v3.0.13"
+        )
+    }
+
     func testIsNewestVersion_release() throws {
         XCTAssertFalse(isNewestVersion(currentVersion: "v2.11.0", latestVersion: "v2.11.0"))
         XCTAssertTrue(isNewestVersion(currentVersion: "v2.11.0", latestVersion: "v2.11.1"))

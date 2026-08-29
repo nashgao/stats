@@ -22,7 +22,24 @@ import Bluetooth
 import Clock
 import Remote
 
-let updater = Updater(github: "exelban/stats", url: "https://api.mac-stats.com/release/latest")
+internal enum StatsLinks {
+    static let repository = "nashgao/stats"
+    static let repositoryURL = URL(string: "https://github.com/\(repository)")!
+    static let releaseAPI = URL(string: "https://api.github.com/repos/\(repository)/releases/latest")!
+    static let newIssue = repositoryURL.appendingPathComponent("issues/new")
+
+    static func release(tag: String) -> URL {
+        repositoryURL
+            .appendingPathComponent("releases")
+            .appendingPathComponent("tag")
+            .appendingPathComponent(tag)
+    }
+}
+
+let updater = Updater(
+    github: StatsLinks.repository,
+    url: StatsLinks.releaseAPI.absoluteString
+)
 let isCustomBuild = true
 var modules: [Module] = [
     CPU(),
