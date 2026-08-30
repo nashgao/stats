@@ -34,7 +34,7 @@ private struct ioDevice {
 internal class DevicesReader: Reader<[BLEDevice]>, CBCentralManagerDelegate, CBPeripheralDelegate {
     private var devices: [BLEDevice] = []
     private var devicesToRemove: [UUID] = []
-    private var manager: CBCentralManager!
+    private var manager: CBCentralManager?
     
     private var characteristicsDict: [UUID: CBCharacteristic] = [:]
     private var bleLevels: [UUID: KeyValue_t] = [:]
@@ -44,7 +44,20 @@ internal class DevicesReader: Reader<[BLEDevice]>, CBCentralManagerDelegate, CBP
     
     init(callback: @escaping (T?) -> Void = {_ in }) {
         super.init(.bluetooth, callback: callback)
-        self.manager = CBCentralManager(delegate: self, queue: nil)
+    }
+
+    public override func start() {
+        if self.manager == nil {
+            self.manager = CBCentralManager(delegate: self, queue: nil)
+        } else if self.manager?.state == .poweredOn {
+            self.manager?.scanForPeripherals(withServices: nil, options: nil)
+        }
+        super.start()
+    }
+
+    public override func stop() {
+        self.manager?.stopScan()
+        super.stop()
     }
     
     public override func read() {
@@ -107,7 +120,7 @@ internal class DevicesReader: Reader<[BLEDevice]>, CBCentralManagerDelegate, CBP
             ))
         }
         
-        let peripherals = self.manager.retrievePeripherals(withIdentifiers: self.devices.compactMap({ $0.uuid }))
+        let peripherals = self.manager?.retrievePeripherals(withIdentifiers: self.devices.compactMap({ $0.uuid })) ?? []
         peripherals.forEach { (p: CBPeripheral) in
             guard let idx = self.devices.firstIndex(where: { $0.uuid == p.identifier }) else {
                 return
@@ -118,8 +131,8 @@ internal class DevicesReader: Reader<[BLEDevice]>, CBCentralManagerDelegate, CBP
             }
             
             if p.state == .disconnected {
-                if self.manager.isScanning {
-                    self.manager.connect(p, options: nil)
+                if self.manager?.isScanning == true {
+                    self.manager?.connect(p, options: nil)
                 }
             } else if p.state == .disconnecting {
                 self.devicesToRemove.append(p.identifier)

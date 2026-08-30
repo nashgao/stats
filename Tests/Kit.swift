@@ -10,6 +10,7 @@
 //
 
 import XCTest
+@testable import Bluetooth
 @testable import Kit
 @testable import Stats
 
@@ -21,6 +22,21 @@ class KitTests: XCTestCase {
 
         XCTAssertGreaterThanOrEqual(window.frame.width, Constants.Design.settingsMinimumSize.width)
         XCTAssertGreaterThanOrEqual(window.frame.height, Constants.Design.settingsMinimumSize.height)
+    }
+
+    @MainActor
+    func testBluetoothReader_doesNotRequestAuthorizationBeforeModuleStarts() throws {
+        let reader = DevicesReader()
+        let manager = try XCTUnwrap(
+            Mirror(reflecting: reader).children.first { $0.label == "manager" }
+        )
+        let optionalManager = Mirror(reflecting: manager.value)
+
+        XCTAssertEqual(optionalManager.displayStyle, .optional)
+        XCTAssertTrue(
+            optionalManager.children.isEmpty,
+            "Constructing a disabled Bluetooth module must not create CBCentralManager or request permission"
+        )
     }
 
     @MainActor
