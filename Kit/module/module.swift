@@ -92,6 +92,10 @@ open class Module {
     
     public var popupKeyboardShortcut: [UInt16] { self.popupView?.keyboardShortcut ?? [] }
     
+    /// The module popup content view, exposed so the unified popup prototype
+    /// can embed these views into a single shared panel.
+    public var embeddedPopupView: Popup_p? { self.popupView }
+    
     private var moduleType: ModuleType
     
     private var settingsView: Settings_v? = nil

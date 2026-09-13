@@ -104,27 +104,42 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             modules.reversed().forEach{ $0.mount() }
             self.modulesMounted = true
             if let module = ProcessInfo.processInfo.environment["STATS_POPUP_MODULE"] {
-                // The requested module can be disabled in the shared preferences
-                // (the live instance keeps its own config). Enable it in memory
-                // so the capture populates, without persisting the state.
-                let moduleName = ModuleType.popupNameAliases[module] ?? module
-                modules.forEach { m in
-                    if m.config.name == moduleName && !m.enabled {
-                        m.enabled = true
-                        m.mount()
+                if module == "All" {
+                    // Unified popup prototype: mount all seven telemetry modules
+                    // in memory (no Store writes) and open the shared panel.
+                    modules.forEach { m in
+                        if UnifiedPopupController.moduleOrder.contains(m.config.name) && !m.enabled {
+                            m.enabled = true
+                            m.mount()
+                        }
                     }
-                }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-                    let screen = NSScreen.main?.frame ?? .zero
-                    NotificationCenter.default.post(
-                        name: .togglePopup,
-                        object: nil,
-                        userInfo: [
-                            "module": module,
-                            "origin": CGPoint(x: screen.midX, y: screen.maxY - Constants.Widget.height),
-                            "center": CGFloat.zero
-                        ]
-                    )
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                        let screen = NSScreen.main?.frame ?? .zero
+                        UnifiedPopupController.shared.show(origin: NSPoint(x: screen.midX, y: screen.maxY - Constants.Widget.height))
+                    }
+                } else {
+                    // The requested module can be disabled in the shared preferences
+                    // (the live instance keeps its own config). Enable it in memory
+                    // so the capture populates, without persisting the state.
+                    let moduleName = ModuleType.popupNameAliases[module] ?? module
+                    modules.forEach { m in
+                        if m.config.name == moduleName && !m.enabled {
+                            m.enabled = true
+                            m.mount()
+                        }
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                        let screen = NSScreen.main?.frame ?? .zero
+                        NotificationCenter.default.post(
+                            name: .togglePopup,
+                            object: nil,
+                            userInfo: [
+                                "module": module,
+                                "origin": CGPoint(x: screen.midX, y: screen.maxY - Constants.Widget.height),
+                                "center": CGFloat.zero
+                            ]
+                        )
+                    }
                 }
             } else if let destination = ProcessInfo.processInfo.environment["STATS_SETTINGS_DESTINATION"] {
                 self.ensureSettingsWindow().open(module: destination)
