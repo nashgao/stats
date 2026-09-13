@@ -102,11 +102,21 @@ private func unifiedSymbol(_ name: String, scale: NSImage.SymbolScale = .medium)
 }
 
 private class UnifiedCardView: NSView {
+    /// 0 quiet, 1 attention, 2 critical - tints the card background.
+    var statusLevel: Int = 0
+    
     override var isFlipped: Bool { true }
     
     override func updateLayer() {
         self.effectiveAppearance.performAsCurrentDrawingAppearance {
-            self.layer?.backgroundColor = Constants.Design.surfaceGroup.withAlphaComponent(0.6).cgColor
+            switch self.statusLevel {
+            case 1:
+                self.layer?.backgroundColor = NSColor.systemOrange.withAlphaComponent(0.16).cgColor
+            case 2:
+                self.layer?.backgroundColor = NSColor.systemRed.withAlphaComponent(0.16).cgColor
+            default:
+                self.layer?.backgroundColor = Constants.Design.surfaceGroup.withAlphaComponent(0.6).cgColor
+            }
         }
     }
 }
@@ -319,6 +329,13 @@ private final class UnifiedHeroCard: UnifiedCardView {
         self.layoutCard()
     }
     
+    /// Redundant encoding for attention: tint plus ink, never hue alone.
+    func setStatus(level: Int) {
+        self.statusLevel = level
+        self.valueField.textColor = level == 2 ? .systemRed : (level == 1 ? .systemOrange : .labelColor)
+        self.updateLayer()
+    }
+    
     var collapsedHeight: CGFloat {
         self.bulletTrack == nil ? 64 : 72
     }
@@ -342,6 +359,10 @@ private final class UnifiedHeroCard: UnifiedCardView {
 
 private final class UnifiedGrammarRow: NSView {
     let module: String
+    /// 0 quiet, 1 attention, 2 critical - tints the row background.
+    var statusLevel: Int = 0
+    
+    override var isFlipped: Bool { true }
     let nameLabel = unifiedLabel(font: .systemFont(ofSize: 12, weight: .medium), color: .labelColor)
     let valueField = unifiedLabel(font: .monospacedDigitSystemFont(ofSize: 12, weight: .semibold), color: .labelColor, alignment: .right)
     let glyphField = unifiedLabel("✓", font: .systemFont(ofSize: 10, weight: .semibold), color: .systemGreen, alignment: .center)
@@ -357,6 +378,8 @@ private final class UnifiedGrammarRow: NSView {
     init(module: String, label: String, icon: String, expandable: Bool) {
         self.module = module
         super.init(frame: .zero)
+        self.wantsLayer = true
+        self.layer?.cornerRadius = 8
         self.iconView.image = unifiedSymbol(icon)
         self.iconView.contentTintColor = .controlAccentColor
         self.addSubview(self.iconView)
@@ -395,6 +418,33 @@ private final class UnifiedGrammarRow: NSView {
         self.layoutRow()
     }
     
+    override func updateLayer() {
+        guard self.wantsLayer else { return }
+        self.effectiveAppearance.performAsCurrentDrawingAppearance {
+            switch self.statusLevel {
+            case 1:
+                self.layer?.backgroundColor = NSColor.systemOrange.withAlphaComponent(0.12).cgColor
+            case 2:
+                self.layer?.backgroundColor = NSColor.systemRed.withAlphaComponent(0.12).cgColor
+            default:
+                self.layer?.backgroundColor = NSColor.clear.cgColor
+            }
+        }
+    }
+    
+    /// Redundant encoding for attention: tint plus glyph, never hue alone.
+    func setStatus(level: Int) {
+        self.statusLevel = level
+        if level == 0 {
+            self.glyphField.stringValue = "✓"
+            self.glyphField.textColor = .systemGreen
+        } else {
+            self.glyphField.stringValue = "▲"
+            self.glyphField.textColor = level == 2 ? .systemRed : .systemOrange
+        }
+        self.updateLayer()
+    }
+    
     var totalHeight: CGFloat {
         40 + (self.expanded ? self.detailHeight + 8 : 0)
     }
@@ -419,6 +469,16 @@ private final class UnifiedGrammarRow: NSView {
 
 final class UnifiedPanelContent: NSView {
     var onLayoutChange: (() -> Void)?
+    
+    private let island = UnifiedCardView()
+    private let islandGlyph = unifiedLabel("▲", font: .systemFont(ofSize: 13, weight: .semibold), color: .systemOrange)
+    private let islandTitle = unifiedLabel(font: .systemFont(ofSize: 12, weight: .semibold), color: .labelColor)
+    private let islandSubtitle = unifiedLabel(font: .systemFont(ofSize: 11, weight: .regular), color: .secondaryLabelColor)
+    private let islandNote = unifiedLabel(font: .systemFont(ofSize: 10, weight: .regular), color: .systemOrange)
+    private let islandDismiss = NSButton()
+    private var islandDismissed: Bool = false
+    private var islandResolvedUntil: Date? = nil
+    private var lastAttentionKey: String = ""
     
     private let brandIcon = NSImageView()
     private let brandLabel = unifiedLabel("Stats", font: .systemFont(ofSize: 13, weight: .semibold), color: .labelColor)
@@ -455,6 +515,22 @@ final class UnifiedPanelContent: NSView {
     init(width: CGFloat) {
         super.init(frame: NSRect(x: 0, y: 0, width: width, height: 600))
         self.wantsLayer = true
+        
+        self.island.wantsLayer = true
+        self.island.layer?.cornerRadius = 12
+        self.island.addSubview(self.islandGlyph)
+        self.island.addSubview(self.islandTitle)
+        self.island.addSubview(self.islandSubtitle)
+        self.island.addSubview(self.islandNote)
+        self.islandDismiss.isBordered = false
+        self.islandDismiss.title = "×"
+        self.islandDismiss.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        self.islandDismiss.contentTintColor = .secondaryLabelColor
+        self.islandDismiss.target = self
+        self.islandDismiss.action = #selector(self.dismissIsland)
+        self.island.addSubview(self.islandDismiss)
+        self.island.isHidden = true
+        self.addSubview(self.island)
         
         self.brandIcon.image = unifiedSymbol("chart.bar.fill", scale: .small)
         self.brandIcon.contentTintColor = .controlAccentColor
@@ -505,6 +581,26 @@ final class UnifiedPanelContent: NSView {
         let margin: CGFloat = Constants.Popup.margins
         let w = self.bounds.width
         var y: CGFloat = margin
+        
+        let attentions = AttentionEvaluator.shared.attentions
+        self.updateIsland(attentions: attentions, width: w - margin * 2)
+        if !self.island.isHidden {
+            self.island.frame = NSRect(x: margin, y: y, width: w - margin * 2, height: 46)
+            self.islandGlyph.frame = NSRect(x: 12, y: 14, width: 16, height: 16)
+            self.islandTitle.frame = NSRect(x: 34, y: 8, width: self.island.frame.width - 150, height: 15)
+            self.islandSubtitle.frame = NSRect(x: 34, y: 25, width: self.island.frame.width - 150, height: 14)
+            self.islandNote.frame = NSRect(x: self.island.frame.width - 96, y: 16, width: 56, height: 13)
+            self.islandNote.alignment = .right
+            self.islandDismiss.frame = NSRect(x: self.island.frame.width - 34, y: 12, width: 20, height: 20)
+            y += 54
+        }
+        
+        self.cpuHero.setStatus(level: Self.statusLevel(of: "CPU", in: attentions))
+        self.gpuHero.setStatus(level: Self.statusLevel(of: "GPU", in: attentions))
+        self.ramHero.setStatus(level: Self.statusLevel(of: "RAM", in: attentions))
+        self.sensorsRow.setStatus(level: Self.statusLevel(of: "Sensors", in: attentions))
+        self.batteryRow.setStatus(level: Self.statusLevel(of: "Battery", in: attentions))
+        
         self.brandIcon.frame = NSRect(x: margin + 2, y: y + 3, width: 14, height: 14)
         self.brandLabel.frame = NSRect(x: margin + 20, y: y + 1, width: 120, height: 18)
         self.verdictChip.setAttributed(Self.attributedVerdict(quiet: AttentionEvaluator.shared.attentions.isEmpty))
@@ -543,6 +639,57 @@ final class UnifiedPanelContent: NSView {
         self.sensorsRow.setExpanded(target == "Sensors")
         self.relayout()
         self.onLayoutChange?()
+    }
+    
+    private func updateIsland(attentions: [Attention], width: CGFloat) {
+        let key = attentions.map({ $0.label }).joined(separator: "|")
+        if attentions.isEmpty {
+            if !self.lastAttentionKey.isEmpty {
+                // attentions just cleared: brief "back to nominal" note
+                self.islandResolvedUntil = Date().addingTimeInterval(6)
+            }
+            self.lastAttentionKey = ""
+            if let until = self.islandResolvedUntil, until > Date() {
+                self.island.isHidden = false
+                self.island.statusLevel = 0
+                self.islandGlyph.stringValue = "✓"
+                self.islandGlyph.textColor = .systemGreen
+                self.islandTitle.stringValue = localizedString("Back to nominal")
+                self.islandSubtitle.stringValue = ""
+                self.islandNote.stringValue = ""
+                self.islandDismiss.isHidden = true
+            } else {
+                self.island.isHidden = true
+                self.islandResolvedUntil = nil
+            }
+            return
+        }
+        
+        self.islandResolvedUntil = nil
+        if key != self.lastAttentionKey {
+            // a new attention set re-arms a previously dismissed island
+            self.islandDismissed = false
+            self.lastAttentionKey = key
+        }
+        self.island.isHidden = self.islandDismissed
+        let level = attentions.map({ $0.level.rawValue }).max() ?? 1
+        self.island.statusLevel = level
+        self.islandGlyph.stringValue = "▲"
+        self.islandGlyph.textColor = level == 2 ? .systemRed : .systemOrange
+        self.islandTitle.stringValue = attentions.first?.label ?? ""
+        self.islandTitle.textColor = level == 2 ? .systemRed : .systemOrange
+        self.islandSubtitle.stringValue = Array(attentions.dropFirst()).map({ $0.label }).joined(separator: " · ")
+        self.islandNote.stringValue = localizedString("auto-resolves")
+        self.islandDismiss.isHidden = false
+    }
+    
+    @objc private func dismissIsland() {
+        self.islandDismissed = true
+        self.relayout()
+    }
+    
+    private static func statusLevel(of module: String, in attentions: [Attention]) -> Int {
+        attentions.filter({ $0.module == module }).map({ $0.level.rawValue }).max() ?? 0
     }
     
     /// Scroll offset so the named module's section sits near the top.
