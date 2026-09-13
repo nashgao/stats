@@ -1170,11 +1170,26 @@ public class SMCHelper {
         }
     }
     
+    // SMAppService can report `.enabled` while the daemon is missing from the system launchd domain
+    // (stale background-task state), which would leave fan control silently dead.
+    private func daemonIsLoaded() -> Bool {
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/bin/launchctl")
+        task.arguments = ["print", "system/eu.exelban.Stats.SMC.Helper"]
+        do {
+            try task.run()
+        } catch {
+            return true
+        }
+        task.waitUntilExit()
+        return task.terminationStatus == 0
+    }
+    
     public func install(completion: @escaping (_ state: SMCHelperInstallState) -> Void) {
         if #available(macOS 13, *) {
             self.cleanupLegacyInstall()
             let service = SMAppService.daemon(plistName: self.plistName)
-            if service.status == .enabled {
+            if service.status == .enabled && self.daemonIsLoaded() {
                 completion(.enabled)
                 return
             }
