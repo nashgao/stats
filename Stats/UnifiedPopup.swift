@@ -31,16 +31,22 @@ final class UnifiedPopupController {
             name: .popupVisibilityChanged,
             object: nil
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(self.routeUnifiedPopup(_:)),
+            name: .toggleUnifiedPopup,
+            object: nil
+        )
     }
     
     var isVisible: Bool {
         self.panel.isVisible
     }
     
-    /// App-level menu bar item. Toggleable via the `unified_widget` defaults
+    /// App-level menu bar item. Toggleable via the unified_widget defaults
     /// key (default: on). Coexists with the per-module widgets.
     func setupStatusItem() {
-        guard Store.shared.bool(key: "unified_widget", defaultValue: true) else { return }
+        guard Store.shared.bool(key: UnifiedPopupRouting.storeKey, defaultValue: true) else { return }
         guard self.statusItem == nil else { return }
         
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -68,6 +74,28 @@ final class UnifiedPopupController {
         self.show(origin: window.frame.origin, center: window.frame.width/2)
     }
     
+    /// Module widget click routed to the unified panel: opens it under the
+    /// clicked widget, scrolled to that module's section. If the panel is
+    /// already open, just re-anchors the scroll.
+    @objc private func routeUnifiedPopup(_ notification: Notification) {
+        guard UnifiedPopupRouting.isEnabled,
+              let origin = notification.userInfo?["origin"] as? CGPoint,
+              let center = notification.userInfo?["center"] as? CGFloat else { return }
+        let anchor = notification.userInfo?["module"] as? String
+        
+        if self.panel.isVisible {
+            if let anchor {
+                self.panel.scrollToSection(anchor)
+            }
+            return
+        }
+        
+        // The unified panel re-parents module popup views, so any open
+        // module popup must be closed first.
+        modules.forEach { $0.closePopupIfVisible() }
+        self.show(origin: origin, center: center, scrollTo: anchor)
+    }
+    
     @objc private func modulePopupVisibilityChanged(_ notification: Notification) {
         guard let state = notification.userInfo?["state"] as? Bool, state else { return }
         // A module popup is showing (and has reclaimed its view): close the
@@ -81,7 +109,7 @@ final class UnifiedPopupController {
         self.panel.orderOut(nil)
     }
     
-    func show(origin: NSPoint, center: CGFloat = 0) {
+    func show(origin: NSPoint, center: CGFloat = 0, scrollTo: String? = nil) {
         let selected = UnifiedPopupController.moduleOrder.compactMap { name in
             modules.first(where: { $0.config.name == name })
         }
@@ -106,7 +134,11 @@ final class UnifiedPopupController {
         
         self.panel.setFrame(NSRect(x: x, y: y, width: width, height: height), display: true)
         self.panel.appearSections()
-        self.panel.scrollToTop()
+        if let scrollTo {
+            self.panel.scrollToSection(scrollTo)
+        } else {
+            self.panel.scrollToTop()
+        }
         self.panel.orderFrontRegardless()
         if let scrollTo = ProcessInfo.processInfo.environment["STATS_POPUP_SCROLL_TO"] {
             if scrollTo == "bottom" {
@@ -126,7 +158,7 @@ private final class UnifiedPopupPanel: NSPanel {
     private let backgroundView = UnifiedPopupBackgroundView()
     private let scrollView = NSScrollView()
     private let document = UnifiedPopupDocumentView()
-    private var sections: [(header: NSTextField, popup: Popup_p)] = []
+    private var sections: [(name: String, header: NSTextField, popup: Popup_p)] = []
     
     var contentHeight: CGFloat {
         self.document.frame.height
@@ -183,7 +215,7 @@ private final class UnifiedPopupPanel: NSPanel {
     }
     
     func populate(modules: [Module]) {
-        for (header, popup) in self.sections {
+        for (_, header, popup) in self.sections {
             header.removeFromSuperview()
             popup.removeFromSuperview()
         }
@@ -205,17 +237,17 @@ private final class UnifiedPopupPanel: NSPanel {
                 previous?(size)
                 self?.relayout()
             }
-            self.sections.append((header, popup))
+            self.sections.append((module.config.name, header, popup))
         }
         self.relayout()
     }
     
     func appearSections() {
-        for (_, popup) in self.sections { popup.appear() }
+        for (_, _, popup) in self.sections { popup.appear() }
     }
     
     func disappearSections() {
-        for (_, popup) in self.sections { popup.disappear() }
+        for (_, _, popup) in self.sections { popup.disappear() }
     }
     
     func scrollToTop() {
@@ -234,7 +266,7 @@ private final class UnifiedPopupPanel: NSPanel {
         let margin = Constants.Popup.margins
         let headerHeight: CGFloat = 20
         var y: CGFloat = margin
-        for (header, popup) in self.sections {
+        for (_, header, popup) in self.sections {
             header.frame = NSRect(x: margin, y: y, width: Self.panelWidth - margin*2, height: headerHeight)
             y += headerHeight + 4
             popup.frame = NSRect(x: margin, y: y, width: Constants.Popup.width, height: popup.frame.height)
@@ -242,6 +274,14 @@ private final class UnifiedPopupPanel: NSPanel {
         }
         y += margin - 12
         self.document.frame = NSRect(x: 0, y: 0, width: Self.panelWidth, height: max(y, 1))
+    }
+    
+    /// Scroll the document so the named module's section header sits near
+    /// the top of the visible area.
+    func scrollToSection(_ name: String) {
+        guard let section = self.sections.first(where: { $0.name == name }) else { return }
+        let target = max(section.header.frame.origin.y - 8, 0)
+        self.document.scroll(NSPoint(x: 0, y: target))
     }
 }
 

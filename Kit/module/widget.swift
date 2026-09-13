@@ -11,6 +11,22 @@
 
 import Cocoa
 
+/// Unified popup click routing. When enabled, a normal click on a module
+/// menu bar widget opens the unified popup panel instead of the module's
+/// classic popup; Option-click keeps the classic behavior.
+public enum UnifiedPopupRouting {
+    public static let storeKey = "unified_widget"
+    
+    public static var isEnabled: Bool {
+        Store.shared.bool(key: self.storeKey, defaultValue: true)
+    }
+    
+    public static var widgetClickRoutesToUnified: Bool {
+        guard self.isEnabled else { return false }
+        return NSApp.currentEvent?.modifierFlags.contains(.option) != true
+    }
+}
+
 public enum widget_t: String {
     case unknown = ""
     case mini = "mini"
@@ -365,6 +381,14 @@ public class SWidget {
     
     @objc private func togglePopup() {
         if let item = self.menuBarItem, let window = item.button?.window {
+            if UnifiedPopupRouting.widgetClickRoutesToUnified {
+                NotificationCenter.default.post(name: .toggleUnifiedPopup, object: nil, userInfo: [
+                    "module": self.module,
+                    "origin": window.frame.origin,
+                    "center": window.frame.width/2
+                ])
+                return
+            }
             NotificationCenter.default.post(name: .togglePopup, object: nil, userInfo: [
                 "module": self.module,
                 "widget": self.type,
@@ -519,6 +543,14 @@ public class MenuBar {
     
     @objc private func togglePopup() {
         if let item = self.menuBarItem, let window = item.button?.window {
+            if UnifiedPopupRouting.widgetClickRoutesToUnified {
+                NotificationCenter.default.post(name: .toggleUnifiedPopup, object: nil, userInfo: [
+                    "module": self.moduleName,
+                    "origin": window.frame.origin,
+                    "center": window.frame.width/2
+                ])
+                return
+            }
             NotificationCenter.default.post(name: .togglePopup, object: nil, userInfo: [
                 "module": self.moduleName,
                 "origin": window.frame.origin,
