@@ -17,6 +17,8 @@ final class UnifiedPopupController {
     
     private let panel: UnifiedPopupPanel
     private var statusItem: NSStatusItem? = nil
+    private var glyphTimer: Timer?
+    private var glyphState: String = ""
     
     private init() {
         self.panel = UnifiedPopupPanel(
@@ -57,7 +59,72 @@ final class UnifiedPopupController {
         button.action = #selector(self.togglePanel)
         button.toolTip = localizedString("Open unified popup")
         self.statusItem = item
+        if self.glyphTimer == nil {
+            self.glyphTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+                self?.updateGlyph()
+            }
+        }
+        self.updateGlyph()
         NSLog("[UnifiedPopup] status item installed (unified_widget=on)")
+    }
+    
+    /// Adaptive glyph + tint, evaluated on a ~1s cadence from the shared
+    /// AttentionEvaluator. Status pairs the glyph with a tint: secondary
+    /// label color when quiet, systemOrange for attention, systemRed for
+    /// critical; accent blue stays reserved for interaction. Attention
+    /// tints are baked into the image because NSStatusBarButton does not
+    /// reliably apply contentTintColor to swapped symbol images.
+    private func updateGlyph() {
+        guard let button = self.statusItem?.button else { return }
+        let attention = AttentionEvaluator.shared.primary
+        let key = attention.map { "\($0.kind.rawValue)-\($0.level.rawValue)" } ?? "default"
+        guard key != self.glyphState else { return }
+        self.glyphState = key
+        
+        var image: NSImage
+        var tint = NSColor.secondaryLabelColor
+        switch attention?.kind {
+        case .some(.fan):
+            image = self.symbolImage("fanblades.fill", fallback: "wind")
+        case .some(.temperature):
+            image = self.symbolImage("thermometer.medium", fallback: "thermometer")
+        case .some(.memory):
+            image = self.symbolImage("memorychip", fallback: "square.stack.3d.up.fill")
+        case .some(.gpu):
+            image = self.symbolImage("gauge.high", fallback: "gauge")
+        case .some(.battery):
+            image = self.symbolImage("battery.100bolt", fallback: "bolt.fill")
+        default:
+            image = iconFromSymbol(name: "chart.bar.fill", scale: .medium)
+        }
+        if let attention {
+            tint = attention.level == .critical ? .systemRed : .systemOrange
+            image = self.tinted(image, with: tint)
+        }
+        button.image = image
+        button.contentTintColor = tint
+    }
+    
+    /// Primary SFSymbol with a macOS 12-safe fallback for symbols newer
+    /// than the deployment target (checked at runtime, not compile time).
+    private func symbolImage(_ name: String, fallback: String) -> NSImage {
+        guard let symbol = NSImage(systemSymbolName: name, accessibilityDescription: nil) else {
+            return iconFromSymbol(name: fallback, scale: .medium)
+        }
+        return symbol.withSymbolConfiguration(NSImage.SymbolConfiguration(textStyle: .body, scale: .medium)) ?? symbol
+    }
+    
+    /// Recolor a template/symbol image's shape (source-atop fill).
+    private func tinted(_ image: NSImage, with color: NSColor) -> NSImage {
+        let rect = NSRect(origin: .zero, size: image.size)
+        let tinted = NSImage(size: image.size)
+        tinted.lockFocus()
+        color.set()
+        image.draw(in: rect)
+        rect.fill(using: .sourceAtop)
+        tinted.unlockFocus()
+        tinted.isTemplate = false
+        return tinted
     }
     
     @objc private func togglePanel() {

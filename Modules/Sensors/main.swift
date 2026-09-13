@@ -106,8 +106,10 @@ public class Sensors: Module {
         self.portalView.usageCallback(value.sensors)
         self.notificationsView.usageCallback(value.sensors)
 
+        // Hottest temperature across popup-visible sensors (default: all),
+        // so the sample reflects what the app actually shows.
         if let hottest = value.sensors
-            .filter({ $0.type == .temperature && $0.state && $0.value.isFinite })
+            .filter({ $0.type == .temperature && $0.popupState && $0.value.isFinite })
             .max(by: { $0.value < $1.value }) {
             NotificationCenter.default.post(
                 name: .telemetrySample,
@@ -116,6 +118,20 @@ public class Sensors: Module {
                     value: hottest.value,
                     displayValue: hottest.formattedValue,
                     detail: hottest.name
+                )
+            )
+        }
+        
+        let fans = value.sensors.compactMap({ $0 as? Fan }).filter({ !$0.isComputed && $0.maxSpeed > 1 })
+        if let loudest = fans.max(by: { $0.percentage < $1.percentage }) {
+            NotificationCenter.default.post(
+                name: .telemetrySample,
+                object: TelemetrySample(
+                    metric: .fan,
+                    value: Double(loudest.percentage) / 100,
+                    secondaryValue: loudest.mode.isAutomatic ? 0 : 1,
+                    displayValue: "\(Int(loudest.value).formatted(.number)) RPM",
+                    detail: loudest.name
                 )
             )
         }

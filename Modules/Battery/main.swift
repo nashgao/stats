@@ -120,6 +120,7 @@ public class Battery: Module {
                 metric: .battery,
                 value: batteryLevel,
                 secondaryValue: value.isBatteryPowered ? 0 : 1,
+                power: value.isBatteryPowered ? -abs(value.batteryPower) : abs(value.batteryPower),
                 displayValue: "\(Int((batteryLevel * 100).rounded()))%",
                 detail: batteryState
             )

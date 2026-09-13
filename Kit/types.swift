@@ -44,12 +44,15 @@ public enum TelemetryMetric: String, CaseIterable, Sendable {
     case network
     case battery
     case temperature
+    case gpu
+    case fan
 }
 
 public struct TelemetrySample: Sendable {
     public let metric: TelemetryMetric
     public let value: Double
     public let secondaryValue: Double?
+    public let power: Double?
     public let displayValue: String
     public let detail: String
     public let isAvailable: Bool
@@ -59,6 +62,7 @@ public struct TelemetrySample: Sendable {
         metric: TelemetryMetric,
         value: Double,
         secondaryValue: Double? = nil,
+        power: Double? = nil,
         displayValue: String,
         detail: String = "",
         isAvailable: Bool = true,
@@ -67,6 +71,7 @@ public struct TelemetrySample: Sendable {
         self.metric = metric
         self.value = value
         self.secondaryValue = secondaryValue
+        self.power = power
         self.displayValue = displayValue
         self.detail = detail
         self.isAvailable = isAvailable

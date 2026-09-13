@@ -180,6 +180,16 @@ public class GPU: Module {
         self.notificationsView.usageCallback(utilization)
         self.previewView.loadCallback(selectedGPU)
         
+        NotificationCenter.default.post(
+            name: .telemetrySample,
+            object: TelemetrySample(
+                metric: .gpu,
+                value: min(max(utilization, 0), 1),
+                displayValue: "\(Int((utilization * 100).rounded()))%",
+                detail: selectedGPU.model
+            )
+        )
+        
         self.menuBar.widgets.filter{ $0.isActive }.forEach { (w: SWidget) in
             switch w.item {
             case let widget as Mini:

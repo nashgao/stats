@@ -20,6 +20,8 @@ private extension TelemetryMetric {
         case .network: return localizedString("Network")
         case .battery: return localizedString("Battery")
         case .temperature: return localizedString("Temperature")
+        case .gpu: return localizedString("GPU")
+        case .fan: return localizedString("Fans")
         }
     }
 
@@ -31,6 +33,8 @@ private extension TelemetryMetric {
         case .network: return "arrow.up.arrow.down"
         case .battery: return "battery.75percent"
         case .temperature: return "thermometer.medium"
+        case .gpu: return "gauge.medium"
+        case .fan: return "fanblades"
         }
     }
 }
@@ -86,6 +90,12 @@ private func health(for sample: TelemetrySample) -> TelemetryHealth {
     case .temperature:
         if sample.value >= 95 { return .critical }
         if sample.value >= 80 { return .warning }
+    case .gpu:
+        if sample.value >= 0.9 { return .critical }
+        if sample.value >= 0.75 { return .warning }
+    case .fan:
+        if sample.value >= 0.95 { return .critical }
+        if sample.value >= 0.8 { return .warning }
     case .network:
         break
     }
@@ -651,6 +661,7 @@ class Dashboard: NSStackView {
         case .network: self.networkCard.update(sample)
         case .battery: self.batteryCard.update(sample)
         case .temperature: self.temperatureCard.update(sample)
+        case .gpu, .fan: break
         }
         self.lastUpdateField.stringValue = "\(localizedString("Updated")) \(self.timeFormatter.string(from: sample.timestamp))"
         self.updateOverallHealth()
