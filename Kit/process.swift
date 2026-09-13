@@ -105,11 +105,15 @@ public class ProcessesView: NSStackView {
     }
     
     public func clear(_ symbol: String = "") {
-        self.list.forEach{ $0.clear(symbol) }
+        self.list.forEach {
+            $0.clear(symbol)
+            $0.isHidden = true
+        }
     }
     
     public func set(_ idx: Int, _ process: Process_p, _ values: [String], share: Double? = nil) {
         if self.list.indices.contains(idx) {
+            self.list[idx].isHidden = false
             self.list[idx].set(process, values)
             if let share {
                 self.list[idx].setShare(share)
