@@ -16,9 +16,18 @@ import Cocoa
 /// classic popup; Option-click keeps the classic behavior.
 public enum UnifiedPopupRouting {
     public static let storeKey = "unified_widget"
+    /// Escape hatch: show the unified item AND the legacy module widgets.
+    public static let showWidgetsKey = "unified_show_widgets"
     
     public static var isEnabled: Bool {
         Store.shared.bool(key: self.storeKey, defaultValue: true)
+    }
+    
+    /// Unified mode replaces the per-module menu bar widgets with the single
+    /// unified item; `unified_show_widgets` (default off) shows both.
+    public static var moduleWidgetsAllowed: Bool {
+        if !self.isEnabled { return true }
+        return Store.shared.bool(key: self.showWidgetsKey, defaultValue: false)
     }
     
     public static var widgetClickRoutesToUnified: Bool {
@@ -344,6 +353,9 @@ public class SWidget {
     
     public func setMenuBarItem(state: Bool) {
         if state {
+            // Unified mode shows a single menu bar item; module widgets stay
+            // mounted (readers run) but create no status items.
+            guard UnifiedPopupRouting.moduleWidgetsAllowed else { return }
             if self.keepMenuBarPosition {
                 restoreNSStatusItemPosition(id: "\(self.module)_\(self.type.rawValue)")
             }
@@ -504,6 +516,7 @@ public class MenuBar {
     private func setupMenuBarItem(_ state: Bool) {
         DispatchQueue.main.async(execute: {
             if state && self.active {
+                guard UnifiedPopupRouting.moduleWidgetsAllowed else { return }
                 restoreNSStatusItemPosition(id: self.moduleName)
                 self.menuBarItem = NSStatusBar.system.statusItem(withLength: 0)
                 DispatchQueue.main.async(execute: {
