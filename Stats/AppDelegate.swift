@@ -104,6 +104,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             modules.reversed().forEach{ $0.mount() }
             self.modulesMounted = true
             if let module = ProcessInfo.processInfo.environment["STATS_POPUP_MODULE"] {
+                // The requested module can be disabled in the shared preferences
+                // (the live instance keeps its own config). Enable it in memory
+                // so the capture populates, without persisting the state.
+                modules.forEach { m in
+                    if m.config.name == module && !m.enabled {
+                        m.enabled = true
+                        m.mount()
+                    }
+                }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
                     let screen = NSScreen.main?.frame ?? .zero
                     NotificationCenter.default.post(
