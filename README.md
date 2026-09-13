@@ -74,6 +74,17 @@ open -n --env STATS_SETTINGS_DESTINATION=Settings --env STATS_OPEN_PRESET_MENU=1
 
 Use a disposable `XCTestConfigurationFilePath` environment value when running captures alongside the installed app so chart storage is isolated from the live database.
 
+## Fan control & code signing
+
+Fan control talks to the SMC through a privileged helper (`eu.exelban.Stats.SMC.Helper`) registered via `SMAppService`. macOS only registers the helper when the app and the helper are signed by the same development team, so ad-hoc builds cannot enable fan control — the "Install fan helper" flow will fail with an unsigned-build message.
+
+One-time setup for a local fork build:
+
+1. Open `Stats.xcodeproj` in Xcode and sign in with your Apple ID (Xcode ▸ Settings ▸ Accounts; a free account is enough).
+2. Select your team in the Signing & Capabilities pane of the **Stats** target (the project's `SMPrivilegedExecutables`/`SMAuthorizedClients` requirements resolve against that team automatically).
+3. Build and run once from Xcode. Approve the "Stats" daemon when macOS asks (System Settings ▸ Login Items).
+4. Fan control is live from then on, including for subsequently installed local builds.
+
 ## Features
 Stats is an application that allows you to monitor your macOS system.
 
