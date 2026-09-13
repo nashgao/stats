@@ -43,15 +43,24 @@ final class AttentionEvaluator {
         static let batteryDrainWatts: Double = 20
     }
     
-    private(set) var attentions: [Attention] = []
+    private(set) var attentions: [Attention] {
+        get { self.queue.sync { self._attentions } }
+        set { self.queue.sync { self._attentions = newValue } }
+    }
+    private var _attentions: [Attention] = []
     private var samples: [TelemetryMetric: TelemetrySample] = [:]
+    /// Reader threads post telemetry samples concurrently with the main
+    /// thread; all state is serialized here.
+    private let queue = DispatchQueue(label: "eu.exelban.Stats.AttentionEvaluator")
     
     /// First attention in priority order (fan, temperature, memory, gpu,
     /// battery, cpu); nil when the system is quiet.
-    var primary: Attention? { self.attentions.first }
+    var primary: Attention? {
+        self.queue.sync { self._attentions.first }
+    }
     
     func attention(for module: String) -> Attention? {
-        self.attentions.first(where: { $0.module == module })
+        self.queue.sync { self._attentions.first(where: { $0.module == module }) }
     }
     
     private init() {
@@ -65,14 +74,16 @@ final class AttentionEvaluator {
     
     @objc private func sample(_ notification: Notification) {
         guard let sample = notification.object as? TelemetrySample else { return }
-        self.samples[sample.metric] = sample
-        let next = self.evaluate()
-        if next != self.attentions {
-            self.attentions = next
-            NSLog(
-                "[Attention] %@",
-                next.isEmpty ? "quiet" : next.map({ "\($0.label) [\($0.level == .critical ? "critical" : "attention")]" }).joined(separator: " · ")
-            )
+        self.queue.async {
+            self.samples[sample.metric] = sample
+            let next = self.evaluate()
+            if next != self._attentions {
+                self._attentions = next
+                NSLog(
+                    "[Attention] %@",
+                    next.isEmpty ? "quiet" : next.map({ "\($0.label) [\($0.level == .critical ? "critical" : "attention")]" }).joined(separator: " · ")
+                )
+            }
         }
     }
     

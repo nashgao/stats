@@ -62,6 +62,9 @@ final class UnifiedPopupController {
         if self.glyphTimer == nil {
             self.glyphTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
                 self?.updateGlyph()
+                if self?.panel.isVisible == true {
+                    self?.panel.updateAttentionChrome()
+                }
             }
         }
         self.updateGlyph()
@@ -142,17 +145,20 @@ final class UnifiedPopupController {
     }
     
     /// Module widget click routed to the unified panel: opens it under the
-    /// clicked widget, scrolled to that module's section. If the panel is
-    /// already open, just re-anchors the scroll.
+    /// clicked widget, scrolled to that module's section. When any attention
+    /// is active, the first attention section overrides the anchor. If the
+    /// panel is already open, just re-anchors the scroll; manual scrolling
+    /// always wins afterwards.
     @objc private func routeUnifiedPopup(_ notification: Notification) {
         guard UnifiedPopupRouting.isEnabled,
               let origin = notification.userInfo?["origin"] as? CGPoint,
               let center = notification.userInfo?["center"] as? CGFloat else { return }
         let anchor = notification.userInfo?["module"] as? String
+        let target = AttentionEvaluator.shared.primary?.module ?? anchor
         
         if self.panel.isVisible {
-            if let anchor {
-                self.panel.scrollToSection(anchor)
+            if let target {
+                self.panel.scrollToSection(target)
             }
             return
         }
@@ -160,7 +166,7 @@ final class UnifiedPopupController {
         // The unified panel re-parents module popup views, so any open
         // module popup must be closed first.
         modules.forEach { $0.closePopupIfVisible() }
-        self.show(origin: origin, center: center, scrollTo: anchor)
+        self.show(origin: origin, center: center, scrollTo: target)
     }
     
     @objc private func modulePopupVisibilityChanged(_ notification: Notification) {
@@ -182,6 +188,7 @@ final class UnifiedPopupController {
         }
         // Re-parent on every show: a module popup may have reclaimed its view.
         self.panel.populate(modules: selected)
+        self.panel.updateAttentionChrome()
         
         let screenHeight = NSScreen.main?.visibleFrame.height ?? 800
         let height = max(320, min(self.panel.contentHeight, screenHeight * 0.7))
@@ -226,6 +233,8 @@ private final class UnifiedPopupPanel: NSPanel {
     private let scrollView = NSScrollView()
     private let document = UnifiedPopupDocumentView()
     private var sections: [(name: String, header: NSTextField, popup: Popup_p)] = []
+    private let headlineView = UnifiedPopupHeadlineView()
+    private var badges: [String: NSTextField] = [:]
     
     var contentHeight: CGFloat {
         self.document.frame.height
@@ -278,7 +287,65 @@ private final class UnifiedPopupPanel: NSPanel {
         self.scrollView.documentView = self.document
         self.effectView.addSubview(self.scrollView)
         
+        self.headlineView.isHidden = true
+        self.document.addSubview(self.headlineView)
+        
         content.addSubview(self.effectView)
+    }
+    
+    /// Health headline strip + per-section attention badges, driven by the
+    /// shared AttentionEvaluator. The strip hides entirely when quiet.
+    func updateAttentionChrome() {
+        let attentions = AttentionEvaluator.shared.attentions
+        
+        if attentions.isEmpty {
+            self.headlineView.isHidden = true
+        } else {
+            let text = NSMutableAttributedString()
+            for (index, attention) in attentions.enumerated() {
+                if index > 0 {
+                    text.append(NSAttributedString(string: "  ·  ", attributes: [
+                        .font: NSFont.systemFont(ofSize: 12, weight: .regular),
+                        .foregroundColor: NSColor.secondaryLabelColor
+                    ]))
+                }
+                text.append(NSAttributedString(string: attention.label, attributes: [
+                    .font: NSFont.systemFont(ofSize: 12, weight: .semibold),
+                    .foregroundColor: attention.level == .critical ? NSColor.systemRed : NSColor.systemOrange
+                ]))
+            }
+            self.headlineView.attributedStringValue = text
+            self.headlineView.isHidden = false
+        }
+        
+        for (name, _, _) in self.sections {
+            guard let badge = self.badges[name] else { continue }
+            if let attention = AttentionEvaluator.shared.attention(for: name) {
+                badge.attributedStringValue = NSAttributedString(
+                    string: "● \(Self.shortLabel(attention))",
+                    attributes: [
+                        .font: NSFont.systemFont(ofSize: 10, weight: .semibold),
+                        .foregroundColor: attention.level == .critical ? NSColor.systemRed : NSColor.systemOrange
+                    ]
+                )
+                badge.isHidden = false
+            } else {
+                badge.isHidden = true
+            }
+        }
+        
+        self.relayout()
+    }
+    
+    private static func shortLabel(_ attention: Attention) -> String {
+        switch attention.kind {
+        case .fan, .temperature: return attention.label
+        default:
+            if attention.label.hasPrefix(attention.module + " ") {
+                return String(attention.label.dropFirst(attention.module.count + 1))
+            }
+            return attention.label
+        }
     }
     
     func populate(modules: [Module]) {
@@ -287,6 +354,8 @@ private final class UnifiedPopupPanel: NSPanel {
             popup.removeFromSuperview()
         }
         self.sections = []
+        self.badges.values.forEach { $0.removeFromSuperview() }
+        self.badges = [:]
         
         for module in modules {
             guard let popup = module.embeddedPopupView else { continue }
@@ -298,6 +367,12 @@ private final class UnifiedPopupPanel: NSPanel {
             ])
             self.document.addSubview(header)
             self.document.addSubview(popup)
+            
+            let badge = NSTextField(labelWithString: "")
+            badge.lineBreakMode = .byTruncatingTail
+            badge.isHidden = true
+            self.document.addSubview(badge)
+            self.badges[module.config.name] = badge
             
             let previous = popup.sizeCallback
             popup.sizeCallback = { [weak self] size in
@@ -333,8 +408,17 @@ private final class UnifiedPopupPanel: NSPanel {
         let margin = Constants.Popup.margins
         let headerHeight: CGFloat = 20
         var y: CGFloat = margin
-        for (_, header, popup) in self.sections {
+        if !self.headlineView.isHidden {
+            self.headlineView.frame = NSRect(x: margin, y: y, width: Self.panelWidth - margin*2, height: 20)
+            y += 26
+        }
+        for (name, header, popup) in self.sections {
             header.frame = NSRect(x: margin, y: y, width: Self.panelWidth - margin*2, height: headerHeight)
+            if let badge = self.badges[name] {
+                badge.sizeToFit()
+                let width = min(badge.frame.width, Self.panelWidth / 2)
+                badge.frame = NSRect(x: Self.panelWidth - margin - width, y: y + 3, width: width, height: 14)
+            }
             y += headerHeight + 4
             popup.frame = NSRect(x: margin, y: y, width: Constants.Popup.width, height: popup.frame.height)
             y += popup.frame.height + 12
@@ -354,6 +438,22 @@ private final class UnifiedPopupPanel: NSPanel {
 
 private final class UnifiedPopupDocumentView: NSView {
     override var isFlipped: Bool { true }
+}
+
+private final class UnifiedPopupHeadlineView: NSTextField {
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        self.isEditable = false
+        self.isSelectable = false
+        self.isBezeled = false
+        self.drawsBackground = false
+        self.lineBreakMode = .byTruncatingTail
+        self.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+    }
+    
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
 }
 
 private final class UnifiedPopupBackgroundView: NSView {
