@@ -53,8 +53,9 @@ final class UnifiedPopupController {
         
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         guard let button = item.button else { return }
-        button.image = iconFromSymbol(name: "chart.bar.fill", scale: .medium)
-        button.contentTintColor = .secondaryLabelColor
+        let image = iconFromSymbol(name: "chart.bar.fill", scale: .medium)
+        image.isTemplate = true
+        button.image = image
         button.target = self
         button.action = #selector(self.togglePanel)
         button.toolTip = localizedString("Open unified popup")
@@ -72,11 +73,14 @@ final class UnifiedPopupController {
     }
     
     /// Adaptive glyph + tint, evaluated on a ~1s cadence from the shared
-    /// AttentionEvaluator. Status pairs the glyph with a tint: secondary
-    /// label color when quiet, systemOrange for attention, systemRed for
-    /// critical; accent blue stays reserved for interaction. Attention
-    /// tints are baked into the image because NSStatusBarButton does not
-    /// reliably apply contentTintColor to swapped symbol images.
+    /// AttentionEvaluator. Status pairs the glyph with a tint: systemOrange
+    /// for attention, systemRed for critical; accent blue stays reserved
+    /// for interaction. Attention tints are baked into the image because
+    /// NSStatusBarButton does not reliably apply contentTintColor to swapped
+    /// symbol images. The quiet glyph is a TRUE template image - untouched
+    /// symbol, no baked color, no content tint - so the menu bar renders it
+    /// adaptively (white on a dark bar, dark on a light bar), matching the
+    /// other menu bar items.
     private func updateGlyph() {
         guard let button = self.statusItem?.button else { return }
         let attention = AttentionEvaluator.shared.primary
@@ -84,28 +88,29 @@ final class UnifiedPopupController {
         guard key != self.glyphState else { return }
         self.glyphState = key
         
-        var image: NSImage
-        var tint = NSColor.secondaryLabelColor
-        switch attention?.kind {
-        case .some(.fan):
-            image = self.symbolImage("fanblades.fill", fallback: "wind")
-        case .some(.temperature):
-            image = self.symbolImage("thermometer.medium", fallback: "thermometer")
-        case .some(.memory):
-            image = self.symbolImage("memorychip", fallback: "square.stack.3d.up.fill")
-        case .some(.gpu):
-            image = self.symbolImage("gauge.high", fallback: "gauge")
-        case .some(.battery):
-            image = self.symbolImage("battery.100bolt", fallback: "bolt.fill")
-        default:
-            image = iconFromSymbol(name: "chart.bar.fill", scale: .medium)
-        }
         if let attention {
-            tint = attention.level == .critical ? .systemRed : .systemOrange
-            image = self.tinted(image, with: tint)
+            let image: NSImage
+            switch attention.kind {
+            case .fan:
+                image = self.symbolImage("fanblades.fill", fallback: "wind")
+            case .temperature:
+                image = self.symbolImage("thermometer.medium", fallback: "thermometer")
+            case .memory:
+                image = self.symbolImage("memorychip", fallback: "square.stack.3d.up.fill")
+            case .gpu:
+                image = self.symbolImage("gauge.high", fallback: "gauge")
+            case .battery:
+                image = self.symbolImage("battery.100bolt", fallback: "bolt.fill")
+            case .cpu:
+                image = iconFromSymbol(name: "chart.bar.fill", scale: .medium)
+            }
+            button.image = self.tinted(image, with: attention.level == .critical ? .systemRed : .systemOrange)
+        } else {
+            let image = iconFromSymbol(name: "chart.bar.fill", scale: .medium)
+            image.isTemplate = true
+            button.image = image
         }
-        button.image = image
-        button.contentTintColor = tint
+        button.contentTintColor = nil
     }
     
     /// Primary SFSymbol with a macOS 12-safe fallback for symbols newer
