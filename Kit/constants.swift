@@ -149,4 +149,12 @@ public enum ModuleType: Int {
         default: return nil
         }
     }
+    
+    /// Short names accepted by the `.togglePopup` notification in addition to
+    /// the module config name. The QA harness and external triggers refer to
+    /// the Network module as "Net" (its Modules/Net directory name), which
+    /// does not match the config name "Network".
+    public static let popupNameAliases: [String: String] = [
+        "Net": "Network"
+    ]
 }

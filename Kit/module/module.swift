@@ -290,12 +290,13 @@ open class Module {
     
     @objc private func listenForPopupToggle(_ notification: Notification) {
         guard let popup = self.popup,
-              let name = notification.userInfo?["module"] as? String,
+              let rawName = notification.userInfo?["module"] as? String,
               let buttonOrigin = notification.userInfo?["origin"] as? CGPoint,
-              let buttonCenter = notification.userInfo?["center"] as? CGFloat,
-              self.config.name == name else {
+              let buttonCenter = notification.userInfo?["center"] as? CGFloat else {
             return
         }
+        let name = ModuleType.popupNameAliases[rawName] ?? rawName
+        guard self.config.name == name else { return }
         
         let openedWindows = NSApplication.shared.windows.filter{ $0 is NSPanel }
         openedWindows.forEach{ $0.setIsVisible(false) }

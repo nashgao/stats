@@ -107,8 +107,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 // The requested module can be disabled in the shared preferences
                 // (the live instance keeps its own config). Enable it in memory
                 // so the capture populates, without persisting the state.
+                let moduleName = ModuleType.popupNameAliases[module] ?? module
                 modules.forEach { m in
-                    if m.config.name == module && !m.enabled {
+                    if m.config.name == moduleName && !m.enabled {
                         m.enabled = true
                         m.mount()
                     }
