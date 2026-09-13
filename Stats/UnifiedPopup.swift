@@ -209,6 +209,9 @@ final class UnifiedPopupController {
         }
         
         self.panel.setFrame(NSRect(x: x, y: y, width: width, height: height), display: true)
+        if let expand = ProcessInfo.processInfo.environment["STATS_POPUP_EXPAND"] {
+            self.panel.expandSection(expand)
+        }
         if let scrollTo, let offset = self.panel.sectionOffset(for: scrollTo) {
             self.panel.scrollToOffset(offset)
         } else {
@@ -332,6 +335,10 @@ private final class UnifiedPopupPanel: NSPanel {
     
     func refreshContent() {
         self.content.relayout()
+    }
+    
+    func expandSection(_ module: String) {
+        self.content.expandSection(module)
     }
     
     func sectionOffset(for module: String) -> CGFloat? {

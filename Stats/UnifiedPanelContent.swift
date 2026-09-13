@@ -248,7 +248,7 @@ private final class UnifiedHeroCard: UnifiedCardView {
     var expanded: Bool = false
     var onToggle: (() -> Void)?
     /// Fixed-height detail content installed by the panel; hidden when collapsed.
-    let expandContainer = NSView()
+    let expandContainer = UnifiedFlippedView()
     
     init(module: String, icon: String, detailHeight: CGFloat) {
         self.module = module
@@ -368,7 +368,7 @@ private final class UnifiedGrammarRow: NSView {
     let glyphField = unifiedLabel("✓", font: .systemFont(ofSize: 10, weight: .semibold), color: .systemGreen, alignment: .center)
     let spark = UnifiedSparklineView()
     let chevron = NSButton()
-    let expandContainer = NSView()
+    let expandContainer = UnifiedFlippedView()
     private let iconView = NSImageView()
     private let hairline = UnifiedHairline()
     var expanded: Bool = false
@@ -484,9 +484,9 @@ final class UnifiedPanelContent: NSView {
     private let brandLabel = unifiedLabel("Stats", font: .systemFont(ofSize: 13, weight: .semibold), color: .labelColor)
     private let verdictChip = UnifiedChipView()
     
-    private let cpuHero = UnifiedHeroCard(module: "CPU", icon: "cpu", detailHeight: 178)
-    private let gpuHero = UnifiedHeroCard(module: "GPU", icon: "gpu.card", detailHeight: 62)
-    private let ramHero = UnifiedHeroCard(module: "RAM", icon: "memorychip", detailHeight: 108)
+    private let cpuHero = UnifiedHeroCard(module: "CPU", icon: "cpu", detailHeight: 142)
+    private let gpuHero = UnifiedHeroCard(module: "GPU", icon: "gpu.card", detailHeight: 36)
+    private let ramHero = UnifiedHeroCard(module: "RAM", icon: "memorychip", detailHeight: 106)
     private let diskRow = UnifiedGrammarRow(module: "Disk", label: localizedString("Disk"), icon: "internaldrive", expandable: false)
     private let netRow = UnifiedGrammarRow(module: "Network", label: localizedString("Network"), icon: "arrow.up.arrow.down", expandable: false)
     private let sensorsRow = UnifiedGrammarRow(module: "Sensors", label: localizedString("Sensors"), icon: "thermometer.medium", expandable: true)
@@ -690,6 +690,13 @@ final class UnifiedPanelContent: NSView {
     
     private static func statusLevel(of module: String, in attentions: [Attention]) -> Int {
         attentions.filter({ $0.module == module }).map({ $0.level.rawValue }).max() ?? 0
+    }
+    
+    /// Harness QA (STATS_POPUP_EXPAND=<module>): expand a section at open.
+    func expandSection(_ module: String) {
+        if self.expandedSection != module {
+            self.toggleSection(module)
+        }
     }
     
     /// Scroll offset so the named module's section sits near the top.
@@ -910,43 +917,68 @@ final class UnifiedPanelContent: NSView {
         }
     }
     
+    private var fanKeys: [String] = []
+    
     private func rebuildFans() {
         guard let sensors = self.sensorsList else { return }
         let fans = sensors.sensors.compactMap({ $0 as? Fan }).filter({ !$0.isComputed && $0.maxSpeed > 1 })
-        for view in self.sensorsFansContainer.subviews {
-            view.removeFromSuperview()
-        }
-        var y: CGFloat = 0
-        for fan in fans {
-            let fanView = FanView(fan, width: self.sensorsRow.expandContainer.bounds.width) { [weak self] in
-                self?.onLayoutChange?()
+        let keys = fans.map({ $0.key }).sorted()
+        if keys != self.fanKeys {
+            self.fanKeys = keys
+            for view in self.sensorsFansContainer.subviews {
+                view.removeFromSuperview()
             }
-            self.sensorsFansContainer.addSubview(fanView)
-            fanView.frame = NSRect(x: 0, y: y, width: self.sensorsRow.expandContainer.bounds.width, height: 72)
-            y += fanView.frame.height + 4
+            for fan in fans {
+                // The module's own fan control: it sizes itself and reports
+                // height changes through the callback.
+                let fanView = FanView(fan, width: 316) { [weak self] in
+                    self?.layoutFanContainer()
+                    self?.relayout()
+                    self?.onLayoutChange?()
+                }
+                self.sensorsFansContainer.addSubview(fanView)
+            }
+            let temps = sensors.sensors
+                .filter({ $0.type == .temperature && $0.popupState && $0.value.isFinite })
+                .sorted(by: { $0.value > $1.value })
+                .prefix(3)
+            for temp in temps {
+                let label = unifiedLabel(temp.name, font: .systemFont(ofSize: 11, weight: .regular), color: .secondaryLabelColor)
+                let value = unifiedLabel(temp.formattedValue, font: .monospacedDigitSystemFont(ofSize: 11, weight: .semibold), color: .labelColor, alignment: .right)
+                label.identifier = NSUserInterfaceItemIdentifier("temp")
+                value.identifier = NSUserInterfaceItemIdentifier("temp")
+                self.sensorsFansContainer.addSubview(label)
+                self.sensorsFansContainer.addSubview(value)
+            }
         }
-        let temps = sensors.sensors
-            .filter({ $0.type == .temperature && $0.popupState && $0.value.isFinite })
-            .sorted(by: { $0.value > $1.value })
-            .prefix(3)
-        for temp in temps {
-            let label = unifiedLabel(temp.name, font: .systemFont(ofSize: 11, weight: .regular), color: .secondaryLabelColor)
-            let value = unifiedLabel(temp.formattedValue, font: .monospacedDigitSystemFont(ofSize: 11, weight: .semibold), color: .labelColor, alignment: .right)
-            self.sensorsFansContainer.addSubview(label)
-            self.sensorsFansContainer.addSubview(value)
-            label.frame = NSRect(x: 0, y: y + 1, width: 220, height: 14)
-            value.frame = NSRect(x: 224, y: y + 1, width: 100, height: 14)
-            y += 18
+        self.layoutFanContainer()
+        // FanViews size themselves after entering the hierarchy; re-stack once more.
+        DispatchQueue.main.async { [weak self] in
+            self?.layoutFanContainer()
+            self?.relayout()
+            self?.onLayoutChange?()
+        }
+    }
+    
+    private func layoutFanContainer() {
+        let width = max(self.sensorsRow.expandContainer.bounds.width, 100)
+        var y: CGFloat = 0
+        for case let fanView as FanView in self.sensorsFansContainer.subviews {
+            let height = max(fanView.frame.height, 64)
+            fanView.frame = NSRect(x: 0, y: y, width: width, height: height)
+            y += height + 6
+        }
+        for view in self.sensorsFansContainer.subviews where view.identifier?.rawValue == "temp" {
+            if view is NSTextField, let field = view as? NSTextField {
+                let isValue = field.alignment == .right
+                field.frame = NSRect(x: isValue ? width - 100 : 0, y: y + 1, width: isValue ? 100 : 220, height: 14)
+                if !isValue { y += 18 }
+            }
         }
         let height = max(y, 30)
-        self.sensorsFansContainer.frame = NSRect(x: 0, y: 0, width: self.sensorsRow.expandContainer.bounds.width, height: height)
+        self.sensorsFansContainer.frame = NSRect(x: 0, y: 0, width: width, height: height)
         self.sensorsRow.detailHeight = height
-        let wasExpanded = self.sensorsRow.expanded
         self.sensorsRow.expandContainer.frame = NSRect(x: 8, y: 44, width: self.sensorsRow.bounds.width - 16, height: height)
-        if wasExpanded {
-            self.relayout()
-            self.onLayoutChange?()
-        }
     }
 }
 
