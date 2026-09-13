@@ -16,7 +16,7 @@ final class UnifiedPopupController {
     static let moduleOrder = ["CPU", "GPU", "RAM", "Disk", "Network", "Sensors", "Battery"]
     
     private let panel: UnifiedPopupPanel
-    private var populated: Bool = false
+    private var statusItem: NSStatusItem? = nil
     
     private init() {
         self.panel = UnifiedPopupPanel(
@@ -25,22 +25,86 @@ final class UnifiedPopupController {
             backing: .buffered,
             defer: false
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(self.modulePopupVisibilityChanged(_:)),
+            name: .popupVisibilityChanged,
+            object: nil
+        )
     }
     
-    func show(origin: NSPoint) {
-        if !self.populated {
-            let selected = UnifiedPopupController.moduleOrder.compactMap { name in
-                modules.first(where: { $0.config.name == name })
-            }
-            self.panel.populate(modules: selected)
-            self.populated = true
+    var isVisible: Bool {
+        self.panel.isVisible
+    }
+    
+    /// App-level menu bar item. Toggleable via the `unified_widget` defaults
+    /// key (default: on). Coexists with the per-module widgets.
+    func setupStatusItem() {
+        guard Store.shared.bool(key: "unified_widget", defaultValue: true) else { return }
+        guard self.statusItem == nil else { return }
+        
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        guard let button = item.button else { return }
+        button.image = iconFromSymbol(name: "chart.bar.fill", scale: .medium)
+        button.contentTintColor = .secondaryLabelColor
+        button.target = self
+        button.action = #selector(self.togglePanel)
+        button.toolTip = localizedString("Open unified popup")
+        self.statusItem = item
+        NSLog("[UnifiedPopup] status item installed (unified_widget=on)")
+    }
+    
+    @objc private func togglePanel() {
+        if self.panel.isVisible {
+            self.hide()
+            return
         }
+        
+        // The unified panel re-parents module popup views, so any open
+        // module popup must be closed first.
+        modules.forEach { $0.closePopupIfVisible() }
+        
+        guard let window = self.statusItem?.button?.window else { return }
+        self.show(origin: window.frame.origin, center: window.frame.width/2)
+    }
+    
+    @objc private func modulePopupVisibilityChanged(_ notification: Notification) {
+        guard let state = notification.userInfo?["state"] as? Bool, state else { return }
+        // A module popup is showing (and has reclaimed its view): close the
+        // unified surface so both never present module content at once.
+        self.hide()
+    }
+    
+    func hide() {
+        guard self.panel.isVisible else { return }
+        self.panel.disappearSections()
+        self.panel.orderOut(nil)
+    }
+    
+    func show(origin: NSPoint, center: CGFloat = 0) {
+        let selected = UnifiedPopupController.moduleOrder.compactMap { name in
+            modules.first(where: { $0.config.name == name })
+        }
+        // Re-parent on every show: a module popup may have reclaimed its view.
+        self.panel.populate(modules: selected)
         
         let screenHeight = NSScreen.main?.visibleFrame.height ?? 800
         let height = max(320, min(self.panel.contentHeight, screenHeight * 0.7))
         let width = UnifiedPopupPanel.panelWidth
-        let rect = NSRect(x: origin.x - width/2, y: origin.y - height - 3, width: width, height: height)
-        self.panel.setFrame(rect, display: true)
+        var x = origin.x - width/2 + center
+        let y = origin.y - height - 3
+        
+        let buttonPoint = NSPoint(x: origin.x + center, y: origin.y)
+        if let screen = NSScreen.screens.first(where: { $0.frame.contains(buttonPoint) }) ?? NSScreen.main {
+            if x + width > screen.frame.maxX {
+                x = screen.frame.maxX - width - 3
+            }
+            if x < screen.frame.minX {
+                x = screen.frame.minX + 3
+            }
+        }
+        
+        self.panel.setFrame(NSRect(x: x, y: y, width: width, height: height), display: true)
         self.panel.appearSections()
         self.panel.scrollToTop()
         self.panel.orderFrontRegardless()

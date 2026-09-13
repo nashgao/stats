@@ -149,6 +149,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         }
         self.defaultValues()
         self.icon()
+        UnifiedPopupController.shared.setupStatusItem()
         
         NotificationCenter.default.addObserver(self, selector: #selector(listenForAppPause), name: .pause, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(handleToggleSettings), name: .toggleSettings, object: nil)

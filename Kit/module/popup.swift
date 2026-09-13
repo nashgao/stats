@@ -296,6 +296,13 @@ public class PopupWindow: NSWindow, NSWindowDelegate {
         self.locked = true
     }
     
+    /// Re-embed the popup content view into this window. Called when the
+    /// popup is opened while its view is hosted inside the unified popup.
+    public func reattachView(_ view: Popup_p?) {
+        guard let view else { return }
+        self.viewController.setup(title: self.title, view: view)
+    }
+    
     public func windowDidResignKey(_ notification: Notification) {
         if self.locked {
             return
