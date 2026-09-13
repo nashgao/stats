@@ -15,12 +15,12 @@ public struct Popup_c_s {
     public let width: CGFloat = 304
     public let height: CGFloat = 300
     public let maximumHeight: CGFloat = 720
-    public let margins: CGFloat = 8
-    public let spacing: CGFloat = 2
+    public let margins: CGFloat = 10
+    public let spacing: CGFloat = 6
     public let headerHeight: CGFloat = 48
     public let separatorHeight: CGFloat = 30
-    public let radius: CGFloat = 10
-    public let processHeight: CGFloat = 22
+    public let radius: CGFloat = 14
+    public let processHeight: CGFloat = 26
 }
 
 public struct Settings_c_s {
@@ -38,20 +38,20 @@ public struct Design_c_s {
     public let space6: CGFloat = 24
     public let space8: CGFloat = 32
 
-    public let sectionRadius: CGFloat = 10
+    public let sectionRadius: CGFloat = 14
+    public let innerRadius: CGFloat = 10
+    public let chipRadius: CGFloat = 6
     public let navigationRowHeight: CGFloat = 36
     public let minimumControlSize: CGFloat = 32
 
-    public let separatorOpacity: CGFloat = 0.55
-    public let hairlineWidth: CGFloat = 1
-    public let trendLineWidth: CGFloat = 2
+    public let separatorOpacity: CGFloat = 0.3
+    public let hairlineWidth: CGFloat = 0.5
+    public let trendLineWidth: CGFloat = 1.5
 
-    public let metricTrendHeight: CGFloat = 38
+    public let metricTrendHeight: CGFloat = 42
     public let metricCardHeight: CGFloat = 148
-    public let metricCardMinimumWidth: CGFloat = 220
-    public let healthRibbonItemHeight: CGFloat = 52
-    public let healthRibbonHeight: CGFloat = 128
-    public let healthRibbonColumns: Int = 3
+    public let compactMetricCardHeight: CGFloat = 44
+    public let metricCardMinimumWidth: CGFloat = 200
     public let deviceIconSize: CGFloat = 58
     public let supportPopoverSize = CGSize(width: 220, height: 56)
 
@@ -66,6 +66,7 @@ public struct Design_c_s {
 
     public var surfaceSecondary: NSColor { .underPageBackgroundColor }
     public var surfaceElevated: NSColor { .windowBackgroundColor }
+    public var surfaceGroup: NSColor { .quaternaryLabelColor }
     public var textSecondary: NSColor { .secondaryLabelColor }
     public var separatorSubtle: NSColor { .separatorColor }
     public var accentPrimary: NSColor { .controlAccentColor }
@@ -74,8 +75,8 @@ public struct Design_c_s {
     public var statusCritical: NSColor { .systemRed }
 
     public var healthHeadlineFont: NSFont { .systemFont(ofSize: 24, weight: .semibold) }
+    public var metricHeadlineFont: NSFont { .monospacedDigitSystemFont(ofSize: 24, weight: .semibold) }
     public var metricValueFont: NSFont { .monospacedDigitSystemFont(ofSize: 20, weight: .semibold) }
-    public var compactMetricValueFont: NSFont { .monospacedDigitSystemFont(ofSize: 14, weight: .semibold) }
     public var sectionTitleFont: NSFont { .systemFont(ofSize: 15, weight: .semibold) }
     public var bodyFont: NSFont { .systemFont(ofSize: 13, weight: .regular) }
     public var bodyEmphasisFont: NSFont { .systemFont(ofSize: 13, weight: .medium) }

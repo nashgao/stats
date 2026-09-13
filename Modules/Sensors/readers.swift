@@ -15,6 +15,13 @@ import Kit
 internal class SensorsReader: Reader<Sensors_List> {
     static let HIDtypes: [SensorType] = [.temperature, .voltage]
     
+    // SMC keys that decode to plausible values but are fixed registers, not live
+    // sensors. Tf06/Tf16 verified pinned at exactly 99.625/97.625 °C across idle
+    // and full CPU load on M5 Max, while all real sensors drift (2026-09).
+    private static let invalidSMCKeys: [[Platform]: Set<String>] = [
+        Platform.m5Gen: ["Tf06", "Tf16"]
+    ]
+    
     internal var list: Sensors_List = Sensors_List()
     
     private var lastRead: TimeInterval = ProcessInfo.processInfo.systemUptime
@@ -65,6 +72,12 @@ internal class SensorsReader: Reader<Sensors_List> {
             }
         })
         
+        if let platform = SystemKit.shared.device.platform {
+            for (platforms, keys) in SensorsReader.invalidSMCKeys where platforms.contains(platform) {
+                available.removeAll(where: { keys.contains($0) })
+            }
+        }
+        
         sensorsList.forEach { (s: Sensor) in
             if let idx = available.firstIndex(where: { $0 == s.key }) {
                 list.append(s)
@@ -96,7 +109,15 @@ internal class SensorsReader: Reader<Sensors_List> {
             default: type = nil
             }
             if let t = type {
-                list.append(Sensor(key: key, name: key, group: .unknown, type: t, platforms: []))
+                let typeName: String
+                switch t {
+                case .temperature: typeName = localizedString("Temperature")
+                case .voltage: typeName = localizedString("Voltage")
+                case .current: typeName = localizedString("Current")
+                case .power: typeName = localizedString("Power")
+                default: typeName = localizedString("Unknown")
+                }
+                list.append(Sensor(key: key, name: "\(typeName) (\(key))", group: .unknown, type: t, platforms: []))
             }
         }
         

@@ -199,7 +199,8 @@ private class SeparatorLineView: NSView {
     }
     
     override func updateLayer() {
-        self.layer?.backgroundColor = (self.isDarkMode ? NSColor.white : NSColor.black).cgColor
+        self.layer?.backgroundColor = Constants.Design.separatorSubtle
+            .withAlphaComponent(Constants.Design.separatorOpacity).cgColor
     }
     
     override func viewDidChangeEffectiveAppearance() {
@@ -210,6 +211,7 @@ private class SeparatorLineView: NSView {
 
 private class Popup: NSStackView, Popup_p {
     fileprivate var keyboardShortcut: [UInt16] = []
+    fileprivate var subtitle: String? = nil
     fileprivate var sizeCallback: ((NSSize) -> Void)? = nil
     
     init() {
@@ -220,7 +222,7 @@ private class Popup: NSStackView, Popup_p {
         self.orientation = .vertical
         self.distribution = .fill
         self.alignment = .width
-        self.spacing = Constants.Popup.spacing*3
+        self.spacing = Constants.Design.space2
         
         self.reinit()
         

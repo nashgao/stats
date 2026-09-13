@@ -34,12 +34,12 @@ open class PortalWrapper: NSStackView, Portal_p {
             view.orientation = .horizontal
             view.distribution = .fillEqually
             
-            view.spacing = Constants.Popup.spacing*2
+            view.spacing = Constants.Design.space3
             view.edgeInsets = NSEdgeInsets(
-                top: Constants.Popup.spacing,
-                left: Constants.Popup.spacing,
-                bottom: Constants.Popup.spacing,
-                right: Constants.Popup.spacing
+                top: Constants.Design.space2,
+                left: Constants.Design.space3,
+                bottom: Constants.Design.space2,
+                right: Constants.Design.space3
             )
             
             return view
@@ -48,7 +48,7 @@ open class PortalWrapper: NSStackView, Portal_p {
         super.init(frame: .zero)
         
         self.orientation = .vertical
-        self.spacing = Constants.Popup.spacing
+        self.spacing = Constants.Design.space2
         
         self.addArrangedSubview(self.header)
         self.addArrangedSubview(self.body)
@@ -79,7 +79,7 @@ public class PortalHeader: NSStackView {
         self.name = name
         
         super.init(frame: NSRect.zero)
-        self.heightAnchor.constraint(equalToConstant: 20).isActive = true
+        self.heightAnchor.constraint(equalToConstant: 24).isActive = true
         
         let title = NSTextField()
         title.isEditable = false
@@ -90,7 +90,7 @@ public class PortalHeader: NSStackView {
         title.backgroundColor = .clear
         title.canDrawSubviewsIntoLayer = true
         title.alignment = .left
-        title.font = NSFont.systemFont(ofSize: 12, weight: .medium)
+        title.font = NSFont.systemFont(ofSize: 13, weight: .medium)
         title.stringValue = localizedString(name)
         
         let settings = NSButton()

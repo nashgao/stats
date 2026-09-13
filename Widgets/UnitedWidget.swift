@@ -106,6 +106,7 @@ public struct UnitedWidget: Widget {
             VStack {
                 if values.isEmpty {
                     Text("No data available")
+                        .foregroundStyle(.secondary)
                 } else {
                     LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
                         ForEach(values.indices, id: \.self) { index in
@@ -137,15 +138,19 @@ struct CircularGaugeView: View {
 
     var body: some View {
         ZStack {
-            Circle().stroke(Color.gray.opacity(0.2), lineWidth: 6)
+            Circle().stroke(Color(nsColor: .systemGray).opacity(0.2), lineWidth: 6)
             Circle()
                 .trim(from: 0, to: self.progress)
                 .stroke(self.color, style: StrokeStyle(lineWidth: 6, lineCap: .round))
                 .rotationEffect(.degrees(-90))
-                .animation(.easeInOut(duration: 0.3), value: self.progress)
+                .animation(.easeInOut(duration: 0.18), value: self.progress)
             VStack(spacing: 0) {
-                Text(self.title).font(.system(size: 10))
-                Text("\(Int(self.progress * 100))%").font(.system(size: 12))
+                Text(self.title)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+                Text("\(Int(self.progress * 100))%")
+                    .font(.system(size: 12))
+                    .monospacedDigit()
             }
         }
         .frame(width: 60, height: 60)

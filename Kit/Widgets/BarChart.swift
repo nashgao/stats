@@ -13,8 +13,8 @@ import Cocoa
 
 public class BarChart: WidgetWrapper {
     private var labelState: Bool = false
-    private var boxState: Bool = true
-    private var frameState: Bool = false
+    private var boxState: Bool = false
+    private var frameState: Bool = true
     public var colorState: SColor = .systemAccent
     private var colors: [SColor] = SColor.allCases
     
@@ -90,7 +90,7 @@ public class BarChart: WidgetWrapper {
         style.alignment = .center
         let stringAttributes = [
             NSAttributedString.Key.font: NSFont.systemFont(ofSize: 7, weight: .regular),
-            NSAttributedString.Key.foregroundColor: NSColor.textColor,
+            NSAttributedString.Key.foregroundColor: NSColor.secondaryLabelColor,
             NSAttributedString.Key.paragraphStyle: style
         ]
         
@@ -214,7 +214,7 @@ public class BarChart: WidgetWrapper {
         }
         
         if self.boxState || self.frameState {
-            (isDarkMode ? NSColor.white : NSColor.black).set()
+            Constants.Design.separatorSubtle.set()
             box.lineWidth = lineWidth
             box.stroke()
         }

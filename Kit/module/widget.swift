@@ -197,7 +197,7 @@ open class WidgetWrapper: NSView, widget_p {
         let offset = lineWidth / 2
         let width: CGFloat = (Constants.Widget.margin.x*2) + size + (lineWidth*2)
         
-        NSColor.textColor.set()
+        NSColor.secondaryLabelColor.set()
         
         var circle = NSBezierPath()
         circle = NSBezierPath(ovalIn: CGRect(x: Constants.Widget.margin.x+offset, y: 1+offset, width: size, height: size))

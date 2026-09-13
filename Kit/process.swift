@@ -26,17 +26,21 @@ public class ProcessesView: NSStackView {
     private var list: [ProcessView] = []
     private var colorViews: [ColorView] = []
     
-    public init(frame: NSRect = .zero, values: [ProcessHeader], n: Int = 0) {
+    public init(frame: NSRect = .zero, values: [ProcessHeader], n: Int = 0, header: Bool = true, shareBars: Bool = false) {
         super.init(frame: frame)
         
         self.orientation = .vertical
         self.spacing = 0
         
-        let header = self.generateHeaderView(values)
-        self.addArrangedSubview(header)
+        if header {
+            let header = self.generateHeaderView(values)
+            self.addArrangedSubview(header)
+        }
         
         for _ in 0..<n {
-            let view = ProcessView(n: values.count)
+            let view = shareBars
+                ? ProcessView(size: CGSize(width: frame.width, height: Constants.Popup.processHeight), n: values.count, shareBar: true)
+                : ProcessView(n: values.count)
             self.addArrangedSubview(view)
             self.list.append(view)
         }
@@ -104,9 +108,12 @@ public class ProcessesView: NSStackView {
         self.list.forEach{ $0.clear(symbol) }
     }
     
-    public func set(_ idx: Int, _ process: Process_p, _ values: [String]) {
+    public func set(_ idx: Int, _ process: Process_p, _ values: [String], share: Double? = nil) {
         if self.list.indices.contains(idx) {
             self.list[idx].set(process, values)
+            if let share {
+                self.list[idx].setShare(share)
+            }
         }
     }
     
@@ -132,7 +139,11 @@ public class ProcessView: NSStackView {
     }()
     private var valueViews: [ValueField] = []
     
-    public init(size: CGSize = CGSize(width: 264, height: 22), n: Int = 1) {
+    private var shareTrack: NSView? = nil
+    private var shareFill: NSView? = nil
+    private var shareFillWidth: NSLayoutConstraint? = nil
+    
+    public init(size: CGSize = CGSize(width: 264, height: 22), n: Int = 1, shareBar: Bool = false) {
         var rect = NSRect(x: 2, y: 5, width: 12, height: 12)
         if size.height != 22 {
             rect = NSRect(x: 1, y: 3, width: 12, height: 12)
@@ -171,7 +182,12 @@ public class ProcessView: NSStackView {
         
         self.addArrangedSubview(imageBox)
         self.addArrangedSubview(self.labelView)
-        self.valuesViews(n).forEach{ self.addArrangedSubview($0) }
+        self.valuesViews(n, shareBar: shareBar).forEach{ self.addArrangedSubview($0) }
+        
+        if shareBar {
+            self.labelView.textColor = .labelColor
+            self.addShareBar()
+        }
         
         self.addTrackingArea(NSTrackingArea(
             rect: NSRect(x: 0, y: 0, width: self.frame.width, height: self.frame.height),
@@ -197,13 +213,15 @@ public class ProcessView: NSStackView {
         fatalError("init(coder:) has not been implemented")
     }
     
-    private func valuesViews(_ n: Int) -> [NSView] {
+    private func valuesViews(_ n: Int, shareBar: Bool = false) -> [NSView] {
         var list: [ValueField] = []
         
         for _ in 0..<n {
             let view: ValueField = ValueField()
             view.widthAnchor.constraint(equalToConstant: 68).isActive = true
-            if n != 1 {
+            if shareBar {
+                view.font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .medium)
+            } else if n != 1 {
                 view.font = NSFont.systemFont(ofSize: 10, weight: .regular)
             }
             list.append(view)
@@ -211,6 +229,48 @@ public class ProcessView: NSStackView {
         
         self.valueViews = list
         return list
+    }
+    
+    private func addShareBar() {
+        let track: NSView = NSView()
+        track.translatesAutoresizingMaskIntoConstraints = false
+        track.wantsLayer = true
+        track.layer?.backgroundColor = Constants.Design.separatorSubtle.withAlphaComponent(Constants.Design.separatorOpacity).cgColor
+        track.layer?.cornerRadius = 1.5
+        
+        let fill: NSView = NSView()
+        fill.translatesAutoresizingMaskIntoConstraints = false
+        fill.wantsLayer = true
+        fill.layer?.backgroundColor = NSColor.systemBlue.cgColor
+        fill.layer?.cornerRadius = 1.5
+        
+        track.addSubview(fill)
+        self.addSubview(track)
+        
+        self.shareTrack = track
+        self.shareFill = fill
+        self.shareFillWidth = fill.widthAnchor.constraint(equalTo: track.widthAnchor, multiplier: 0)
+        
+        NSLayoutConstraint.activate([
+            track.leadingAnchor.constraint(equalTo: self.leadingAnchor),
+            track.trailingAnchor.constraint(equalTo: self.trailingAnchor),
+            track.bottomAnchor.constraint(equalTo: self.bottomAnchor),
+            track.heightAnchor.constraint(equalToConstant: 3),
+            fill.leadingAnchor.constraint(equalTo: track.leadingAnchor),
+            fill.topAnchor.constraint(equalTo: track.topAnchor),
+            fill.bottomAnchor.constraint(equalTo: track.bottomAnchor),
+            self.shareFillWidth!
+        ])
+    }
+    
+    fileprivate func setShare(_ share: Double) {
+        guard let track = self.shareTrack, let fill = self.shareFill else { return }
+        self.shareFillWidth?.isActive = false
+        self.shareFillWidth = fill.widthAnchor.constraint(
+            equalTo: track.widthAnchor,
+            multiplier: CGFloat(min(max(share, 0), 1))
+        )
+        self.shareFillWidth?.isActive = true
     }
     
     public override func mouseEntered(with: NSEvent) {
@@ -250,6 +310,7 @@ public class ProcessView: NSStackView {
         self.valueViews.forEach({ $0.stringValue = symbol })
         self.imageView.image = nil
         self.pid = nil
+        self.setShare(0)
         self.setLock(false)
         self.toolTip = symbol
     }

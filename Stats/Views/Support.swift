@@ -118,8 +118,8 @@ private class SupportView: NSStackView {
         
         let support: NSStackView = NSStackView(frame: NSRect(x: 0, y: 0, width: 160, height: 60))
         support.heightAnchor.constraint(equalToConstant: 80).isActive = true
-        support.edgeInsets = NSEdgeInsets(top: 12, left: 0, bottom: 0, right: 0)
-        support.spacing = 20
+        support.edgeInsets = NSEdgeInsets(top: Constants.Design.space3, left: 0, bottom: 0, right: 0)
+        support.spacing = Constants.Design.space5
         support.orientation = .horizontal
         
         let systemStats = SupportButtonView(name: "System Stats", image: "AppIcon", action: {

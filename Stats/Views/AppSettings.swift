@@ -600,7 +600,7 @@ private class ModuleSelectorView: NSStackView {
             view.material = .contentBackground
             view.state = .active
             view.wantsLayer = true
-            view.layer?.cornerRadius = 5
+            view.layer?.cornerRadius = Constants.Design.innerRadius
             return view
         }()
         
@@ -715,9 +715,7 @@ private class ModulePreview: NSStackView {
         
         self.wantsLayer = true
         self.layer?.cornerRadius = 2
-        self.layer?.borderColor = NSColor(red: 221/255, green: 221/255, blue: 221/255, alpha: 1).cgColor
         self.layer?.borderWidth = 1
-        self.layer?.backgroundColor = NSColor.white.cgColor
         
         self.identifier = NSUserInterfaceItemIdentifier(rawValue: id)
         self.setAccessibilityElement(true)
@@ -750,7 +748,12 @@ private class ModulePreview: NSStackView {
         fatalError("init(coder:) has not been implemented")
     }
     
+    override var wantsUpdateLayer: Bool { true }
+    
     override func updateLayer() {
+        super.updateLayer()
+        self.layer?.borderColor = Constants.Design.separatorSubtle.cgColor
+        self.layer?.backgroundColor = Constants.Design.surfaceElevated.cgColor
         self.imageView.contentTintColor = self.isDarkMode ? .textBackgroundColor : .textColor
     }
     

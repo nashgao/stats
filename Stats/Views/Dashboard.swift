@@ -119,6 +119,11 @@ private final class TelemetryTrendView: NSView {
         self.needsDisplay = true
     }
 
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        self.needsDisplay = true
+    }
+
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
         guard self.values.count > 1 else { return }
@@ -160,15 +165,28 @@ private final class TelemetryTrendView: NSView {
         path.lineJoinStyle = .round
         Constants.Design.accentPrimary.setStroke()
         path.stroke()
+
+        // graded fill: solid beneath the stroke fading to transparent at the baseline
+        let fill = path.copy() as! NSBezierPath
+        fill.line(to: NSPoint(x: graphRect.maxX, y: graphRect.minY))
+        fill.line(to: NSPoint(x: graphRect.minX, y: graphRect.minY))
+        fill.close()
+        NSGradient(colors: [
+            Constants.Design.accentPrimary.withAlphaComponent(0.02),
+            Constants.Design.accentPrimary.withAlphaComponent(0.45)
+        ])?.draw(in: fill, angle: 90)
     }
 }
 
 private final class TelemetryMetricCard: NSView {
     private let metric: TelemetryMetric
+    private let effectView = NSVisualEffectView()
     private let valueField = TextView()
     private let detailField = TextView()
     private let statusField = TextView()
     private let trend: TelemetryTrendView
+    private var heightConstraint: NSLayoutConstraint!
+    private var isCompact = false
 
     init(metric: TelemetryMetric) {
         self.metric = metric
@@ -176,11 +194,17 @@ private final class TelemetryMetricCard: NSView {
         super.init(frame: .zero)
 
         self.translatesAutoresizingMaskIntoConstraints = false
-        self.wantsLayer = true
-        self.layer?.backgroundColor = Constants.Design.surfaceSecondary.cgColor
-        self.layer?.cornerRadius = Constants.Design.sectionRadius
         self.setAccessibilityElement(true)
         self.setAccessibilityRole(.group)
+
+        self.effectView.translatesAutoresizingMaskIntoConstraints = false
+        self.effectView.material = .contentBackground
+        self.effectView.blendingMode = .withinWindow
+        self.effectView.state = .active
+        self.effectView.wantsLayer = true
+        self.effectView.layer?.cornerRadius = Constants.Design.sectionRadius
+        self.effectView.layer?.masksToBounds = true
+        self.addSubview(self.effectView)
 
         let icon = NSImageView(image: NSImage(
             systemSymbolName: metric.symbolName,
@@ -227,7 +251,12 @@ private final class TelemetryMetricCard: NSView {
         )
         self.addSubview(stack)
 
+        self.heightConstraint = self.heightAnchor.constraint(equalToConstant: Constants.Design.metricCardHeight)
         NSLayoutConstraint.activate([
+            self.effectView.leadingAnchor.constraint(equalTo: self.leadingAnchor),
+            self.effectView.trailingAnchor.constraint(equalTo: self.trailingAnchor),
+            self.effectView.topAnchor.constraint(equalTo: self.topAnchor),
+            self.effectView.bottomAnchor.constraint(equalTo: self.bottomAnchor),
             stack.leadingAnchor.constraint(equalTo: self.leadingAnchor),
             stack.trailingAnchor.constraint(equalTo: self.trailingAnchor),
             stack.topAnchor.constraint(equalTo: self.topAnchor),
@@ -237,7 +266,7 @@ private final class TelemetryMetricCard: NSView {
             self.detailField.widthAnchor.constraint(equalTo: self.widthAnchor, constant: -Constants.Design.space8),
             self.trend.widthAnchor.constraint(equalTo: self.widthAnchor, constant: -Constants.Design.space8),
             self.trend.heightAnchor.constraint(equalToConstant: Constants.Design.metricTrendHeight),
-            self.heightAnchor.constraint(equalToConstant: Constants.Design.metricCardHeight),
+            self.heightConstraint,
             self.widthAnchor.constraint(greaterThanOrEqualToConstant: Constants.Design.metricCardMinimumWidth)
         ])
 
@@ -248,10 +277,6 @@ private final class TelemetryMetricCard: NSView {
         fatalError("init(coder:) has not been implemented")
     }
 
-    override func updateLayer() {
-        self.layer?.backgroundColor = Constants.Design.surfaceSecondary.cgColor
-    }
-
     func update(_ sample: TelemetrySample) {
         let currentHealth = health(for: sample)
         self.valueField.stringValue = sample.displayValue
@@ -260,133 +285,39 @@ private final class TelemetryMetricCard: NSView {
         self.statusField.stringValue = currentHealth.label
         self.statusField.textColor = currentHealth.color
         self.trend.add(sample)
+        self.setCompact(!sample.isAvailable)
         self.setAccessibilityLabel(
             "\(self.metric.title), \(sample.displayValue), \(self.detailField.stringValue), \(currentHealth.label)"
         )
     }
-}
 
-private final class HealthRibbonItem: NSView {
-    private let metric: TelemetryMetric
-    private let valueField = TextView()
-    private let statusField = TextView()
-
-    init(metric: TelemetryMetric) {
-        self.metric = metric
-        super.init(frame: .zero)
-        self.translatesAutoresizingMaskIntoConstraints = false
-        self.setAccessibilityElement(true)
-        self.setAccessibilityRole(.group)
-
-        let icon = NSImageView(image: NSImage(
-            systemSymbolName: metric.symbolName,
-            accessibilityDescription: metric.title
-        ) ?? NSImage())
-        icon.contentTintColor = Constants.Design.textSecondary
-        icon.symbolConfiguration = NSImage.SymbolConfiguration(
-            pointSize: Constants.Design.captionFont.pointSize,
-            weight: .medium
-        )
-        icon.widthAnchor.constraint(equalToConstant: Constants.Design.space4).isActive = true
-
-        let titleField = TextView()
-        titleField.font = Constants.Design.captionFont
-        titleField.stringValue = metric.title
-        titleField.lineBreakMode = .byTruncatingTail
-
-        let titleRow = NSStackView(views: [icon, titleField])
-        titleRow.orientation = .horizontal
-        titleRow.alignment = .centerY
-        titleRow.spacing = Constants.Design.space1
-
-        self.valueField.font = Constants.Design.compactMetricValueFont
-        self.valueField.stringValue = "—"
-        self.statusField.font = Constants.Design.captionFont
-        self.statusField.textColor = TelemetryHealth.waiting.color
-        self.statusField.stringValue = TelemetryHealth.waiting.label
-
-        let stack = NSStackView(views: [titleRow, self.valueField, self.statusField])
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        stack.orientation = .vertical
-        stack.alignment = .leading
-        stack.spacing = Constants.Design.space1
-        self.addSubview(stack)
-        NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: self.leadingAnchor),
-            stack.trailingAnchor.constraint(lessThanOrEqualTo: self.trailingAnchor),
-            stack.centerYAnchor.constraint(equalTo: self.centerYAnchor),
-            self.heightAnchor.constraint(equalToConstant: Constants.Design.healthRibbonItemHeight)
-        ])
-
-        self.setAccessibilityLabel("\(metric.title), \(localizedString("Waiting for data"))")
-    }
-
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    func update(_ sample: TelemetrySample) {
-        let currentHealth = health(for: sample)
-        self.valueField.stringValue = sample.displayValue
-        self.statusField.stringValue = currentHealth.label
-        self.statusField.textColor = currentHealth.color
-        self.setAccessibilityLabel(
-            "\(self.metric.title), \(sample.displayValue), \(currentHealth.label)"
-        )
+    private func setCompact(_ compact: Bool) {
+        guard compact != self.isCompact else { return }
+        self.isCompact = compact
+        self.valueField.isHidden = compact
+        self.detailField.isHidden = compact
+        self.trend.isHidden = compact
+        self.heightConstraint.constant = compact ? Constants.Design.compactMetricCardHeight : Constants.Design.metricCardHeight
     }
 }
 
-private final class HealthRibbon: NSView {
-    private let metrics: [TelemetryMetric] = [.cpu, .memory, .disk, .network, .temperature, .battery]
-    private var items: [TelemetryMetric: HealthRibbonItem] = [:]
-    private var states: [TelemetryMetric: TelemetryHealth] = [:]
+private final class TonalChipView: NSView {
+    override var wantsUpdateLayer: Bool { true }
 
-    var highestHealth: TelemetryHealth {
-        self.states.values.max() ?? .waiting
-    }
-
-    var hasWaitingMetrics: Bool {
-        self.states.count < self.metrics.count
-    }
-
-    init() {
+    init(_ field: NSTextField) {
         super.init(frame: .zero)
+
         self.translatesAutoresizingMaskIntoConstraints = false
         self.wantsLayer = true
-        self.layer?.backgroundColor = Constants.Design.surfaceSecondary.cgColor
-        self.layer?.cornerRadius = Constants.Design.sectionRadius
+        self.layer?.cornerRadius = Constants.Design.chipRadius
 
-        var rows: [[NSView]] = [[], []]
-        for (index, metric) in self.metrics.enumerated() {
-            let item = HealthRibbonItem(metric: metric)
-            self.items[metric] = item
-            rows[index / Constants.Design.healthRibbonColumns].append(item)
-        }
-
-        let grid = NSGridView(views: rows)
-        grid.translatesAutoresizingMaskIntoConstraints = false
-        grid.columnSpacing = Constants.Design.space4
-        grid.rowSpacing = Constants.Design.space2
-        grid.xPlacement = .fill
-        grid.yPlacement = .center
-        for index in 0..<grid.numberOfColumns {
-            grid.column(at: index).xPlacement = .fill
-        }
-        for index in 0..<grid.numberOfRows {
-            grid.row(at: index).height = Constants.Design.healthRibbonItemHeight
-        }
-        if let firstItem = self.items[self.metrics[0]] {
-            for metric in self.metrics.dropFirst() {
-                self.items[metric]?.widthAnchor.constraint(equalTo: firstItem.widthAnchor).isActive = true
-            }
-        }
-        self.addSubview(grid)
+        field.translatesAutoresizingMaskIntoConstraints = false
+        self.addSubview(field)
         NSLayoutConstraint.activate([
-            grid.leadingAnchor.constraint(equalTo: self.leadingAnchor, constant: Constants.Design.space3),
-            grid.trailingAnchor.constraint(equalTo: self.trailingAnchor, constant: -Constants.Design.space3),
-            grid.topAnchor.constraint(equalTo: self.topAnchor, constant: Constants.Design.space2),
-            grid.bottomAnchor.constraint(equalTo: self.bottomAnchor, constant: -Constants.Design.space2),
-            self.heightAnchor.constraint(equalToConstant: Constants.Design.healthRibbonHeight)
+            field.leadingAnchor.constraint(equalTo: self.leadingAnchor, constant: Constants.Design.space2),
+            field.trailingAnchor.constraint(equalTo: self.trailingAnchor, constant: -Constants.Design.space2),
+            field.centerYAnchor.constraint(equalTo: self.centerYAnchor),
+            self.heightAnchor.constraint(equalToConstant: 18)
         ])
     }
 
@@ -395,13 +326,7 @@ private final class HealthRibbon: NSView {
     }
 
     override func updateLayer() {
-        self.layer?.backgroundColor = Constants.Design.surfaceSecondary.cgColor
-    }
-
-    func update(_ sample: TelemetrySample) {
-        guard let item = self.items[sample.metric] else { return }
-        item.update(sample)
-        self.states[sample.metric] = health(for: sample)
+        self.layer?.backgroundColor = Constants.Design.surfaceGroup.cgColor
     }
 }
 
@@ -411,7 +336,6 @@ class Dashboard: NSStackView {
     private let lastUpdateField = TextView()
     private let uptimeSummaryField = TextView()
     private let uptimeField = TextView()
-    private let healthRibbon = HealthRibbon()
     private let cpuCard = TelemetryMetricCard(metric: .cpu)
     private let memoryCard = TelemetryMetricCard(metric: .memory)
     private let diskCard = TelemetryMetricCard(metric: .disk)
@@ -445,7 +369,7 @@ class Dashboard: NSStackView {
             bottom: Constants.Design.space4,
             right: Constants.Design.space4
         )
-        scrollView.stackView.spacing = Constants.Design.space3
+        scrollView.stackView.spacing = Constants.Design.space4
         func addContent(_ view: NSView) {
             view.translatesAutoresizingMaskIntoConstraints = false
             scrollView.stackView.addArrangedSubview(view)
@@ -457,14 +381,10 @@ class Dashboard: NSStackView {
 
         addContent(self.heroView())
 
-        let healthTitle = self.sectionTitle(
-            localizedString("Live system health"),
+        addContent(self.sectionTitle(
+            localizedString("Live activity"),
             subtitle: localizedString("Current state from the same readers that power the menu bar")
-        )
-        addContent(healthTitle)
-        addContent(self.healthRibbon)
-
-        addContent(self.sectionTitle(localizedString("Live activity")))
+        ))
         self.configureCardsContainer()
         addContent(self.cardsContainer)
 
@@ -547,17 +467,18 @@ class Dashboard: NSStackView {
         labels.alignment = .leading
         labels.spacing = Constants.Design.space1
 
-        self.uptimeSummaryField.font = Constants.Design.secondaryEmphasisFont
-        self.uptimeSummaryField.alignment = .right
+        self.uptimeSummaryField.font = Constants.Design.captionFont
         self.lastUpdateField.font = Constants.Design.captionRegularFont
         self.lastUpdateField.textColor = Constants.Design.textSecondary
-        self.lastUpdateField.alignment = .right
         self.lastUpdateField.stringValue = localizedString("No live sample yet")
 
-        let timing = NSStackView(views: [self.uptimeSummaryField, self.lastUpdateField])
+        let timing = NSStackView(views: [
+            TonalChipView(self.uptimeSummaryField),
+            TonalChipView(self.lastUpdateField)
+        ])
         timing.orientation = .vertical
         timing.alignment = .trailing
-        timing.spacing = Constants.Design.space1
+        timing.spacing = Constants.Design.space2
 
         let view = NSStackView(views: [deviceImage, labels, NSView(), timing])
         view.orientation = .horizontal
@@ -603,7 +524,7 @@ class Dashboard: NSStackView {
     private func configureCardsContainer() {
         self.cardsContainer.orientation = .vertical
         self.cardsContainer.alignment = .width
-        self.cardsContainer.spacing = Constants.Design.space3
+        self.cardsContainer.spacing = Constants.Design.space4
         self.updateCardLayout(columns: 1)
     }
 
@@ -723,7 +644,6 @@ class Dashboard: NSStackView {
 
     private func apply(_ sample: TelemetrySample) {
         self.samples[sample.metric] = sample
-        self.healthRibbon.update(sample)
         switch sample.metric {
         case .cpu: self.cpuCard.update(sample)
         case .memory: self.memoryCard.update(sample)
@@ -737,8 +657,9 @@ class Dashboard: NSStackView {
     }
 
     private func updateOverallHealth() {
-        let currentHealth = self.healthRibbon.highestHealth
-        if self.healthRibbon.hasWaitingMetrics && currentHealth <= .nominal {
+        let currentHealth = self.samples.values.map { health(for: $0) }.max() ?? .waiting
+        let hasWaitingMetrics = self.samples.count < self.metricCards.count
+        if hasWaitingMetrics && currentHealth <= .nominal {
             self.healthStatusField.textColor = Constants.Design.textSecondary
             self.healthStatusField.stringValue = localizedString("Live metrics updating")
         } else {

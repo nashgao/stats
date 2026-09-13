@@ -13,8 +13,8 @@ import Cocoa
 
 public class LineChart: WidgetWrapper {
     private var labelState: Bool = false
-    private var boxState: Bool = true
-    private var frameState: Bool = false
+    private var boxState: Bool = false
+    private var frameState: Bool = true
     private var valueState: Bool = false
     private var valueColorState: Bool = false
     private var colorState: SColor = .systemAccent
@@ -92,6 +92,7 @@ public class LineChart: WidgetWrapper {
         ))
         
         self.canDrawConcurrently = true
+        self.chart.setGradedFill(true)
         
         if !preview {
             self.boxState = Store.shared.bool(key: "\(self.title)_\(self.type.rawValue)_box", defaultValue: self.boxState)
@@ -124,7 +125,7 @@ public class LineChart: WidgetWrapper {
         style.alignment = .center
         let stringAttributes = [
             NSAttributedString.Key.font: NSFont.systemFont(ofSize: 7, weight: .regular),
-            NSAttributedString.Key.foregroundColor: NSColor.textColor,
+            NSAttributedString.Key.foregroundColor: NSColor.secondaryLabelColor,
             NSAttributedString.Key.paragraphStyle: style
         ]
         
@@ -189,7 +190,7 @@ public class LineChart: WidgetWrapper {
             let style = NSMutableParagraphStyle()
             style.alignment = .right
             
-            var valueColor = isDarkMode ? NSColor.white : NSColor.black
+            var valueColor = NSColor.labelColor
             if self.valueColorState {
                 valueColor = color
             }
@@ -239,7 +240,7 @@ public class LineChart: WidgetWrapper {
         context.restoreGState()
         
         if self.boxState || self.frameState {
-            (isDarkMode ? NSColor.white : NSColor.black).set()
+            Constants.Design.separatorSubtle.set()
             box.lineWidth = lineWidth
             box.stroke()
         }

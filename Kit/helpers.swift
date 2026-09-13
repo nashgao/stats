@@ -11,6 +11,7 @@
 // swiftlint:disable file_length
 
 import Cocoa
+import Security
 import ServiceManagement
 import UserNotifications
 import WebKit
@@ -429,12 +430,12 @@ public func separatorView(_ title: String, origin: NSPoint = NSPoint(x: 0, y: 0)
         leftLine.leadingAnchor.constraint(equalTo: view.leadingAnchor),
         leftLine.trailingAnchor.constraint(equalTo: labelView.leadingAnchor, constant: -gap),
         leftLine.centerYAnchor.constraint(equalTo: view.centerYAnchor),
-        leftLine.heightAnchor.constraint(equalToConstant: 1),
+        leftLine.heightAnchor.constraint(equalToConstant: Constants.Design.hairlineWidth),
         
         rightLine.leadingAnchor.constraint(equalTo: labelView.trailingAnchor, constant: gap),
         rightLine.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -rightInset),
         rightLine.centerYAnchor.constraint(equalTo: view.centerYAnchor),
-        rightLine.heightAnchor.constraint(equalToConstant: 1)
+        rightLine.heightAnchor.constraint(equalToConstant: Constants.Design.hairlineWidth)
     ])
     
     return view
@@ -467,13 +468,13 @@ public func popupBadgeRow(_ view: NSView? = nil, title: String, status: Bool? = 
 public func popupRow(_ view: NSView? = nil, title: String, value: String, multiline: Bool = false) -> (LabelField, ValueField, NSView) {
     let lines: CGFloat = CGFloat(multiline ? value.filter { $0 == "\n" }.count + 1 : 1)
     let width = view?.frame.width ?? 0
-    let height = multiline ? ((lines*16) + (22-16)): 22
+    let height = multiline ? ((lines*16) + (Constants.Popup.processHeight-16)): Constants.Popup.processHeight
     
     let rowView: NSView = NSView(frame: NSRect(x: 0, y: 0, width: width, height: height))
     
     let labelWidth = title.widthOfString(usingFont: .systemFont(ofSize: 12, weight: .regular)) + 4
-    let labelView: LabelField = LabelField(frame: NSRect(x: 0, y: ((22-16)/2) + ((lines-1)*16), width: labelWidth, height: 16), title)
-    let valueView: ValueField = ValueField(frame: NSRect(x: labelWidth, y: (22-16)/2, width: rowView.frame.width - labelWidth, height: multiline ? 16*lines : 16), value)
+    let labelView: LabelField = LabelField(frame: NSRect(x: 0, y: ((Constants.Popup.processHeight-16)/2) + ((lines-1)*16), width: labelWidth, height: 16), title)
+    let valueView: ValueField = ValueField(frame: NSRect(x: labelWidth, y: (Constants.Popup.processHeight-16)/2, width: rowView.frame.width - labelWidth, height: multiline ? 16*lines : 16), value)
     
     if multiline {
         valueView.cell?.usesSingleLineMode = false
@@ -517,12 +518,12 @@ public func portalRow(_ v: NSStackView, title: String, value: String = "", isSel
 }
 
 public func popupWithColorRow(_ view: NSView, color: NSColor, title: String, value: String) -> (ColorBlock, LabelField, ValueField) {
-    let rowView: NSView = NSView(frame: NSRect(x: 0, y: 0, width: view.frame.width, height: 22))
+    let rowView: NSView = NSView(frame: NSRect(x: 0, y: 0, width: view.frame.width, height: Constants.Popup.processHeight))
     
-    let colorView: ColorBlock = ColorBlock(frame: NSRect(x: 3, y: 6, width: 10, height: 10), color: color)
+    let colorView: ColorBlock = ColorBlock(frame: NSRect(x: 3, y: (Constants.Popup.processHeight-10)/2, width: 10, height: 10), color: color)
     let labelWidth = min(180, title.widthOfString(usingFont: .systemFont(ofSize: 13, weight: .regular)) + 5)
-    let labelView: LabelField = LabelField(frame: NSRect(x: 18, y: (22-16)/2, width: labelWidth, height: 16), title)
-    let valueView: ValueField = ValueField(frame: NSRect(x: 18 + labelWidth, y: (22-16)/2, width: rowView.frame.width - labelWidth - 18, height: 16), value)
+    let labelView: LabelField = LabelField(frame: NSRect(x: 18, y: (Constants.Popup.processHeight-16)/2, width: labelWidth, height: 16), title)
+    let valueView: ValueField = ValueField(frame: NSRect(x: 18 + labelWidth, y: (Constants.Popup.processHeight-16)/2, width: rowView.frame.width - labelWidth - 18, height: 16), value)
     
     rowView.addSubview(colorView)
     rowView.addSubview(labelView)
@@ -1100,6 +1101,20 @@ public class SMCHelper {
     private var legacyIsInstalled: Bool {
         syncShell("ls /Library/PrivilegedHelperTools/").contains(self.id)
     }
+
+    /// True when the running app is signed by a real certificate that
+    /// carries a team identifier. Ad-hoc builds can never register the
+    /// privileged helper — SMAppService rejects them at `register()` — so
+    /// fan control silently no-ops unless the app is signed.
+    public var isProperlySigned: Bool {
+        var staticCode: SecStaticCode?
+        guard SecStaticCodeCreateWithPath(Bundle.main.bundleURL as CFURL, [], &staticCode) == errSecSuccess, let staticCode else {
+            return false
+        }
+        var info: CFDictionary?
+        guard SecCodeCopySigningInformation(staticCode, [], &info) == errSecSuccess, let info else { return false }
+        return ((info as? [String: Any])?["teamid"] as? String)?.isEmpty == false
+    }
     
     private var connection: NSXPCConnection? = nil
     
@@ -1559,6 +1574,7 @@ var isDarkMode: Bool {
 
 public class PreferencesSection: NSStackView {
     private let container: NSStackView = NSStackView()
+    private let effectView: NSVisualEffectView = NSVisualEffectView()
     private var subtitleField: NSTextField?
 
     public init(title: String = "", subtitle: String = "", id: String? = nil, _ components: [NSView] = []) {
@@ -1574,18 +1590,34 @@ public class PreferencesSection: NSStackView {
             self.addHeader(title: title, subtitle: subtitle)
         }
         
+        self.effectView.material = .contentBackground
+        self.effectView.blendingMode = .withinWindow
+        self.effectView.state = .active
+        self.effectView.wantsLayer = true
+        self.effectView.layer?.cornerRadius = Constants.Design.sectionRadius
+        self.effectView.layer?.masksToBounds = true
+        self.effectView.translatesAutoresizingMaskIntoConstraints = false
+        self.addSubview(self.effectView)
+        
         self.container.orientation = .vertical
         self.container.wantsLayer = true
-        self.container.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
+        self.container.layer?.backgroundColor = NSColor.clear.cgColor
         self.container.layer?.cornerRadius = Constants.Design.sectionRadius
         self.container.edgeInsets = NSEdgeInsets(
-            top: Constants.Design.space2,
-            left: Constants.Design.space3,
-            bottom: Constants.Design.space2,
-            right: Constants.Design.space3
+            top: Constants.Design.space3,
+            left: Constants.Design.space4,
+            bottom: Constants.Design.space3,
+            right: Constants.Design.space4
         )
-        self.container.spacing = Constants.Design.space2
+        self.container.spacing = Constants.Design.space3
         self.addArrangedSubview(self.container)
+        
+        NSLayoutConstraint.activate([
+            self.effectView.leadingAnchor.constraint(equalTo: self.container.leadingAnchor),
+            self.effectView.trailingAnchor.constraint(equalTo: self.container.trailingAnchor),
+            self.effectView.topAnchor.constraint(equalTo: self.container.topAnchor),
+            self.effectView.bottomAnchor.constraint(equalTo: self.container.bottomAnchor)
+        ])
         
         for item in components {
             self.add(item)
@@ -1594,10 +1626,6 @@ public class PreferencesSection: NSStackView {
     
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
-    }
-    
-    public override func updateLayer() {
-        self.container.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
     }
     
     private func addHeader(title: String, subtitle: String) {

@@ -199,6 +199,7 @@ public class LineChartView: ChartView {
     private var head: Int = 0
     private var shadowPoints: [DoubleValue?] = []
     private var transparent: Bool = true
+    private var gradedFill: Bool = false
     private var flipY: Bool = false
     private var minMax: Bool = false
     private var color: NSColor
@@ -266,6 +267,7 @@ public class LineChartView: ChartView {
         var originalPoints: [DoubleValue?] = []
         var shadowPoints: [DoubleValue?] = []
         var transparent: Bool = true
+        var gradedFill: Bool = false
         var flipY: Bool = false
         var minMax: Bool = false
         var color: NSColor = .controlAccentColor
@@ -281,6 +283,7 @@ public class LineChartView: ChartView {
             originalPoints = self.orderedPointsLocked()
             shadowPoints = self.shadowPoints
             transparent = self.transparent
+            gradedFill = self.gradedFill
             flipY = self.flipY
             minMax = self.minMax
             color = self.color
@@ -307,10 +310,10 @@ public class LineChartView: ChartView {
         if !transparent {
             gradientColor = color.withAlphaComponent(0.8)
         }
-        let gradient = NSGradient(colors: [
-            gradientColor.withAlphaComponent(0.5),
-            gradientColor.withAlphaComponent(1.0)
-        ])
+        // graded fill: solid at the top of the stroke fading to transparent at the baseline
+        let gradient = gradedFill
+            ? NSGradient(colors: [color.withAlphaComponent(0.02), color.withAlphaComponent(0.45)])
+            : NSGradient(colors: [gradientColor.withAlphaComponent(0.5), gradientColor.withAlphaComponent(1.0)])
         
         let offset: CGFloat = 1 / (NSScreen.main?.backingScaleFactor ?? 1)
         let xLegendHeight: CGFloat = xLegend ? 14 : 0
@@ -681,6 +684,16 @@ public class LineChartView: ChartView {
         self.displayIfVisible()
     }
     
+    public func setGradedFill(_ newValue: Bool) {
+        guard self.read({ self.gradedFill }) != newValue else { return }
+        self.write { self.gradedFill = newValue }
+        self.displayIfVisible()
+    }
+    
+    public var peak: Double {
+        self.read { self.points.compactMap({ $0?.value }).max() ?? 0 }
+    }
+    
     public func setFlipY(_ newValue: Bool) {
         guard self.read({ self.flipY }) != newValue else { return }
         self.write { self.flipY = newValue }
@@ -857,6 +870,11 @@ public class NetworkChartView: ChartView {
     public func setTooltipState(_ newState: Bool) {
         self.inChart.setTooltipEnabled(newState)
         self.outChart.setTooltipEnabled(newState)
+    }
+
+    public func setGradedFill(_ newValue: Bool) {
+        self.inChart.setGradedFill(newValue)
+        self.outChart.setGradedFill(newValue)
     }
     
     public func setLegend(x: Bool, y: Bool) {

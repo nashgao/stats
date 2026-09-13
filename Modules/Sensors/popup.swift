@@ -13,8 +13,17 @@ import Cocoa
 import Kit
 
 internal class Popup: PopupWrapper {
+    private let heroHeight: CGFloat = 64
+
     private var list: [String: NSView] = [:]
-    
+    private var sectionViews: [NSView] = []
+
+    private var hottestField: NSTextField? = nil
+    private var hottestCaptionField: NSTextField? = nil
+    private var averageChipView: NSView? = nil
+    private var averageChipField: NSTextField? = nil
+    private var footer: NSView? = nil
+
     private var unknownSensorsState: Bool { Store.shared.bool(key: "Sensors_unknown", defaultValue: false) }
     private var fanValueState: FanValue = .percentage
     
@@ -33,8 +42,7 @@ internal class Popup: PopupWrapper {
         self.fanValueState = FanValue(rawValue: Store.shared.string(key: "Sensors_popup_fanValue", defaultValue: self.fanValueState.rawValue)) ?? .percentage
         
         self.orientation = .vertical
-        self.spacing = 0
-        self.translatesAutoresizingMaskIntoConstraints = false
+        self.spacing = Constants.Design.space2
         
         self.settingsView.orientation = .vertical
         self.settingsView.spacing = Constants.Settings.margin
@@ -53,6 +61,12 @@ internal class Popup: PopupWrapper {
                 selected: self.fanValueState.rawValue
             ))
         ]))
+
+        self.addArrangedSubview(self.initHero())
+        self.footer = self.footerView()
+        self.addArrangedSubview(self.footer!)
+        self.applySemanticColors()
+
         #if arch(arm64)
         NotificationCenter.default.addObserver(self, selector: #selector(self.checkFanModesAndResetFtst), name: .checkFanModes, object: nil)
         #endif
@@ -74,6 +88,10 @@ internal class Popup: PopupWrapper {
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
+
+    public override func updateLayer() {
+        self.applySemanticColors()
+    }
     
     internal func setup(_ values: [Sensor_p]? = nil, reload: Bool = false) {
         guard let values = reload ? self.sensors : values else { return }
@@ -83,52 +101,42 @@ internal class Popup: PopupWrapper {
             sensors = sensors.filter({ $0.group != .unknown })
         }
         
-        self.subviews.forEach({ $0.removeFromSuperview() })
+        self.untrackTonalViews(self.sectionViews)
+        self.sectionViews.forEach({ $0.removeFromSuperview() })
+        self.sectionViews = []
+        self.list.removeAll()
         if !reload {
             self.settingsView.subviews.filter({ $0.identifier == NSUserInterfaceItemIdentifier("sensor") }).forEach { v in
                 v.removeFromSuperview()
             }
         }
-        
+
+        var newSections: [NSView] = []
+        let innerWidth = self.frame.width - self.sectionSidePadding*2
+
         if !fans.isEmpty {
-            let separator = SeparatorView(
-                label: localizedString("Fans"),
-                button: PopupButton(toolTip: localizedString("Control"), state: self.fanControlState) { [weak self] in
-                    self?.toggleFanControl()
-                }
-            )
-            separator.widthAnchor.constraint(equalToConstant: Constants.Popup.width).isActive = true
-            self.addArrangedSubview(separator)
-            
-            let container = NSStackView()
-            container.orientation = .vertical
-            container.spacing = Constants.Popup.spacing
-            
+            let button = PopupButton(toolTip: localizedString("Control"), state: self.fanControlState) { [weak self] in
+                self?.toggleFanControl()
+            }
+            let section = self.sectionStack(localizedString("Fans"), button: button)
+
             fans.forEach { (f: Sensor_p) in
                 if let fan = f as? Fan {
                     if f.isComputed {
-                        let sensor = SensorView(fan, width: self.frame.width, toggleable: false) {}
+                        let sensor = SensorView(fan, width: innerWidth, toggleable: false) {}
                         self.list[fan.key] = sensor
-                        container.addArrangedSubview(sensor)
+                        section.addArrangedSubview(sensor)
                     } else {
-                        let view = FanView(fan, width: self.frame.width) { [weak self] in
-                            let h = container.arrangedSubviews.map({ $0.bounds.height + container.spacing }).reduce(0, +) - container.spacing
-                            if container.frame.size.height != h && h >= 0 {
-                                container.setFrameSize(NSSize(width: container.frame.width, height: h))
-                            }
+                        let view = FanView(fan, width: innerWidth) { [weak self] in
                             self?.recalculateHeight()
                         }
                         self.list[fan.key] = view
-                        container.addArrangedSubview(view)
+                        section.addArrangedSubview(view)
                     }
                 }
             }
-            
-            let h = container.arrangedSubviews.map({ $0.bounds.height + container.spacing }).reduce(0, +) - container.spacing
-            if container.frame.size.height != h {
-                container.setFrameSize(NSSize(width: container.frame.width, height: h))
-            }
-            self.addArrangedSubview(container)
+
+            newSections.append(section)
         }
         
         var types: [SensorType] = []
@@ -166,22 +174,30 @@ internal class Popup: PopupWrapper {
             if typ == .fan { return }
             filtered = filtered.filter{ $0.popupState }
             if filtered.isEmpty { return }
-            
-            self.addArrangedSubview(separatorView(localizedString(typ.rawValue), width: self.frame.width))
+
+            let section = self.sectionStack(localizedString(typ.rawValue))
             groups.forEach { (group: SensorGroup) in
                 filtered.filter{ $0.group == group }.forEach { (s: Sensor_p) in
-                    let sensor = SensorView(s, width: self.frame.width) { [weak self] in
+                    let sensor = SensorView(s, width: innerWidth) { [weak self] in
                         self?.recalculateHeight()
                     }
-                    self.addArrangedSubview(sensor)
+                    section.addArrangedSubview(sensor)
                     self.list[s.key] = sensor
                 }
             }
+            newSections.append(section)
         }
-        
+
+        let footerIndex = self.arrangedSubviews.firstIndex(where: { $0 === self.footer }) ?? self.arrangedSubviews.count
+        newSections.enumerated().forEach { (i: Int, view: NSView) in
+            self.insertArrangedSubview(view, at: footerIndex + i)
+        }
+        self.sectionViews = newSections
+
         if !reload {
             self.sensors = values
         }
+        self.applySemanticColors()
         self.recalculateHeight()
     }
     
@@ -198,6 +214,7 @@ internal class Popup: PopupWrapper {
     }
     
     private func renderSensors(_ values: [Sensor_p]) {
+        self.renderHero(values)
         values.forEach { (s: Sensor_p) in
             switch self.list[s.key] {
             case let fan as FanView:
@@ -217,11 +234,100 @@ internal class Popup: PopupWrapper {
     }
     
     private func recalculateHeight() {
-        let h = self.arrangedSubviews.map({ $0.bounds.height + self.spacing }).reduce(0, +) - self.spacing
+        var h: CGFloat = self.spacing * CGFloat(max(self.arrangedSubviews.count - 1, 0))
+        self.arrangedSubviews.forEach { v in
+            if let v = v as? NSStackView {
+                let rows = v.arrangedSubviews
+                h += v.edgeInsets.top + v.edgeInsets.bottom
+                h += rows.map({ $0.bounds.height }).reduce(0, +)
+                h += v.spacing * CGFloat(max(rows.count - 1, 0))
+            } else {
+                h += v.bounds.height
+            }
+        }
         if self.frame.size.height != h {
             self.setFrameSize(NSSize(width: self.frame.width, height: h))
             self.sizeCallback?(self.frame.size)
         }
+    }
+
+    // MARK: - hero
+
+    private func initHero() -> NSView {
+        let view: NSView = NSView(frame: NSRect(x: 0, y: 0, width: self.frame.width, height: self.heroHeight))
+        view.heightAnchor.constraint(equalToConstant: self.heroHeight).isActive = true
+
+        let big = NSTextField(labelWithAttributedString: self.heroString("–", unit: ""))
+        big.frame = NSRect(x: self.heroSidePadding, y: 18, width: 200, height: 40)
+        big.setAccessibilityLabel(localizedString("Hottest sensor"))
+        self.hottestField = big
+        view.addSubview(big)
+
+        let caption = NSTextField(labelWithString: localizedString("Hottest sensor"))
+        caption.font = NSFont.systemFont(ofSize: 11, weight: .regular)
+        caption.textColor = .secondaryLabelColor
+        caption.frame = NSRect(x: self.heroSidePadding + 1, y: 4, width: 200, height: 13)
+        self.hottestCaptionField = caption
+        view.addSubview(caption)
+
+        let chips = NSStackView()
+        chips.orientation = .vertical
+        chips.alignment = .trailing
+        chips.spacing = 5
+        chips.frame = NSRect(x: self.frame.width - self.heroSidePadding - 160, y: 6, width: 160, height: 41)
+
+        let averageChip = self.makeChip()
+        self.averageChipView = averageChip.0
+        self.averageChipField = averageChip.1
+        chips.addArrangedSubview(averageChip.0)
+        view.addSubview(chips)
+
+        return view
+    }
+
+    private func heroString(_ value: String, unit: String) -> NSAttributedString {
+        let text = NSMutableAttributedString(string: value, attributes: [
+            .font: NSFont.monospacedDigitSystemFont(ofSize: 34, weight: .semibold),
+            .foregroundColor: NSColor.labelColor
+        ])
+        if !unit.isEmpty {
+            text.append(NSAttributedString(string: unit, attributes: [
+                .font: NSFont.systemFont(ofSize: 16, weight: .medium),
+                .foregroundColor: NSColor.secondaryLabelColor
+            ]))
+        }
+        return text
+    }
+
+    private func chipString(_ value: String, suffix: String) -> NSAttributedString {
+        let text = NSMutableAttributedString(string: value, attributes: [
+            .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium),
+            .foregroundColor: NSColor.labelColor
+        ])
+        text.append(NSAttributedString(string: " \(suffix)", attributes: [
+            .font: NSFont.systemFont(ofSize: 11, weight: .regular),
+            .foregroundColor: NSColor.tertiaryLabelColor
+        ]))
+        return text
+    }
+
+    private func renderHero(_ values: [Sensor_p]) {
+        let temperatures = values.filter({ $0.type == .temperature && !$0.isComputed && $0.value.isFinite && $0.value > 0 && $0.value < 110 })
+        guard !temperatures.isEmpty else { return }
+
+        if let hottest = temperatures.max(by: { $0.value < $1.value }) {
+            let unit = UnitTemperature.current.symbol
+            let value = temperature(hottest.value)
+            self.hottestField?.attributedStringValue = self.heroString(value.replacingOccurrences(of: unit, with: ""), unit: unit)
+            self.hottestField?.setAccessibilityLabel("\(localizedString("Hottest sensor")): \(hottest.name), \(value)")
+            self.hottestCaptionField?.stringValue = hottest.name
+            self.hottestCaptionField?.toolTip = hottest.key
+        }
+
+        let average = temperatures.map({ $0.value }).reduce(0, +) / Double(temperatures.count)
+        self.averageChipView?.isHidden = false
+        self.averageChipField?.attributedStringValue = self.chipString(temperature(average), suffix: localizedString("avg"))
+        self.averageChipView?.toolTip = "\(localizedString("Average temperature")): \(temperature(average))"
     }
     
     // MARK: - Settings
@@ -337,7 +443,7 @@ internal class ValueSensorView: NSStackView {
         self.orientation = .horizontal
         self.distribution = .fillProportionally
         self.spacing = 0
-        self.layer?.cornerRadius = 3
+        self.layer?.cornerRadius = Constants.Design.chipRadius
         
         self.labelView.stringValue = sensor.name
         self.labelView.toolTip = sensor.key
@@ -377,7 +483,9 @@ internal class ValueSensorView: NSStackView {
     
     public override func mouseEntered(with: NSEvent) {
         guard self.isToggleable else { return }
-        self.layer?.backgroundColor = .init(gray: 0.01, alpha: 0.05)
+        self.effectiveAppearance.performAsCurrentDrawingAppearance {
+            self.layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.06).cgColor
+        }
     }
     
     public override func mouseExited(with: NSEvent) {
@@ -395,14 +503,14 @@ internal class ChartSensorView: NSStackView {
         super.init(frame: NSRect(x: 0, y: 0, width: width, height: 60))
         
         self.wantsLayer = true
-        self.layer?.backgroundColor = NSColor.lightGray.withAlphaComponent(0.1).cgColor
         self.orientation = .horizontal
         self.distribution = .fillProportionally
         self.spacing = 0
-        self.layer?.cornerRadius = 3
+        self.layer?.cornerRadius = Constants.Design.chipRadius
         
         self.chart = LineChartView(frame: NSRect(x: 0, y: 0, width: self.frame.width, height: self.frame.height), num: 120, scale: .linear)
         self.chart?.setSuffix(suffix)
+        self.chart?.setGradedFill(true)
         
         if let view = self.chart {
             self.addArrangedSubview(view)
@@ -419,6 +527,7 @@ internal class ChartSensorView: NSStackView {
     }
     
     override func updateLayer() {
+        self.layer?.backgroundColor = Constants.Design.surfaceSecondary.cgColor
         self.chart?.display()
     }
     
@@ -496,8 +605,8 @@ internal class FanView: NSStackView {
         self.orientation = .vertical
         self.alignment = .centerX
         self.distribution = .fillProportionally
-        self.spacing = 1
-        self.edgeInsets = NSEdgeInsets(top: 4, left: 0, bottom: 4, right: 0)
+        self.spacing = Constants.Design.space1
+        self.edgeInsets = NSEdgeInsets(top: Constants.Design.space1, left: 0, bottom: Constants.Design.space1, right: 0)
         self.wantsLayer = true
         self.layer?.cornerRadius = Constants.Popup.radius
         
@@ -581,7 +690,9 @@ internal class FanView: NSStackView {
         container.distribution = .fillProportionally
         container.spacing = 0
         container.wantsLayer = true
-        container.layer?.backgroundColor = (isDarkMode ? NSColor(red: 17/255, green: 17/255, blue: 17/255, alpha: 0.25) : NSColor(red: 225/255, green: 225/255, blue: 225/255, alpha: 1)).cgColor
+        self.effectiveAppearance.performAsCurrentDrawingAppearance {
+            container.layer?.backgroundColor = Constants.Design.surfaceSecondary.cgColor
+        }
         
         let button: NSButton = NSButton()
         button.isBordered = false
@@ -687,7 +798,7 @@ internal class FanView: NSStackView {
         minBtn.wantsLayer = true
         minBtn.layer?.cornerRadius = Constants.Popup.radius
         minBtn.layer?.borderWidth = 1
-        minBtn.layer?.borderColor = NSColor.lightGray.cgColor
+        minBtn.layer?.borderColor = NSColor.separatorColor.cgColor
         
         let valueField: NSTextField = TextView()
         valueField.font = NSFont.systemFont(ofSize: 11, weight: .light)
@@ -711,7 +822,7 @@ internal class FanView: NSStackView {
         maxBtn.action = #selector(self.setMax)
         maxBtn.layer?.cornerRadius = Constants.Popup.radius
         maxBtn.layer?.borderWidth = 1
-        maxBtn.layer?.borderColor = NSColor.lightGray.cgColor
+        maxBtn.layer?.borderColor = NSColor.separatorColor.cgColor
         maxBtn.setContentHuggingPriority(.defaultHigh, for: .horizontal)
         
         levels.addArrangedSubview(minBtn)
@@ -951,12 +1062,21 @@ internal class FanView: NSStackView {
     
     private func showInstallFailed() {
         let alert = NSAlert()
-        alert.messageText = localizedString("Could not enable the fan helper")
-        alert.informativeText = localizedString("Open System Settings ▸ Login Items, make sure Stats is allowed in the background, then try again.")
-        alert.addButton(withTitle: localizedString("Open Login Items"))
-        alert.addButton(withTitle: localizedString("Cancel"))
-        
-        if alert.runModal() == .alertFirstButtonReturn {
+        if SMCHelper.shared.isProperlySigned {
+            alert.messageText = localizedString("Could not enable the fan helper")
+            alert.informativeText = localizedString("Open System Settings ▸ Login Items, make sure Stats is allowed in the background, then try again.")
+            alert.addButton(withTitle: localizedString("Open Login Items"))
+            alert.addButton(withTitle: localizedString("Cancel"))
+        } else {
+            // The honest root cause: SMAppService refuses to register a
+            // helper for an ad-hoc signed app, so no amount of Login Items
+            // approval will help. Point at the real fix.
+            alert.messageText = localizedString("This build is unsigned")
+            alert.informativeText = localizedString("Fan control requires a signed build of Stats. Open Stats.xcodeproj in Xcode, add your Apple ID, select your team for the Stats target, then build and run once and approve the helper.")
+            alert.addButton(withTitle: localizedString("Cancel"))
+        }
+
+        if alert.runModal() == .alertFirstButtonReturn, SMCHelper.shared.isProperlySigned {
             SMCHelper.shared.openLoginItems()
         }
     }
@@ -1054,7 +1174,7 @@ private class ModeButtons: NSStackView {
         self.distribution = .fillProportionally
         self.spacing = 0
         self.wantsLayer = true
-        self.layer?.cornerRadius = Constants.Popup.radius
+        self.layer?.cornerRadius = Constants.Design.innerRadius
         self.edgeInsets = .init(top: 0, left: Constants.Popup.margins/2, bottom: 0, right: Constants.Popup.margins/2)
         
         self.modes.autoCallback = { [weak self] in
@@ -1107,9 +1227,9 @@ private class ModeButtons: NSStackView {
     }
     
     override func updateLayer() {
-        self.layer?.backgroundColor = (isDarkMode ? NSColor(red: 17/255, green: 17/255, blue: 17/255, alpha: 0.25) : NSColor(red: 245/255, green: 245/255, blue: 245/255, alpha: 1)).cgColor
+        self.layer?.backgroundColor = Constants.Design.surfaceSecondary.cgColor
     }
-    
+
     @objc private func offMode(_ sender: NSButton) {
         if sender.state.rawValue == 0 {
             self.offBtn.state = .on
@@ -1234,7 +1354,7 @@ private class ModeSwitch: NSStackView {
     }()
     
     private var selectedColor: CGColor {
-        (isDarkMode ? NSColor(red: 95/255, green: 95/255, blue: 95/255, alpha: 1) : .textBackgroundColor).cgColor
+        (isDarkMode ? Constants.Design.surfaceGroup : .textBackgroundColor).cgColor
     }
     
     init(_ mode: FanMode) {
@@ -1270,7 +1390,7 @@ private class ModeSwitch: NSStackView {
     }
     
     override func updateLayer() {
-        self.layer?.backgroundColor = (isDarkMode ? NSColor(red: 17/255, green: 17/255, blue: 17/255, alpha: 0.25) : NSColor(red: 225/255, green: 225/255, blue: 225/255, alpha: 1)).cgColor
+        self.layer?.backgroundColor = Constants.Design.surfaceSecondary.cgColor
         self.autoBtn.layer?.backgroundColor = self.autoBtn.state == .on ? self.selectedColor : NSColor.clear.cgColor
         self.manualBtn.layer?.backgroundColor = self.manualBtn.state == .on ? self.selectedColor : NSColor.clear.cgColor
     }

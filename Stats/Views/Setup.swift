@@ -184,11 +184,11 @@ private class SetupContainer: NSStackView {
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
         
-        NSColor.tertiaryLabelColor.set()
+        Constants.Design.separatorSubtle.withAlphaComponent(Constants.Design.separatorOpacity).set()
         let line = NSBezierPath()
         line.move(to: NSPoint(x: 0, y: 59))
         line.line(to: NSPoint(x: self.frame.width, y: 59))
-        line.lineWidth = 0.25
+        line.lineWidth = Constants.Design.hairlineWidth
         line.stroke()
     }
     
@@ -311,6 +311,7 @@ private class SetupView_preset: NSStackView {
     
     init() {
         super.init(frame: NSRect(x: 0, y: 0, width: setupSize.width, height: setupSize.height - 60))
+        self.wantsLayer = true
         
         let container: NSGridView = NSGridView()
         container.rowSpacing = 0
@@ -335,6 +336,15 @@ private class SetupView_preset: NSStackView {
     
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+    
+    override var wantsUpdateLayer: Bool { true }
+    
+    override func updateLayer() {
+        super.updateLayer()
+        if let selected = self.radios.firstIndex(where: { $0.state == .on }) {
+            self.bars.enumerated().forEach { self.setSelected($1, $0 == selected) }
+        }
     }
     
     private func content() -> NSView {
@@ -393,9 +403,9 @@ private class SetupView_preset: NSStackView {
     }
     
     private func setSelected(_ bar: NSView, _ selected: Bool) {
-        bar.layer?.backgroundColor = (selected ? NSColor.controlAccentColor.withAlphaComponent(0.15) : NSColor(white: 0.5, alpha: 0.14)).cgColor
+        bar.layer?.backgroundColor = (selected ? Constants.Design.accentPrimary.withAlphaComponent(0.15) : Constants.Design.surfaceGroup).cgColor
         bar.layer?.borderWidth = selected ? 1.5 : 0
-        bar.layer?.borderColor = NSColor.controlAccentColor.cgColor
+        bar.layer?.borderColor = Constants.Design.accentPrimary.cgColor
     }
     
     private func widgetImage(module: ModuleType, type: widget_t) -> NSImage? {
@@ -406,10 +416,10 @@ private class SetupView_preset: NSStackView {
     private func menuBarPreview(_ images: [NSImage]) -> NSView {
         let bar = NSView()
         bar.wantsLayer = true
-        bar.layer?.cornerRadius = Constants.Popup.radius
+        bar.layer?.cornerRadius = Constants.Design.innerRadius
         bar.layer?.cornerCurve = .continuous
         bar.layer?.masksToBounds = true
-        bar.layer?.backgroundColor = NSColor.quaternaryLabelColor.withAlphaComponent(0.14).cgColor
+        bar.layer?.backgroundColor = Constants.Design.surfaceGroup.cgColor
         bar.translatesAutoresizingMaskIntoConstraints = false
         bar.setContentHuggingPriority(.required, for: .horizontal)
         
@@ -644,8 +654,8 @@ private class SetupView_end: NSStackView {
         message.isSelectable = false
         
         let support: NSStackView = NSStackView(frame: NSRect(x: 0, y: 0, width: 160, height: 50))
-        support.edgeInsets = NSEdgeInsets(top: 12, left: 0, bottom: 0, right: 0)
-        support.spacing = 12
+        support.edgeInsets = NSEdgeInsets(top: Constants.Design.space3, left: 0, bottom: 0, right: 0)
+        support.spacing = Constants.Design.space3
         support.orientation = .horizontal
         
         let systemStats = SupportButtonView(name: "System Stats", image: "AppIcon", action: {
