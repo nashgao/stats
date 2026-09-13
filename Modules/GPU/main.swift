@@ -180,6 +180,7 @@ public class GPU: Module {
         self.notificationsView.usageCallback(utilization)
         self.previewView.loadCallback(selectedGPU)
         
+        NotificationCenter.default.post(name: .unifiedPanelSample, object: selectedGPU)
         NotificationCenter.default.post(
             name: .telemetrySample,
             object: TelemetrySample(

@@ -341,6 +341,7 @@ public extension Notification.Name {
     static let toggleModule = Notification.Name("toggleModule")
     static let togglePopup = Notification.Name("togglePopup")
     static let toggleUnifiedPopup = Notification.Name("toggleUnifiedPopup")
+    static let unifiedPanelSample = Notification.Name("unifiedPanelSample")
     static let popupVisibilityChanged = Notification.Name("popupVisibilityChanged")
     static let toggleWidget = Notification.Name("toggleWidget")
     static let togglePreview = Notification.Name("togglePreview")

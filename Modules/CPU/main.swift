@@ -12,14 +12,14 @@ import WidgetKit
 
 public struct CPU_Load: Codable, RemoteType {
     public var totalUsage: Double = 0
-    var usagePerCore: [Double] = []
-    var usageECores: Double? = nil
-    var usagePCores: Double? = nil
-    var usageSCores: Double? = nil
+    public var usagePerCore: [Double] = []
+    public var usageECores: Double? = nil
+    public var usagePCores: Double? = nil
+    public var usageSCores: Double? = nil
     
-    var systemLoad: Double = 0
-    var userLoad: Double = 0
-    var idleLoad: Double = 0
+    public var systemLoad: Double = 0
+    public var userLoad: Double = 0
+    public var idleLoad: Double = 0
     
     public func remote() -> Data? {
         var string = "1,1,\(self.totalUsage),\(self.usagePerCore.count),"
@@ -32,10 +32,10 @@ public struct CPU_Load: Codable, RemoteType {
 }
 
 public struct CPU_Frequency: Codable {
-    var value: Double? = nil
-    var eCore: Double? = nil
-    var pCore: Double? = nil
-    var sCore: Double? = nil
+    public var value: Double? = nil
+    public var eCore: Double? = nil
+    public var pCore: Double? = nil
+    public var sCore: Double? = nil
 }
 
 public struct CPU_Limit: Codable {
@@ -45,9 +45,9 @@ public struct CPU_Limit: Codable {
 }
 
 public struct CPU_AverageLoad: Codable, RemoteType {
-    var load1: Double = 0
-    var load5: Double = 0
-    var load15: Double = 0
+    public var load1: Double = 0
+    public var load5: Double = 0
+    public var load15: Double = 0
     
     public func remote() -> Data? {
         let string = "1,1,\(self.load1),\(self.load5),\(self.load15)$"
@@ -146,13 +146,20 @@ public class CPU: Module {
         }
         self.processReader = ProcessReader(.CPU) { [weak self] value in
             self?.popupView.processCallback(value)
+            if let value {
+                NotificationCenter.default.post(name: .unifiedPanelSample, object: value, userInfo: ["module": "CPU"])
+            }
         }
         self.averageLoadReader = AverageLoadReader(.CPU, popup: true) { [weak self] value in
             self?.popupView.averageCallback(value)
+            NotificationCenter.default.post(name: .unifiedPanelSample, object: value)
             self?.previewView.averageCallback(value)
         }
         self.temperatureReader = TemperatureReader(.CPU, popup: true) { [weak self] value in
             self?.popupView.temperatureCallback(value)
+            if let value {
+                NotificationCenter.default.post(name: .unifiedPanelSample, object: value)
+            }
         }
         
         #if arch(x86_64)
@@ -162,6 +169,7 @@ public class CPU: Module {
         #else
         self.frequencyReader = FrequencyReader(.CPU) { [weak self] value in
             self?.popupView.frequencyCallback(value)
+            NotificationCenter.default.post(name: .unifiedPanelSample, object: value)
             self?.previewView.frequencyCallback(value)
         }
         #endif
@@ -197,6 +205,7 @@ public class CPU: Module {
         guard let value = raw, self.enabled else { return }
         
         self.popupView.loadCallback(value)
+        NotificationCenter.default.post(name: .unifiedPanelSample, object: value)
         self.portalView.callback(value)
         self.notificationsView.loadCallback(value)
         self.previewView.loadCallback(value)

@@ -103,6 +103,7 @@ public class Sensors: Module {
         guard let value = raw, self.enabled else { return }
         
         self.popupView.usageCallback(value.sensors)
+        NotificationCenter.default.post(name: .unifiedPanelSample, object: value)
         self.portalView.usageCallback(value.sensors)
         self.notificationsView.usageCallback(value.sensors)
 

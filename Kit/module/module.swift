@@ -92,12 +92,8 @@ open class Module {
     
     public var popupKeyboardShortcut: [UInt16] { self.popupView?.keyboardShortcut ?? [] }
     
-    /// The module popup content view, exposed so the unified popup prototype
-    /// can embed these views into a single shared panel.
-    public var embeddedPopupView: Popup_p? { self.popupView }
-    
     /// Hide the per-module popup window if it is visible. Used before opening
-    /// the unified popup, which re-parents this module's popup view.
+    /// the unified popup.
     public func closePopupIfVisible() {
         if self.popup?.isVisible == true {
             self.popup?.setIsVisible(false)
@@ -321,10 +317,6 @@ open class Module {
         
         if popup.occlusionState.rawValue == 8192 || reopen {
             NSApplication.shared.activate(ignoringOtherApps: true)
-            
-            // The popup view can be hosted inside the unified popup panel;
-            // reclaim it before showing this module's own popup.
-            popup.reattachView(self.popupView)
             
             popup.contentView?.invalidateIntrinsicContentSize()
             

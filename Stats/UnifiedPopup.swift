@@ -2,9 +2,17 @@
 //  UnifiedPopup.swift
 //  Stats
 //
-//  Prototype: unified all-modules popup (mission control panel).
-//  Harness-only entry point (STATS_POPUP_MODULE=All); menu bar
-//  integration is intentionally not included.
+//  Unified all-modules popup panel, design "E - Heroes + Grammar"
+//  (stats-unified-redesign.html). One scrollable glass panel: brand
+//  header with a verdict chip, three hero cards (CPU, GPU, RAM) that
+//  expand in place one at a time, four grammar rows (Disk, Network,
+//  Sensors, Battery), and a shared footer. Sections subscribe to the
+//  modules' existing reader data via .unifiedPanelSample; the classic
+//  per-module popups are untouched.
+//
+//  Harness entry points: STATS_POPUP_MODULE=All opens the panel;
+//  STATS_POPUP_SCROLL_TO accepts "bottom" or a point offset for
+//  capture QA.
 //
 
 import Cocoa
@@ -64,7 +72,7 @@ final class UnifiedPopupController {
             self.glyphTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
                 self?.updateGlyph()
                 if self?.panel.isVisible == true {
-                    self?.panel.updateAttentionChrome()
+                    self?.panel.refreshContent()
                 }
             }
         }
@@ -141,8 +149,7 @@ final class UnifiedPopupController {
             return
         }
         
-        // The unified panel re-parents module popup views, so any open
-        // module popup must be closed first.
+        // Only one popup surface at a time.
         modules.forEach { $0.closePopupIfVisible() }
         
         guard let window = self.statusItem?.button?.window else { return }
@@ -168,33 +175,22 @@ final class UnifiedPopupController {
             return
         }
         
-        // The unified panel re-parents module popup views, so any open
-        // module popup must be closed first.
         modules.forEach { $0.closePopupIfVisible() }
         self.show(origin: origin, center: center, scrollTo: target)
     }
     
     @objc private func modulePopupVisibilityChanged(_ notification: Notification) {
         guard let state = notification.userInfo?["state"] as? Bool, state else { return }
-        // A module popup is showing (and has reclaimed its view): close the
-        // unified surface so both never present module content at once.
         self.hide()
     }
     
     func hide() {
         guard self.panel.isVisible else { return }
-        self.panel.disappearSections()
         self.panel.orderOut(nil)
     }
     
     func show(origin: NSPoint, center: CGFloat = 0, scrollTo: String? = nil) {
-        let selected = UnifiedPopupController.moduleOrder.compactMap { name in
-            modules.first(where: { $0.config.name == name })
-        }
-        // Re-parent on every show: a module popup may have reclaimed its view.
-        self.panel.setAnchor(scrollTo)
-        self.panel.populate(modules: selected)
-        self.panel.updateAttentionChrome()
+        self.panel.refreshContent()
         
         let screenHeight = NSScreen.main?.visibleFrame.height ?? 800
         let height = max(320, min(self.panel.contentHeight, screenHeight * 0.7))
@@ -213,56 +209,39 @@ final class UnifiedPopupController {
         }
         
         self.panel.setFrame(NSRect(x: x, y: y, width: width, height: height), display: true)
-        self.panel.appearSections()
-        if let scrollTo {
-            self.panel.scrollToSection(scrollTo)
+        if let scrollTo, let offset = self.panel.sectionOffset(for: scrollTo) {
+            self.panel.scrollToOffset(offset)
         } else {
             self.panel.scrollToTop()
         }
         self.panel.orderFrontRegardless()
-        if let scrollTo = ProcessInfo.processInfo.environment["STATS_POPUP_SCROLL_TO"] {
-            if scrollTo == "bottom" {
+        if let scrollToEnv = ProcessInfo.processInfo.environment["STATS_POPUP_SCROLL_TO"] {
+            if scrollToEnv == "bottom" {
                 self.panel.scrollToBottom()
-            } else if let offset = Double(scrollTo) {
+            } else if let offset = Double(scrollToEnv) {
                 self.panel.scrollToOffset(offset)
             }
         }
-        NSLog("[UnifiedPopup] shown: %d sections, content %.0fpt, panel %.0fpt", self.panel.sectionsCount, self.panel.contentHeight, height)
+        if ProcessInfo.processInfo.environment["STATS_POPUP_CAPTURE"] == "1" {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 8) { [weak self] in
+                self?.panel.writeSelfCapture()
+            }
+        }
+        NSLog("[UnifiedPopup] shown: content %.0fpt, panel %.0fpt", self.panel.contentHeight, height)
     }
 }
 
 private final class UnifiedPopupPanel: NSPanel {
-    static let panelWidth = Constants.Popup.width + Constants.Popup.margins*2
+    static let panelWidth: CGFloat = 360
     
     private let effectView = NSVisualEffectView()
     private let backgroundView = UnifiedPopupBackgroundView()
     private let scrollView = NSScrollView()
-    private struct Section {
-        let name: String
-        let header: NSTextField
-        let badge: NSTextField
-        let chevron: NSButton
-        let clip: NSView
-        let popup: Popup_p
-        /// Height of the popup's big-number row; 0 marks the section as
-        /// non-collapsible.
-        let heroHeight: CGFloat
-    }
-    
-    private let document = UnifiedPopupDocumentView()
-    private var sections: [Section] = []
-    private let headlineView = UnifiedPopupHeadlineView()
+    private let content = UnifiedPanelContent(width: panelWidth - Constants.Popup.margins * 2)
     private let footerBar = NSView()
-    /// Manual expand/collapse overrides; attention always wins, and the
-    /// anchor section is expanded for the panel's lifetime.
-    private var manualOverrides: [String: Bool] = [:]
-    private var anchorName: String? = nil
     
     var contentHeight: CGFloat {
-        self.document.frame.height
-    }
-    var sectionsCount: Int {
-        self.sections.count
+        self.content.frame.height
     }
     
     override var canBecomeKey: Bool { true }
@@ -275,13 +254,12 @@ private final class UnifiedPopupPanel: NSPanel {
         self.backgroundColor = .clear
         self.hasShadow = true
         
-        let content = UnifiedPopupContentView(frame: NSRect(x: 0, y: 0, width: contentRect.width, height: contentRect.height))
-        content.onEscape = { [weak self] in
+        let chrome = UnifiedPopupContentView(frame: NSRect(x: 0, y: 0, width: contentRect.width, height: contentRect.height))
+        chrome.onEscape = { [weak self] in
             guard let self else { return }
-            self.disappearSections()
             self.orderOut(nil)
         }
-        self.contentView = content
+        self.contentView = chrome
         
         self.effectView.material = .titlebar
         self.effectView.blendingMode = .behindWindow
@@ -306,7 +284,7 @@ private final class UnifiedPopupPanel: NSPanel {
         self.scrollView.scrollerStyle = .overlay
         self.scrollView.frame = NSRect(x: 0, y: 28, width: contentRect.width, height: contentRect.height - 28)
         self.scrollView.autoresizingMask = [.width, .height]
-        self.scrollView.documentView = self.document
+        self.scrollView.documentView = self.content
         self.effectView.addSubview(self.scrollView)
         
         self.footerBar.frame = NSRect(x: 0, y: 0, width: contentRect.width, height: 28)
@@ -345,207 +323,36 @@ private final class UnifiedPopupPanel: NSPanel {
         
         self.effectView.addSubview(self.footerBar)
         
-        self.headlineView.isHidden = true
-        self.document.addSubview(self.headlineView)
-        
-        content.addSubview(self.effectView)
+        chrome.addSubview(self.effectView)
     }
     
-    /// Health headline strip + per-section attention badges, driven by the
-    /// shared AttentionEvaluator. The strip hides entirely when quiet.
-    func updateAttentionChrome() {
-        let attentions = AttentionEvaluator.shared.attentions
-        
-        if attentions.isEmpty {
-            self.headlineView.isHidden = true
-        } else {
-            let text = NSMutableAttributedString()
-            for (index, attention) in attentions.enumerated() {
-                if index > 0 {
-                    text.append(NSAttributedString(string: "  ·  ", attributes: [
-                        .font: NSFont.systemFont(ofSize: 12, weight: .regular),
-                        .foregroundColor: NSColor.secondaryLabelColor
-                    ]))
-                }
-                text.append(NSAttributedString(string: attention.label, attributes: [
-                    .font: NSFont.systemFont(ofSize: 12, weight: .semibold),
-                    .foregroundColor: attention.level == .critical ? NSColor.systemRed : NSColor.systemOrange
-                ]))
-            }
-            self.headlineView.attributedStringValue = text
-            self.headlineView.isHidden = false
-        }
-        
-        for section in self.sections {
-            if let attention = AttentionEvaluator.shared.attention(for: section.name) {
-                section.badge.attributedStringValue = NSAttributedString(
-                    string: "● \(Self.shortLabel(attention))",
-                    attributes: [
-                        .font: NSFont.systemFont(ofSize: 10, weight: .semibold),
-                        .foregroundColor: attention.level == .critical ? NSColor.systemRed : NSColor.systemOrange
-                    ]
-                )
-                section.badge.isHidden = false
-            } else {
-                section.badge.isHidden = true
-            }
-        }
-        
-        self.relayout()
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
     }
     
-    private static func shortLabel(_ attention: Attention) -> String {
-        switch attention.kind {
-        case .fan, .temperature: return attention.label
-        default:
-            if attention.label.hasPrefix(attention.module + " ") {
-                return String(attention.label.dropFirst(attention.module.count + 1))
-            }
-            return attention.label
-        }
+    func refreshContent() {
+        self.content.relayout()
     }
     
-    func populate(modules: [Module]) {
-        for section in self.sections {
-            section.header.removeFromSuperview()
-            section.badge.removeFromSuperview()
-            section.chevron.removeFromSuperview()
-            section.popup.removeFromSuperview()
-            section.clip.removeFromSuperview()
-        }
-        self.sections = []
-        
-        for module in modules {
-            guard let popup = module.embeddedPopupView else { continue }
-            (popup as? PopupWrapper)?.setChromeFooterHidden(true)
-            
-            let header = NSTextField(labelWithString: "")
-            header.attributedStringValue = NSAttributedString(string: module.config.name, attributes: [
-                .font: NSFont.systemFont(ofSize: 13, weight: .semibold),
-                .foregroundColor: NSColor.labelColor
-            ])
-            self.document.addSubview(header)
-            
-            let badge = NSTextField(labelWithString: "")
-            badge.lineBreakMode = .byTruncatingTail
-            badge.isHidden = true
-            self.document.addSubview(badge)
-            
-            let chevron = NSButton()
-            chevron.isBordered = false
-            chevron.imageScaling = .scaleProportionallyDown
-            chevron.identifier = NSUserInterfaceItemIdentifier(module.config.name)
-            chevron.target = self
-            chevron.action = #selector(self.toggleSection(_:))
-            self.document.addSubview(chevron)
-            
-            let clip = UnifiedPopupClipView()
-            clip.wantsLayer = true
-            clip.layer?.masksToBounds = true
-            clip.addSubview(popup)
-            popup.frame = NSRect(x: 0, y: 0, width: Constants.Popup.width, height: popup.frame.height)
-            self.document.addSubview(clip)
-            
-            let previous = popup.sizeCallback
-            popup.sizeCallback = { [weak self] size in
-                previous?(size)
-                self?.relayout()
-            }
-            
-            // Measure the big-number row (first arranged subview) so quiet
-            // sections can clamp to it; a missing measure = non-collapsible.
-            let heroHeight = (popup as? NSStackView)?.arrangedSubviews.first?.bounds.height ?? 0
-            self.sections.append(Section(
-                name: module.config.name,
-                header: header,
-                badge: badge,
-                chevron: chevron,
-                clip: clip,
-                popup: popup,
-                heroHeight: heroHeight
-            ))
-        }
-        self.relayout()
+    func sectionOffset(for module: String) -> CGFloat? {
+        self.content.sectionOffset(for: module)
     }
     
-    func appearSections() {
-        for section in self.sections { section.popup.appear() }
-    }
-    
-    func disappearSections() {
-        for section in self.sections { section.popup.disappear() }
+    func scrollToSection(_ module: String) {
+        guard let offset = self.sectionOffset(for: module) else { return }
+        self.scrollToOffset(offset)
     }
     
     func scrollToTop() {
-        self.document.scroll(NSPoint(x: 0, y: 0))
+        self.content.scroll(NSPoint(x: 0, y: 0))
     }
     
     func scrollToBottom() {
-        self.document.scroll(NSPoint(x: 0, y: self.document.frame.height))
+        self.content.scroll(NSPoint(x: 0, y: self.content.frame.height))
     }
     
     func scrollToOffset(_ offset: Double) {
-        self.document.scroll(NSPoint(x: 0, y: offset))
-    }
-    
-    private func relayout() {
-        let margin = Constants.Popup.margins
-        let headerHeight: CGFloat = 20
-        var y: CGFloat = margin
-        if !self.headlineView.isHidden {
-            self.headlineView.frame = NSRect(x: margin, y: y, width: Self.panelWidth - margin*2, height: 20)
-            y += 26
-        }
-        for section in self.sections {
-            section.header.frame = NSRect(x: margin, y: y, width: Self.panelWidth - margin*2, height: headerHeight)
-            
-            let expanded = self.isExpanded(section)
-            if section.heroHeight > 0 {
-                section.chevron.image = NSImage(systemSymbolName: expanded ? "chevron.down" : "chevron.right", accessibilityDescription: nil)
-                section.chevron.contentTintColor = .secondaryLabelColor
-                section.chevron.isHidden = false
-            } else {
-                section.chevron.isHidden = true
-            }
-            section.chevron.frame = NSRect(x: Self.panelWidth - margin - 16, y: y + 2, width: 16, height: 16)
-            
-            section.badge.sizeToFit()
-            let badgeWidth = min(section.badge.frame.width, Self.panelWidth / 3)
-            section.badge.frame = NSRect(x: Self.panelWidth - margin - 16 - 6 - badgeWidth, y: y + 3, width: badgeWidth, height: 14)
-            
-            y += headerHeight + 4
-            let natural = section.popup.frame.height
-            let clipHeight = expanded ? natural : (section.heroHeight > 0 ? section.heroHeight : natural)
-            section.clip.frame = NSRect(x: margin, y: y, width: Constants.Popup.width, height: clipHeight)
-            y += clipHeight + 12
-        }
-        y += margin - 12
-        self.document.frame = NSRect(x: 0, y: 0, width: Self.panelWidth, height: max(y, 1))
-    }
-    
-    private func isExpanded(_ section: Section) -> Bool {
-        if AttentionEvaluator.shared.attention(for: section.name) != nil { return true }
-        if let override = self.manualOverrides[section.name] { return override }
-        return section.name == self.anchorName
-    }
-    
-    @objc private func toggleSection(_ sender: NSButton) {
-        guard let name = sender.identifier?.rawValue,
-              let section = self.sections.first(where: { $0.name == name }) else { return }
-        self.manualOverrides[name] = !self.isExpanded(section)
-        self.relayout()
-    }
-    
-    func setAnchor(_ name: String?) {
-        self.anchorName = name
-    }
-    
-    /// Scroll the document so the named module's section header sits near
-    /// the top of the visible area.
-    func scrollToSection(_ name: String) {
-        guard let section = self.sections.first(where: { $0.name == name }) else { return }
-        let target = max(section.header.frame.origin.y - 8, 0)
-        self.document.scroll(NSPoint(x: 0, y: target))
+        self.content.scroll(NSPoint(x: 0, y: offset))
     }
     
     @objc private func openActivityMonitor() {
@@ -556,32 +363,33 @@ private final class UnifiedPopupPanel: NSPanel {
     @objc private func openSettings() {
         NotificationCenter.default.post(name: .toggleSettings, object: nil, userInfo: ["module": "Dashboard"])
     }
-}
-
-private final class UnifiedPopupDocumentView: NSView {
-    override var isFlipped: Bool { true }
-}
-
-/// Clip container for an embedded section: top-anchored in the flipped
-/// document coordinates and height-clamped when the section collapses,
-/// so the big-number row stays visible.
-private final class UnifiedPopupClipView: NSView {
-    override var isFlipped: Bool { true }
-}
-
-private final class UnifiedPopupHeadlineView: NSTextField {
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
-        self.isEditable = false
-        self.isSelectable = false
-        self.isBezeled = false
-        self.drawsBackground = false
-        self.lineBreakMode = .byTruncatingTail
-        self.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-    }
     
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
+    /// Harness QA (STATS_POPUP_CAPTURE=1): renders the panel content into a
+    /// PNG on disk, so captures work even when the console is locked.
+    func writeSelfCapture() {
+        let content = self.content
+        content.relayout()
+        let size = content.bounds.size
+        guard size.width > 0, size.height > 0,
+              let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(size.width * 2), pixelsHigh: Int(size.height * 2), bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0) else { return }
+        rep.size = size
+        self.effectiveAppearance.performAsCurrentDrawingAppearance {
+            content.setNeedsDisplayRecursively()
+            content.cacheDisplay(in: content.bounds, to: rep)
+        }
+        guard let png = rep.representation(using: NSBitmapImageRep.FileType.png, properties: [:]) else { return }
+        let path = ProcessInfo.processInfo.environment["STATS_POPUP_CAPTURE_PATH"] ?? "/tmp/unified-panel-selfcapture.png"
+        try? png.write(to: URL(fileURLWithPath: path))
+        NSLog("[UnifiedPopup] self capture written to %@", path)
+    }
+}
+
+private extension NSView {
+    func setNeedsDisplayRecursively() {
+        self.setNeedsDisplay(self.bounds)
+        for subview in self.subviews {
+            subview.setNeedsDisplayRecursively()
+        }
     }
 }
 

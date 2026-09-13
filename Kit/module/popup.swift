@@ -94,61 +94,6 @@ open class PopupWrapper: NSStackView, Popup_p {
         cache.replay(render: render)
     }
 
-    // MARK: - unified panel chrome
-
-    private var chromeFooterHidden: Bool = false
-
-    /// Embedded mode: the unified panel hides the per-popup footer (it has
-    /// its own shared footer) and resets it when the view is re-attached to
-    /// its classic popup window. Classic popups never set this.
-    public func setChromeFooterHidden(_ hidden: Bool) {
-        guard self.chromeFooterHidden != hidden else { return }
-        self.chromeFooterHidden = hidden
-        self.applyChromeFooterState()
-        self.refreshContentHeight()
-    }
-
-    private func applyChromeFooterState() {
-        self.subviews.forEach { subview in
-            if subview is PopupFooterView {
-                subview.isHidden = self.chromeFooterHidden
-            }
-        }
-    }
-
-    open override func didAddSubview(_ subview: NSView) {
-        super.didAddSubview(subview)
-        if self.chromeFooterHidden, subview is PopupFooterView {
-            subview.isHidden = true
-        }
-    }
-
-    /// Stack height of the visible content, matching the recalculateHeight
-    /// formula shared by the module popups, with hidden chrome excluded.
-    public func contentHeight() -> CGFloat {
-        var h: CGFloat = self.spacing * CGFloat(max(self.arrangedSubviews.count - 1, 0))
-        self.arrangedSubviews.forEach { v in
-            if v.isHidden { return }
-            if let v = v as? NSStackView {
-                let rows = v.arrangedSubviews
-                h += v.edgeInsets.top + v.edgeInsets.bottom
-                h += rows.map({ $0.bounds.height }).reduce(0, +)
-                h += v.spacing * CGFloat(max(rows.count - 1, 0))
-            } else {
-                h += v.bounds.height
-            }
-        }
-        return h
-    }
-
-    public func refreshContentHeight() {
-        let h = self.contentHeight()
-        if self.frame.size.height != h {
-            self.setFrameSize(NSSize(width: self.frame.width, height: h))
-        }
-        self.sizeCallback?(self.frame.size)
-    }
-
     // MARK: - redesign scaffolding
 
     public func applySemanticColors() {
@@ -349,16 +294,6 @@ public class PopupWindow: NSWindow, NSWindowDelegate {
     public func windowWillMove(_ notification: Notification) {
         self.viewController.setCloseButton(true)
         self.locked = true
-    }
-    
-    /// Re-embed the popup content view into this window. Called when the
-    /// popup is opened while its view is hosted inside the unified popup.
-    /// Resets the unified panel's embedded chrome state so the classic popup
-    /// keeps its full footer.
-    public func reattachView(_ view: Popup_p?) {
-        guard let view else { return }
-        (view as? PopupWrapper)?.setChromeFooterHidden(false)
-        self.viewController.setup(title: self.title, view: view)
     }
     
     public func windowDidResignKey(_ notification: Notification) {

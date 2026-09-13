@@ -543,7 +543,7 @@ internal class ChartSensorView: NSStackView {
 
 // MARK: - Fan view
 
-internal class FanView: NSStackView {
+public class FanView: NSStackView {
     public var sizeCallback: (() -> Void)
     
     internal var fan: Fan

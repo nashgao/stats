@@ -14,11 +14,11 @@ import Kit
 import WidgetKit
 
 public struct stats: Codable {
-    var read: Int64 = 0
-    var write: Int64 = 0
+    public var read: Int64 = 0
+    public var write: Int64 = 0
     
-    var readBytes: Int64 = 0
-    var writeBytes: Int64 = 0
+    public var readBytes: Int64 = 0
+    public var writeBytes: Int64 = 0
 }
 
 public struct smart_t: Codable {
@@ -46,27 +46,27 @@ internal func smartCriticalWarnings(_ value: Int) -> [String] {
 }
 
 public struct drive: Codable {
-    var parent: io_object_t = 0
+    public var parent: io_object_t = 0
     
-    var uuid: String = ""
-    var mediaName: String = ""
-    var BSDName: String = ""
+    public var uuid: String = ""
+    public var mediaName: String = ""
+    public var BSDName: String = ""
     
-    var root: Bool = false
-    var removable: Bool = false
+    public var root: Bool = false
+    public var removable: Bool = false
     
-    var model: String = ""
-    var path: URL?
-    var connectionType: String = ""
-    var fileSystem: String = ""
-    var writable: Bool = true
-    var encrypted: Bool = false
+    public var model: String = ""
+    public var path: URL?
+    public var connectionType: String = ""
+    public var fileSystem: String = ""
+    public var writable: Bool = true
+    public var encrypted: Bool = false
     
-    var size: Int64 = 1
-    var free: Int64 = 0
+    public var size: Int64 = 1
+    public var free: Int64 = 0
     
-    var activity: stats = stats()
-    var smart: smart_t? = nil
+    public var activity: stats = stats()
+    public var smart: smart_t? = nil
     
     public var percentage: Double {
         let total = self.size
@@ -390,6 +390,7 @@ public class Disk: Module {
         
         DispatchQueue.main.async(execute: {
             self.popupView.activityCallback(value)
+            NotificationCenter.default.post(name: .unifiedPanelSample, object: value)
             self.previewView.activityCallback(value)
         })
         
