@@ -235,6 +235,7 @@ private final class UnifiedPopupPanel: NSPanel {
     private var sections: [(name: String, header: NSTextField, popup: Popup_p)] = []
     private let headlineView = UnifiedPopupHeadlineView()
     private var badges: [String: NSTextField] = [:]
+    private let footerBar = NSView()
     
     var contentHeight: CGFloat {
         self.document.frame.height
@@ -282,10 +283,46 @@ private final class UnifiedPopupPanel: NSPanel {
         self.scrollView.autohidesScrollers = true
         self.scrollView.horizontalScrollElasticity = .none
         self.scrollView.scrollerStyle = .overlay
-        self.scrollView.frame = content.bounds
+        self.scrollView.frame = NSRect(x: 0, y: 28, width: contentRect.width, height: contentRect.height - 28)
         self.scrollView.autoresizingMask = [.width, .height]
         self.scrollView.documentView = self.document
         self.effectView.addSubview(self.scrollView)
+        
+        self.footerBar.frame = NSRect(x: 0, y: 0, width: contentRect.width, height: 28)
+        self.footerBar.autoresizingMask = [.width, .maxYMargin]
+        
+        let separator = NSView(frame: NSRect(x: 12, y: 27, width: contentRect.width - 24, height: 1))
+        separator.autoresizingMask = [.width]
+        separator.wantsLayer = true
+        separator.layer?.backgroundColor = NSColor.separatorColor.withAlphaComponent(0.3).cgColor
+        self.footerBar.addSubview(separator)
+        
+        let activity = NSButton()
+        activity.isBordered = false
+        activity.attributedTitle = NSAttributedString(string: localizedString("Open Activity Monitor"), attributes: [
+            .font: NSFont.systemFont(ofSize: 12, weight: .medium),
+            .foregroundColor: NSColor.controlAccentColor
+        ])
+        activity.target = self
+        activity.action = #selector(self.openActivityMonitor)
+        activity.sizeToFit()
+        activity.frame = NSRect(x: 12, y: 3, width: activity.frame.width, height: 20)
+        self.footerBar.addSubview(activity)
+        
+        let settings = NSButton()
+        settings.isBordered = false
+        settings.attributedTitle = NSAttributedString(string: localizedString("Settings"), attributes: [
+            .font: NSFont.systemFont(ofSize: 12, weight: .regular),
+            .foregroundColor: NSColor.tertiaryLabelColor
+        ])
+        settings.target = self
+        settings.action = #selector(self.openSettings)
+        settings.sizeToFit()
+        settings.frame = NSRect(x: contentRect.width - 12 - settings.frame.width, y: 3, width: settings.frame.width, height: 20)
+        settings.autoresizingMask = [.minXMargin]
+        self.footerBar.addSubview(settings)
+        
+        self.effectView.addSubview(self.footerBar)
         
         self.headlineView.isHidden = true
         self.document.addSubview(self.headlineView)
@@ -359,6 +396,7 @@ private final class UnifiedPopupPanel: NSPanel {
         
         for module in modules {
             guard let popup = module.embeddedPopupView else { continue }
+            (popup as? PopupWrapper)?.setChromeFooterHidden(true)
             
             let header = NSTextField(labelWithString: "")
             header.attributedStringValue = NSAttributedString(string: module.config.name, attributes: [
@@ -433,6 +471,15 @@ private final class UnifiedPopupPanel: NSPanel {
         guard let section = self.sections.first(where: { $0.name == name }) else { return }
         let target = max(section.header.frame.origin.y - 8, 0)
         self.document.scroll(NSPoint(x: 0, y: target))
+    }
+    
+    @objc private func openActivityMonitor() {
+        guard let app = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.ActivityMonitor") else { return }
+        NSWorkspace.shared.open([], withApplicationAt: app, configuration: NSWorkspace.OpenConfiguration())
+    }
+    
+    @objc private func openSettings() {
+        NotificationCenter.default.post(name: .toggleSettings, object: nil, userInfo: ["module": "Dashboard"])
     }
 }
 
