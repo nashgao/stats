@@ -32,8 +32,8 @@ final class AttentionEvaluator {
     enum Threshold {
         static let fanPercentage: Double = 80
         static let fanCriticalPercentage: Double = 95
-        static let temperatureAttentionCelsius: Double = 85
-        static let temperatureCriticalCelsius: Double = 95
+        static let temperatureAttentionCelsius: Double = 93
+        static let temperatureCriticalCelsius: Double = 100
         static let memoryAttention: Double = 0.90
         static let memoryCritical: Double = 0.97
         static let gpuAttention: Double = 0.85
