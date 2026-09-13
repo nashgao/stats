@@ -580,6 +580,7 @@ final class UnifiedPanelContent: NSView {
     func relayout() -> CGFloat {
         let margin: CGFloat = Constants.Popup.margins
         let w = self.bounds.width
+        let wasAtTop = self.bounds.minY < 8
         var y: CGFloat = margin
         
         let attentions = AttentionEvaluator.shared.attentions
@@ -627,6 +628,10 @@ final class UnifiedPanelContent: NSView {
         }
         y += margin
         self.frame = NSRect(x: 0, y: 0, width: w, height: max(y, 1))
+        if wasAtTop {
+            // inserting/removing the island shifts content; keep the top pinned
+            self.scroll(NSPoint(x: 0, y: 0))
+        }
         return self.frame.height
     }
     
