@@ -91,12 +91,12 @@ private func drawToolTip(_ frame: NSRect, _ point: CGPoint, _ size: CGSize, valu
     let box = NSBezierPath(roundedRect: NSRect(x: position.x-3, y: position.y-2, width: size.width, height: textHeight+2), xRadius: 2, yRadius: 2)
     NSColor.gray.setStroke()
     box.stroke()
-    (isDarkMode ? NSColor.black : NSColor.white).withAlphaComponent(0.8).setFill()
+    NSColor.windowBackgroundColor.withAlphaComponent(0.8).setFill()
     box.fill()
     
     var attributes = [
         NSAttributedString.Key.font: NSFont.systemFont(ofSize: 12, weight: .regular),
-        NSAttributedString.Key.foregroundColor: isDarkMode ? NSColor.white : NSColor.textColor
+        NSAttributedString.Key.foregroundColor: NSColor.labelColor
     ]
     var rect = CGRect(x: position.x, y: position.y+valueOffset, width: size.width, height: 12)
     var str = NSAttributedString.init(string: value, attributes: attributes)
@@ -104,7 +104,7 @@ private func drawToolTip(_ frame: NSRect, _ point: CGPoint, _ size: CGSize, valu
     
     if let subtitle {
         attributes[NSAttributedString.Key.font] = NSFont.systemFont(ofSize: 9, weight: .medium)
-        attributes[NSAttributedString.Key.foregroundColor] = (isDarkMode ? NSColor.white : NSColor.textColor).withAlphaComponent(0.7)
+        attributes[NSAttributedString.Key.foregroundColor] = NSColor.labelColor.withAlphaComponent(0.7)
         rect = CGRect(x: position.x, y: position.y, width: size.width-8, height: 9)
         str = NSAttributedString.init(string: subtitle, attributes: attributes)
         str.draw(with: rect)
@@ -390,7 +390,7 @@ public class LineChartView: ChartView {
         if minMax {
             let stringAttributes = [
                 NSAttributedString.Key.font: NSFont.systemFont(ofSize: 9, weight: .light),
-                NSAttributedString.Key.foregroundColor: isDarkMode ? NSColor.white : NSColor.textColor,
+                NSAttributedString.Key.foregroundColor: NSColor.labelColor,
                 NSAttributedString.Key.paragraphStyle: NSMutableParagraphStyle()
             ]
             
@@ -409,7 +409,7 @@ public class LineChartView: ChartView {
             let legendFont = LineChartView.xLegendFont
             let legendAttributes: [NSAttributedString.Key: Any] = [
                 .font: legendFont,
-                .foregroundColor: (isDarkMode ? NSColor.white : NSColor.textColor).withAlphaComponent(0.5)
+                .foregroundColor: NSColor.labelColor.withAlphaComponent(0.5)
             ]
             
             let sampleWidth = LineChartView.xLegendSampleWidth
@@ -443,7 +443,7 @@ public class LineChartView: ChartView {
             let legendFont = NSFont.systemFont(ofSize: 9, weight: .light)
             let legendAttributes: [NSAttributedString.Key: Any] = [
                 .font: legendFont,
-                .foregroundColor: (isDarkMode ? NSColor.white : NSColor.textColor).withAlphaComponent(0.5)
+                .foregroundColor: NSColor.labelColor.withAlphaComponent(0.5)
             ]
             
             let textHeight = legendFont.ascender - legendFont.descender
@@ -454,7 +454,7 @@ public class LineChartView: ChartView {
                 let lineY = xLegendHeight + height * CGFloat(step) / 100
                 
                 if xLegend {
-                    let gridColor = (isDarkMode ? NSColor.white : NSColor.black).withAlphaComponent(0.06)
+                    let gridColor = Constants.Design.separatorSubtle.withAlphaComponent(0.6)
                     gridColor.setStroke()
                     let line = NSBezierPath()
                     line.move(to: CGPoint(x: yLegendWidth, y: lineY))
@@ -989,7 +989,7 @@ public class PieChartView: ChartView {
             style.alignment = .center
             let stringAttributes = [
                 NSAttributedString.Key.font: NSFont.systemFont(ofSize: 10, weight: .regular),
-                NSAttributedString.Key.foregroundColor: isDarkMode ? NSColor.white : NSColor.textColor,
+                NSAttributedString.Key.foregroundColor: NSColor.labelColor,
                 NSAttributedString.Key.paragraphStyle: style
             ]
             
@@ -1002,7 +1002,7 @@ public class PieChartView: ChartView {
             let font = NSFont.systemFont(ofSize: fontSize, weight: .regular)
             let stringAttributes = [
                 NSAttributedString.Key.font: font,
-                NSAttributedString.Key.foregroundColor: isDarkMode ? NSColor.white : NSColor.textColor,
+                NSAttributedString.Key.foregroundColor: NSColor.labelColor,
                 NSAttributedString.Key.paragraphStyle: NSMutableParagraphStyle()
             ]
             
@@ -1223,7 +1223,7 @@ public class GaugeChartView: ChartView {
             style.alignment = .center
             let stringAttributes = [
                 NSAttributedString.Key.font: NSFont.systemFont(ofSize: 10, weight: .medium),
-                NSAttributedString.Key.foregroundColor: isDarkMode ? NSColor.white : NSColor.textColor,
+                NSAttributedString.Key.foregroundColor: NSColor.labelColor,
                 NSAttributedString.Key.paragraphStyle: style
             ]
             let str = NSAttributedString(string: title, attributes: stringAttributes)
