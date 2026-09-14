@@ -10,6 +10,7 @@
 		4A05F9BD83C04F70BFFF7F37 /* Kit.swift in Sources */ = {isa = PBXBuildFile; fileRef = 369463B2B7EA4AF0A895A9B6 /* Kit.swift */; };
 		E2D0FB3CF90F04B7CD2D06F6 /* Attention.swift in Sources */ = {isa = PBXBuildFile; fileRef = A87EB9ADF20521B4565B1FB3 /* Attention.swift */; };
 		B5C6D7E8F9A0B1C2D3E4F506 /* Alerts.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B5C /* Alerts.swift */; };
+		E6F708192A3B4C5D6E7F8091 /* PanelInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4E5F60718293A4B5CB6C7D8 /* PanelInfo.swift */; };
 		5C038CF62D86EE8A00516809 /* SystemStats.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C038CF52D86EE8700516809 /* SystemStats.swift */; };
 		5C044F7A2B3DE6F3005F6951 /* portal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C044F792B3DE6F3005F6951 /* portal.swift */; };
 		5C0A2A8A292A5B4D009B4C1F /* SMJobBlessUtil.py in Resources */ = {isa = PBXBuildFile; fileRef = 5C0A2A89292A5B4D009B4C1F /* SMJobBlessUtil.py */; };
@@ -544,6 +545,7 @@
 		369463B2B7EA4AF0A895A9B6 /* Kit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Kit.swift; sourceTree = "<group>"; };
 		A87EB9ADF20521B4565B1FB3 /* Attention.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Attention.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A4B5C /* Alerts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Alerts.swift; sourceTree = "<group>"; };
+		D4E5F60718293A4B5CB6C7D8 /* PanelInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PanelInfo.swift; sourceTree = "<group>"; };
 		40BE2B202745D63800AE9396 /* da */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = da; path = da.lproj/Localizable.strings; sourceTree = "<group>"; };
 		47665544298DC92F00F7B709 /* sk */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = sk; path = sk.lproj/Localizable.strings; sourceTree = "<group>"; };
 		4921436D25319699000A1C47 /* ko */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ko; path = ko.lproj/Localizable.strings; sourceTree = "<group>"; };
@@ -1316,6 +1318,7 @@
 				369463B2B7EA4AF0A895A9B6 /* Kit.swift */,
 				A87EB9ADF20521B4565B1FB3 /* Attention.swift */,
 				A1B2C3D4E5F60718293A4B5C /* Alerts.swift */,
+				D4E5F60718293A4B5CB6C7D8 /* PanelInfo.swift */,
 			);
 			path = Tests;
 			sourceTree = "<group>";
@@ -2361,6 +2364,7 @@
 				4A05F9BD83C04F70BFFF7F37 /* Kit.swift in Sources */,
 				E2D0FB3CF90F04B7CD2D06F6 /* Attention.swift in Sources */,
 				B5C6D7E8F9A0B1C2D3E4F506 /* Alerts.swift in Sources */,
+				E6F708192A3B4C5D6E7F8091 /* PanelInfo.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

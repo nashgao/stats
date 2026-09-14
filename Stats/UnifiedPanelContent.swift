@@ -99,6 +99,43 @@ enum UnifiedTokens {
     static var cardShadowAlpha: CGFloat { isDark ? 0.25 : 0.06 }
 }
 
+// MARK: - info formatters (pure; unit-tested in Tests/PanelInfo.swift)
+
+enum UnifiedInfoFormatters {
+    /// Battery condition wording from the reader's health percentage
+    /// (health = maxCapacity / designedCapacity * 100).
+    static func batteryCondition(_ health: Int) -> String {
+        switch health {
+        case 90...100: return "Normal"
+        case 80..<90: return "Good"
+        case 60..<80: return "Fair"
+        default: return "Poor"
+        }
+    }
+    
+    /// ProcessInfo.ThermalState display names.
+    static func thermalStateName(_ state: ProcessInfo.ThermalState) -> String {
+        switch state {
+        case .nominal: return "Nominal"
+        case .fair: return "Fair"
+        case .serious: return "Serious"
+        case .critical: return "Critical"
+        @unknown default: return "Unknown"
+        }
+    }
+    
+    /// Grammar-row status level (0/1/2) for a thermal state. Display
+    /// tint only — thermal pressure is deliberately NOT wired into the
+    /// attention evaluator.
+    static func thermalStatusLevel(_ state: ProcessInfo.ThermalState) -> Int {
+        switch state {
+        case .fair: return 1
+        case .serious, .critical: return 2
+        default: return 0
+        }
+    }
+}
+
 // MARK: - sparkline
 
 /// Thin single-hue sparkline: no axes, no fills, rounded joins.
@@ -688,7 +725,8 @@ final class UnifiedPanelContent: NSView {
     private let diskRow = UnifiedGrammarRow(module: "Disk", label: localizedString("Disk"), icon: "internaldrive", expandable: false)
     private let netRow = UnifiedGrammarRow(module: "Network", label: localizedString("Network"), icon: "arrow.up.arrow.down", expandable: false)
     private let sensorsRow = UnifiedGrammarRow(module: "Sensors", label: localizedString("Sensors"), icon: "thermometer.medium", expandable: true)
-    private let batteryRow = UnifiedGrammarRow(module: "Battery", label: localizedString("Battery"), icon: "battery.75percent", expandable: false)
+    private let thermalRow = UnifiedGrammarRow(module: "Thermal", label: localizedString("Thermal"), icon: "thermometer.low", expandable: false)
+    private let batteryRow = UnifiedGrammarRow(module: "Battery", label: localizedString("Battery"), icon: "battery.75percent", expandable: true)
     
     private var expandedSection: String? = nil
     private var lastVerdictKey: String = ""
@@ -710,6 +748,10 @@ final class UnifiedPanelContent: NSView {
     private var gpuDetail: NSView!
     private var ramDetail: NSView!
     private var sensorsFansContainer: NSView!
+    private var batteryDetailContainer: UnifiedFlippedView!
+    private var batteryCyclesField: NSTextField?
+    private var batteryHealthField: NSTextField?
+    private var batteryConditionField: NSTextField?
     
     override var isFlipped: Bool { true }
     
@@ -753,7 +795,7 @@ final class UnifiedPanelContent: NSView {
         self.gpuHero.expandContainer.addSubview(self.gpuDetail)
         self.ramHero.expandContainer.addSubview(self.ramDetail)
         
-        for row in [self.diskRow, self.netRow, self.sensorsRow, self.batteryRow] {
+        for row in [self.diskRow, self.netRow, self.sensorsRow, self.thermalRow, self.batteryRow] {
             self.addSubview(row)
             row.onToggle = { [weak self] in self?.toggleSection(row.module) }
         }
@@ -762,9 +804,21 @@ final class UnifiedPanelContent: NSView {
         self.sensorsRow.detailHeight = 150
         self.sensorsRow.layoutRow()
         
+        // Battery health detail: cycles / health / condition rows in the
+        // same label-left, value-right grammar as the fan temperature rows.
+        self.batteryDetailContainer = UnifiedFlippedView()
+        self.batteryRow.expandContainer.addSubview(self.batteryDetailContainer)
+        self.batteryRow.detailHeight = 60
+        self.batteryCyclesField = self.batteryDetailRow(localizedString("Cycles"))
+        self.batteryHealthField = self.batteryDetailRow(localizedString("Health"))
+        self.batteryConditionField = self.batteryDetailRow(localizedString("Condition"))
+        self.layoutBatteryDetail()
+        
         self.verdictChip.setAttributed(Self.attributedVerdict(quiet: true))
         
         NotificationCenter.default.addObserver(self, selector: #selector(self.sample(_:)), name: .unifiedPanelSample, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(self.thermalStateChanged(_:)), name: ProcessInfo.thermalStateDidChangeNotification, object: nil)
+        self.updateThermalRow()
         
         self.relayout()
     }
@@ -833,7 +887,7 @@ final class UnifiedPanelContent: NSView {
         let fanSticky = self.lastFanAttention.map { Date().timeIntervalSince($0) < 6 } ?? false
         self.sensorsRow.setExpanded(self.expandedSection == "Sensors" || fanSticky)
         
-        for (index, row) in [self.diskRow, self.netRow, self.sensorsRow, self.batteryRow].enumerated() {
+        for (index, row) in [self.diskRow, self.netRow, self.sensorsRow, self.thermalRow, self.batteryRow].enumerated() {
             row.frame = NSRect(x: margin, y: y, width: w - margin * 2, height: row.totalHeight)
             row.layoutRow()
             if index == 0 {
@@ -841,6 +895,8 @@ final class UnifiedPanelContent: NSView {
             }
             y += row.totalHeight
         }
+        self.updateThermalRow()
+        self.layoutBatteryDetail()
         y += margin
         let newFrame = NSRect(x: 0, y: 0, width: w, height: max(y, 1))
         if newFrame != self.frame {
@@ -953,7 +1009,7 @@ final class UnifiedPanelContent: NSView {
     
     /// Scroll offset so the named module's section sits near the top.
     func sectionOffset(for module: String) -> CGFloat? {
-        for view in [self.cpuHero, self.gpuHero, self.ramHero, self.diskRow, self.netRow, self.sensorsRow, self.batteryRow] as [NSView] {
+        for view in [self.cpuHero, self.gpuHero, self.ramHero, self.diskRow, self.netRow, self.sensorsRow, self.thermalRow, self.batteryRow] as [NSView] {
             if (view as? UnifiedHeroCard)?.module == module || (view as? UnifiedGrammarRow)?.module == module {
                 return max(view.frame.origin.y - 8, 0)
             }
@@ -1146,6 +1202,9 @@ final class UnifiedPanelContent: NSView {
         case let battery as Battery_Usage:
             self.batteryRow.valueField.stringValue = "\(Int((abs(battery.level) * 100).rounded()))%"
             self.batteryRow.spark.add(abs(battery.batteryPower))
+            self.batteryCyclesField?.stringValue = "\(battery.cycles)"
+            self.batteryHealthField?.stringValue = "\(battery.health)% of design"
+            self.batteryConditionField?.stringValue = localizedString(UnifiedInfoFormatters.batteryCondition(battery.health))
         default:
             break
         }
@@ -1169,6 +1228,46 @@ final class UnifiedPanelContent: NSView {
     
     private var fanKeys: [String] = []
     private var fanHeights: [CGFloat] = []
+    
+    // MARK: - battery health detail
+    
+    private func batteryDetailRow(_ label: String) -> NSTextField {
+        let name = unifiedLabel(label, font: .systemFont(ofSize: 11, weight: .regular), color: .secondaryLabelColor)
+        let value = unifiedLabel(font: .monospacedDigitSystemFont(ofSize: 11, weight: .semibold), color: .labelColor, alignment: .right)
+        name.identifier = NSUserInterfaceItemIdentifier("battery.detail")
+        value.identifier = NSUserInterfaceItemIdentifier("battery.detail")
+        self.batteryDetailContainer.addSubview(name)
+        self.batteryDetailContainer.addSubview(value)
+        return value
+    }
+    
+    private func layoutBatteryDetail() {
+        let width = max(self.batteryRow.expandContainer.bounds.width, 100)
+        var y: CGFloat = 0
+        for view in self.batteryDetailContainer.subviews where view.identifier?.rawValue == "battery.detail" {
+            guard let field = view as? NSTextField else { continue }
+            let isValue = field.alignment == .right
+            field.frame = NSRect(x: isValue ? width - 100 : 0, y: y + 1, width: isValue ? 100 : 220, height: 14)
+            if !isValue { y += 18 }
+        }
+        self.batteryDetailContainer.frame = NSRect(x: 0, y: 0, width: width, height: max(ceil(y), 30))
+        self.batteryRow.detailHeight = max(ceil(y), 30)
+    }
+    
+    // MARK: - thermal pressure row
+    
+    @objc private func thermalStateChanged(_ notification: Notification) {
+        self.updateThermalRow()
+    }
+    
+    private func updateThermalRow() {
+        let state = ProcessInfo.processInfo.thermalState
+        let name = localizedString(UnifiedInfoFormatters.thermalStateName(state))
+        if self.thermalRow.valueField.stringValue != name {
+            self.thermalRow.valueField.stringValue = name
+        }
+        self.thermalRow.setStatus(level: UnifiedInfoFormatters.thermalStatusLevel(state))
+    }
     
     private func rebuildFans() {
         guard let sensors = self.sensorsList else { return }
