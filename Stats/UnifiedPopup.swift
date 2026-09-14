@@ -58,6 +58,9 @@ final class UnifiedPopupController {
     
     private var qaReadBackLogged = false
     private var qaReadBackFloor: Double = 0
+    /// The panel-toggle probe runs once per launch even though every
+    /// show() re-arms the knob block.
+    private static var qaToggleArmed = false
     
     /// Poll for the spin-up read-back after the RPM target; logs once —
     /// "(meets target)" when the speed reaches max(baseline, target/2),
@@ -419,7 +422,8 @@ final class UnifiedPopupController {
                 ))
             }
         }
-        if ProcessInfo.processInfo.environment["STATS_QA_PANEL_TOGGLE"] == "1" {
+        if ProcessInfo.processInfo.environment["STATS_QA_PANEL_TOGGLE"] == "1" && !Self.qaToggleArmed {
+            Self.qaToggleArmed = true
             // Smoke-test path: drive the toggle decision the way a real
             // status-item click does (open -> closed -> open) and log the
             // state transitions, so a wedge — e.g. isVisible stuck true
