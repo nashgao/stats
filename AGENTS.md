@@ -28,19 +28,41 @@ they exist because every one was learned from a user-visible failure.
 
 ## Fan helper — DO NOT TOUCH
 
-The helper registration is **healthy** (team 4LXUDSR683, daemon loaded,
-fans working). Never run `sfltool resetbtm`, `launchctl bootout`, or
-re-register it as an experiment. The failure modes it survived:
+The helper is an **on-demand launchd service**: `SMC/Helper/main.swift`
+exits when its connections drain, so "registered but not loaded" is the
+NORMAL healthy idle state — launchd activates it on the next XPC
+connection. Never run `sfltool resetbtm`, `launchctl bootout`, or any
+registration as an experiment. Registration happens ONLY via the
+explicit Install button (Settings → Fan control setup, or the fan
+controls' install prompt).
 
-- Stale BTM records resurrect as **zombie** launchd entries (enabled but
-  spawn-failed) — `install()` now drops zombies before registering, and
-  `daemonIsLoaded()` requires `state = running`.
+Failure modes this machinery has survived:
+
+- The 2026-09-15 dead-helper incident: the launch-time "zombie drop"
+  misclassified the healthy idle-unloaded state as broken, dropped the
+  record, and headless `register()` then failed ("Operation not
+  permitted" — daemon registration needs the user's consent). The fix:
+  `healIfNeeded()` is activation-only (one XPC round trip, no
+  register/drop); `install()` probes with a real XPC round trip first
+  and only drops a record that is genuinely broken (no launchd job, or
+  abnormal last exit — never "not loaded" alone); `checkForUpdate()` is
+  a version note only.
+- Stale BTM records (enabled disposition, no launchd entry) make
+  `register()` a silent no-op — the genuine-broken check in `install()`
+  covers exactly that case.
 - XPC reply blocks run on the **connection queue** — anything that
   touches AppKit from a helper reply must hop to the main thread first
   (see `SMCHelper.updateReachability`; the fan-settings crash was this).
 - The helper embeds its Info.plist via `-sectcreate` **without build-setting
   expansion** — `$(DEVELOPMENT_TEAM)` stays literal in the binary; that is
   expected and accepted by the contract check.
+
+⚠️ CURRENT STATE: the record is MISSING (destroyed by the incident) and
+MUST be restored by the USER clicking Install in Settings → Fan control
+setup (registration requires their consent). Do NOT attempt
+registration, `sfltool resetbtm`, `bootout`, or `launchctl bootstrap`
+from agent code — the hardened smoke test is expected to fail with the
+"helper unreachable" message until the user installs.
 
 ## Machine quirks
 

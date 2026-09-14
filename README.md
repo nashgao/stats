@@ -99,9 +99,11 @@ Scripts/check-helper-contract.sh /Applications/Stats.app
 ```
 
 Smoke-test exercises the harness end to end: unified panel opens,
-the SMC helper answers over XPC, a real fan auto→manual→auto cycle
-(`STATS_QA_FAN_CYCLE=1`) round-trips without a crash report, the app
-quits cleanly, and the helper contract holds. QA builds live under
+a genuine helper XPC round trip (version probe) plus real command
+replies for a fan auto→manual→RPM target→auto cycle
+(`STATS_QA_FAN_CYCLE=1`), a read-back anchored to the commanded target
+(auto fan drift cannot satisfy it), no crash report, clean quit, and
+the helper contract holds. QA builds live under
 `/tmp` (`-derivedDataPath /tmp/stats-build`); the installed app is
 always Release.
 
