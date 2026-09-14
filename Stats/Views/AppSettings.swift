@@ -57,13 +57,17 @@ class ApplicationSettings: NSStackView {
     
     private var updateSelector: NSPopUpButton?
     private var menuBarPresetSelector: NSPopUpButton?
-    private var startAtLoginBtn: NSSwitch?
     private var remoteControlBtn: NSSwitch?
     private var remoteUpdatesBtn: NSSwitch?
     
     private var combinedModulesView: PreferencesSection?
     private var fanHelperView: PreferencesSection?
+    private var fanSetupView: PreferencesSection?
     private var remoteView: PreferencesSection?
+    
+    private var fanSetupStatusField: NSTextField?
+    private var fanSetupInstallButton: NSButton?
+    private var opensAtLoginBtn: NSSwitch?
     
     private var updateWindow: UpdateWindow?
     private let moduleSelector: ModuleSelectorView = ModuleSelectorView()
@@ -104,10 +108,6 @@ class ApplicationSettings: NSStackView {
             items: AppUpdateIntervals,
             selected: self.updateIntervalValue
         )
-        self.startAtLoginBtn = switchView(
-            action: #selector(self.toggleLaunchAtLogin),
-            state: LaunchAtLogin.isEnabled
-        )
         
         scrollView.stackView.addArrangedSubview(PreferencesSection([
             PreferencesRow(localizedString("Menu bar preset"), component: self.menuBarPresetSelector!),
@@ -121,7 +121,6 @@ class ApplicationSettings: NSStackView {
                 action: #selector(self.toggleDock),
                 state: Store.shared.bool(key: "dockIcon", defaultValue: false)
             )),
-            PreferencesRow(localizedString("Start at login"), component: self.startAtLoginBtn!),
             PreferencesRow(localizedString("Keep the menubar items position"), component: switchView(
                 action: #selector(self.toggleMenuBarPosition),
                 state: self.keepMenuBarPosition
@@ -135,6 +134,29 @@ class ApplicationSettings: NSStackView {
                 state: Store.shared.bool(key: AttentionNotifier.settingKey, defaultValue: true)
             ))
         ]))
+        
+        // Fused onboarding: helper health and login-item in one place,
+        // reachable long after first run. The Install button drives the
+        // existing install() flow - the registration machinery itself is
+        // untouched (it is healthy; see AGENTS.md).
+        self.fanSetupStatusField = textView("", alignment: .right)
+        self.fanSetupInstallButton = buttonView(#selector(self.installFanHelper), text: localizedString("Install"))
+        let fanHelperComponent = NSStackView()
+        fanHelperComponent.orientation = .horizontal
+        fanHelperComponent.alignment = .centerY
+        fanHelperComponent.spacing = Constants.Design.space2
+        fanHelperComponent.addArrangedSubview(self.fanSetupStatusField!)
+        fanHelperComponent.addArrangedSubview(self.fanSetupInstallButton!)
+        self.opensAtLoginBtn = switchView(
+            action: #selector(self.toggleLaunchAtLogin),
+            state: LaunchAtLogin.isEnabled
+        )
+        self.fanSetupView = PreferencesSection(title: localizedString("Fan control setup"), [
+            PreferencesRow(localizedString("Fan helper"), component: fanHelperComponent),
+            PreferencesRow(localizedString("Opens at login"), component: self.opensAtLoginBtn!)
+        ])
+        scrollView.stackView.addArrangedSubview(self.fanSetupView!)
+        self.refreshFanSetup()
         
         self.combinedModulesView = PreferencesSection([
             PreferencesRow(localizedString("Combined modules"), component: switchView(
@@ -251,7 +273,8 @@ class ApplicationSettings: NSStackView {
     }
     
     internal func viewWillAppear() {
-        self.startAtLoginBtn?.state = LaunchAtLogin.isEnabled ? .on : .off
+        self.opensAtLoginBtn?.state = LaunchAtLogin.isEnabled ? .on : .off
+        self.refreshFanSetup()
         self.remoteControlBtn?.state = SystemStats.shared.control ? .on : .off
         
         self.planField?.stringValue = SystemStats.shared.plan?.rawValue.capitalized ?? "Free"
@@ -397,6 +420,45 @@ class ApplicationSettings: NSStackView {
         Store.shared.set(key: AttentionNotifier.settingKey, value: sender.state == .on)
     }
     
+    // MARK: - fan control setup
+    
+    /// Live helper state for the fused section: text plus the install
+    /// button label, or nil when the helper is healthy and no action
+    /// is offered.
+    private func fanSetupStatus() -> (text: String, action: String?) {
+        let helper = SMCHelper.shared
+        if helper.fansControllable {
+            return (localizedString("Installed and responding"), nil)
+        }
+        if helper.requiresApproval {
+            return (localizedString("Waiting for approval in System Settings"), localizedString("Reinstall"))
+        }
+        if helper.isInstalled {
+            return (localizedString("Registered but not responding"), localizedString("Reinstall"))
+        }
+        return (localizedString("Not installed"), localizedString("Install"))
+    }
+    
+    private func refreshFanSetup() {
+        let status = self.fanSetupStatus()
+        self.fanSetupStatusField?.stringValue = status.text
+        self.fanSetupInstallButton?.title = status.action ?? ""
+        self.fanSetupInstallButton?.isHidden = status.action == nil
+    }
+    
+    @objc private func installFanHelper() {
+        self.fanSetupInstallButton?.isEnabled = false
+        SMCHelper.shared.install { [weak self] _ in
+            DispatchQueue.main.async {
+                // Reachability re-check publishes .fanHelperState, which
+                // refreshes this section through the existing observer.
+                SMCHelper.shared.refreshReachability()
+                self?.refreshFanSetup()
+                self?.fanSetupInstallButton?.isEnabled = true
+            }
+        }
+    }
+    
     @objc private func toggleCombinedModules(_ sender: NSButton) {
         self.combinedModulesState = sender.state == NSControl.StateValue.on
         self.combinedModulesView?.setRowVisibility(1, newState: self.combinedModulesState)
@@ -471,6 +533,7 @@ class ApplicationSettings: NSStackView {
             return
         }
         v.isHidden = !state
+        self.refreshFanSetup()
     }
     
     @objc private func uninstallHelper() {
