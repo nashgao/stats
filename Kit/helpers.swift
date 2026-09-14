@@ -1121,6 +1121,10 @@ public class SMCHelper {
     private var reachability: Bool = false
     private var reachabilityToken: UInt64 = 0
     private var lastReachabilityCheck: Date? = nil
+    private var reachabilityFailures: Int = 0
+    /// Consecutive failed probes required before the UI is told the
+    /// helper is unreachable. Debounces slow on-demand spawns.
+    private let reachabilityFailureThreshold = 2
     
     /// Fan commands work when the helper answers an XPC round trip. The
     /// helper is an ON-DEMAND launchd service that exits when idle, so
@@ -1145,21 +1149,43 @@ public class SMCHelper {
     /// switch between controls and the install prompt. The connection
     /// attempt IS the activation probe: no launchd-state gate, because
     /// an unloaded on-demand helper is healthy, not absent.
+    ///
+    /// Failures are debounced (`reachabilityFailureThreshold`
+    /// consecutive misses before the UI is told "broken") because the
+    /// on-demand spawn can exceed the per-probe deadline under load; a
+    /// single successful reply restores "working" immediately.
     public func refreshReachability() {
         self.reachabilityToken &+= 1
         let token = self.reachabilityToken
         self.lastReachabilityCheck = Date()
         guard self.isInstalled, let helper = self.helper(nil) else {
-            self.updateReachability(false)
+            self.registerReachabilityFailure()
             return
         }
         helper.version { [weak self] version in
             guard let self, self.reachabilityToken == token else { return }
-            self.updateReachability(!version.isEmpty)
+            if version.isEmpty {
+                self.registerReachabilityFailure()
+            } else {
+                self.reachabilityFailures = 0
+                self.updateReachability(true)
+            }
         }
-        // no answer means the daemon is not really there
+        // no answer within the deadline counts as one failure; the
+        // debounce decides whether the UI hears about it
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
             guard let self, self.reachabilityToken == token else { return }
+            self.registerReachabilityFailure()
+        }
+    }
+    
+    /// Debounced failure reporting: N consecutive failed probes before
+    /// "unreachable" is published (~10s at the 5s refresh cadence), so a
+    /// slow on-demand spawn can never flap the settings section or the
+    /// fan controls between "working" and "Install".
+    private func registerReachabilityFailure() {
+        self.reachabilityFailures += 1
+        if self.reachabilityFailures >= self.reachabilityFailureThreshold {
             self.updateReachability(false)
         }
     }
@@ -1292,11 +1318,35 @@ public class SMCHelper {
     }
     
     /// A helper record is only genuinely broken when launchd has no job
-    /// for it, or the job's last exit was abnormal (the helper itself
-    /// always exits 0 when its connections drain). "Enabled but not
-    /// loaded" with a clean last exit is the normal on-demand idle state
-    /// and must NOT be dropped.
-    private func helperEntryIsBroken() -> Bool {
+    /// for it at all, or the job reports a spawn failure. Exit codes are
+    /// deliberately ignored: launchd records signal kills as NEGATIVE
+    /// "last exit code" values (SIGKILL = -9, SIGTERM = -15), which are
+    /// part of the normal lifecycle (app-quit races, respawn
+    /// throttling), and a fresh helper killed under load must never
+    /// count as broken.
+    /// Even the two real signals can flicker transiently, so the check
+    /// must agree TWICE, ~3s apart, before a record is treated as broken
+    /// — and every decision is logged with NSLog.
+    private func helperEntryIsBroken(completion: @escaping (Bool) -> Void) {
+        self.checkHelperEntryBrokenOnce { [weak self] first in
+            guard let self else { return }
+            guard first else {
+                NSLog("[SMC] helper entry: launchd job present, no spawn failure — healthy")
+                completion(false)
+                return
+            }
+            NSLog("[SMC] helper entry: no launchd job or spawn failure detected; re-checking in 3s before treating the record as broken")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
+                guard let self else { return }
+                self.checkHelperEntryBrokenOnce { second in
+                    NSLog("[SMC] helper entry re-check: %@", second ? "still broken — confirmed" : "healthy now — treating the first reading as transient")
+                    completion(second)
+                }
+            }
+        }
+    }
+    
+    private func checkHelperEntryBrokenOnce(completion: @escaping (Bool) -> Void) {
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/bin/launchctl")
         task.arguments = ["print", "system/\(self.id)"]
@@ -1305,24 +1355,17 @@ public class SMCHelper {
         do {
             try task.run()
         } catch {
-            return true
+            completion(true)
+            return
         }
         task.waitUntilExit()
         guard task.terminationStatus == 0 else {
             // launchd has no such service: the BTM record is orphaned
-            return true
+            completion(true)
+            return
         }
         let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-        if output.contains("spawn failed") {
-            return true
-        }
-        if let marker = output.range(of: "last exit code = ") {
-            let codeText = output[marker.upperBound...].prefix(while: { $0.isNumber || $0 == "-" })
-            if let code = Int(codeText), code != 0 {
-                return true
-            }
-        }
-        return false
+        completion(output.contains("spawn failed"))
     }
     
     /// Real XPC round trip: creating the connection activates the
@@ -1353,58 +1396,67 @@ public class SMCHelper {
     /// 1. A live XPC round trip means the helper works — nothing to do.
     ///    "Enabled but not loaded" is the on-demand idle state, not a
     ///    zombie; the connection itself is the activation probe.
-    /// 2. Only a GENUINELY broken record (no launchd job, or an abnormal
-    ///    last exit) may be dropped before re-registering. A healthy-
-    ///    looking record that simply did not answer is left alone and
-    ///    reported as failed so the user can retry.
+    /// 2. Only a GENUINELY broken record (no launchd job or spawn
+    ///    failure, confirmed twice ~3s apart) may be unregistered and
+    ///    re-registered. A healthy-looking record that simply did not
+    ///    answer is left untouched — a merely-not-answering record is
+    ///    never a reason to unregister.
+    /// Every decision is logged with NSLog so the next incident is
+    /// answerable from the unified log.
     public func install(completion: @escaping (_ state: SMCHelperInstallState) -> Void) {
         if #available(macOS 13, *) {
             self.cleanupLegacyInstall()
             let service = SMAppService.daemon(plistName: self.plistName)
+            NSLog("[SMC] install requested (explicit user action)")
             self.probeHelper { live in
                 if live {
+                    NSLog("[SMC] install: helper already answers — nothing to do")
                     completion(.enabled)
                     return
                 }
-                if service.status == .enabled && !self.helperEntryIsBroken() {
-                    print("SMC helper record is present and its launchd entry looks healthy, but it did not answer; leaving the record alone")
-                    completion(.failed)
-                    return
-                }
-                print("SMC helper record is missing or broken; registering (explicit user action)")
-                try? service.unregister()
-                do {
-                    try service.register()
-                } catch {
-                    print("failed to register SMC helper daemon: \(error.localizedDescription)")
-                    if service.status == .requiresApproval {
-                        print("SMC helper requires approval in System Settings > Login Items")
-                        completion(.requiresApproval)
-                        return
-                    }
-                    print("resetting and retrying")
-                    try? service.unregister()
-                    do {
-                        try service.register()
-                    } catch {
-                        print("failed to register SMC helper daemon after reset: \(error.localizedDescription)")
-                        if service.status == .requiresApproval {
-                            print("SMC helper requires approval in System Settings > Login Items")
-                            completion(.requiresApproval)
-                            return
-                        }
+                self.helperEntryIsBroken { broken in
+                    guard broken else {
+                        NSLog("[SMC] install: record and launchd job look healthy but the helper did not answer; leaving the record untouched (retry allowed)")
                         completion(.failed)
                         return
                     }
-                }
-                switch service.status {
-                case .enabled:
-                    completion(.enabled)
-                case .requiresApproval:
-                    print("SMC helper requires approval in System Settings > Login Items")
-                    completion(.requiresApproval)
-                default:
-                    completion(.failed)
+                    NSLog("[SMC] install: record missing or confirmed broken — unregistering and re-registering")
+                    try? service.unregister()
+                    do {
+                        try service.register()
+                        NSLog("[SMC] install: register() accepted")
+                    } catch {
+                        NSLog("[SMC] install: register() failed: %@", error.localizedDescription)
+                        if service.status == .requiresApproval {
+                            NSLog("[SMC] install: approval required in System Settings → Login Items")
+                            completion(.requiresApproval)
+                            return
+                        }
+                        NSLog("[SMC] install: retrying register() once")
+                        try? service.unregister()
+                        do {
+                            try service.register()
+                            NSLog("[SMC] install: retry register() accepted")
+                        } catch {
+                            NSLog("[SMC] install: retry register() failed: %@", error.localizedDescription)
+                            if service.status == .requiresApproval {
+                                NSLog("[SMC] install: approval required in System Settings → Login Items")
+                                completion(.requiresApproval)
+                                return
+                            }
+                            completion(.failed)
+                            return
+                        }
+                    }
+                    switch service.status {
+                    case .enabled:
+                        completion(.enabled)
+                    case .requiresApproval:
+                        NSLog("[SMC] install: approval required in System Settings → Login Items")
+                        completion(.requiresApproval)
+                    default:
+                        completion(.failed)
+                    }
                 }
             }
             return
@@ -1506,6 +1558,7 @@ public class SMCHelper {
     }
     
     public func uninstall(silent: Bool = false) {
+        NSLog("[SMC] uninstall requested (user action), silent=%d", silent ? 1 : 0)
         if let count = SMC.shared.getValue("FNum") {
             for i in 0..<Int(count) {
                 self.setFanMode(i, mode: 0)
@@ -1514,8 +1567,9 @@ public class SMCHelper {
         if #available(macOS 13, *) {
             do {
                 try SMAppService.daemon(plistName: self.plistName).unregister()
+                NSLog("[SMC] daemon record unregistered")
             } catch {
-                print("failed to unregister SMC helper daemon: \(error.localizedDescription)")
+                NSLog("[SMC] failed to unregister SMC helper daemon: %@", error.localizedDescription)
             }
             self.connection?.invalidate()
             self.connection = nil
