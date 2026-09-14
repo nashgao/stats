@@ -1241,6 +1241,16 @@ public class SMCHelper {
                 return
             }
             
+            // A stale BTM record (enabled disposition but no launchd entry,
+            // e.g. left by an old install under a different team) makes smd
+            // treat register() as a no-op: silent success, no approval, no
+            // daemon. Drop the zombie first so the registration is genuine.
+            let zombie = service.status == .enabled && !self.daemonIsLoaded()
+            if zombie {
+                print("SMC helper record is stale (enabled but not loaded); dropping it before registering")
+                try? service.unregister()
+            }
+            
             do {
                 try service.register()
             } catch {
@@ -1256,6 +1266,27 @@ public class SMCHelper {
                     try service.register()
                 } catch {
                     print("failed to register SMC helper daemon after reset: \(error.localizedDescription)")
+                    if service.status == .requiresApproval {
+                        print("SMC helper requires approval in System Settings > Login Items")
+                        completion(.requiresApproval)
+                        return
+                    }
+                    completion(.failed)
+                    return
+                }
+            }
+            
+            // register() can still no-op if the zombie raced back in: the
+            // signature is enabled with no launchd entry. Re-drop and retry
+            // once, only when we started from the zombie state (a healthy
+            // registration whose daemon is still loading must not be touched).
+            if zombie && service.status == .enabled && !self.daemonIsLoaded() {
+                print("SMC helper register() no-op'd against the stale record; re-registering")
+                try? service.unregister()
+                do {
+                    try service.register()
+                } catch {
+                    print("failed to re-register SMC helper daemon after dropping the stale record: \(error.localizedDescription)")
                     if service.status == .requiresApproval {
                         print("SMC helper requires approval in System Settings > Login Items")
                         completion(.requiresApproval)
