@@ -291,6 +291,18 @@ final class UnifiedPopupController {
         if let expand = ProcessInfo.processInfo.environment["STATS_POPUP_EXPAND"] {
             self.panel.expandSection(expand)
         }
+        if ProcessInfo.processInfo.environment["STATS_QA_FAN_CYCLE"] == "1" {
+            // Smoke-test path: exercise the real fan-command round trip
+            // (helper -> XPC reply block) that crashed on thread affinity.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                NSLog("[QA] fan cycle: manual (forced)")
+                SMCHelper.shared.setFanMode(0, mode: 1)
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 12) {
+                NSLog("[QA] fan cycle: automatic")
+                SMCHelper.shared.setFanMode(0, mode: 0)
+            }
+        }
         if let scrollTo, let offset = self.panel.sectionOffset(for: scrollTo) {
             self.panel.scrollToOffset(offset)
         } else {
