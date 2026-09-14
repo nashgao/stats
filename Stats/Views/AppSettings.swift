@@ -129,6 +129,10 @@ class ApplicationSettings: NSStackView {
             PreferencesRow(localizedString("macOS widgets"), component: switchView(
                 action: #selector(self.toggleSystemWidgetsUpdatesState),
                 state: self.systemWidgetsUpdatesState
+            )),
+            PreferencesRow(localizedString("Notify on attention alerts"), component: switchView(
+                action: #selector(self.toggleAttentionAlerts),
+                state: Store.shared.bool(key: AttentionNotifier.settingKey, defaultValue: true)
             ))
         ]))
         
@@ -387,6 +391,10 @@ class ApplicationSettings: NSStackView {
         if !Store.shared.exist(key: "runAtLoginInitialized") {
             Store.shared.set(key: "runAtLoginInitialized", value: true)
         }
+    }
+    
+    @objc private func toggleAttentionAlerts(_ sender: NSButton) {
+        Store.shared.set(key: AttentionNotifier.settingKey, value: sender.state == .on)
     }
     
     @objc private func toggleCombinedModules(_ sender: NSButton) {

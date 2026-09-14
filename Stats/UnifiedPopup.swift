@@ -303,6 +303,22 @@ final class UnifiedPopupController {
                 SMCHelper.shared.setFanMode(0, mode: 0)
             }
         }
+        if ProcessInfo.processInfo.environment["STATS_QA_ALERT"] == "1" {
+            // Smoke-test path: force a deterministic attention edge so the
+            // alerter composes a notification regardless of machine state.
+            // Quiet sample first so the metric leaves the set even when the
+            // machine was already hot at launch, then a crossing sample.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
+                NotificationCenter.default.post(name: .telemetrySample, object: TelemetrySample(
+                    metric: .memory, value: 0.5, displayValue: "50%", detail: "QA"
+                ))
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+                NotificationCenter.default.post(name: .telemetrySample, object: TelemetrySample(
+                    metric: .memory, value: 0.95, displayValue: "95%", detail: "QA"
+                ))
+            }
+        }
         if let scrollTo, let offset = self.panel.sectionOffset(for: scrollTo) {
             self.panel.scrollToOffset(offset)
         } else {

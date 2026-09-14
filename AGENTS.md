@@ -66,3 +66,4 @@ re-register it as an experiment. The failure modes it survived:
 | `STATS_POPUP_EXPAND=<module>` | expand a section at open |
 | `STATS_POPUP_PERF=1` | per-tick timing signposts (`[UnifiedPerf]`) |
 | `STATS_QA_FAN_CYCLE=1` | drive a real fan auto→manual→auto via XPC (smoke test) |
+| `STATS_QA_ALERT=1` | force a synthetic RAM attention edge and log the composed notification (`[QA] alert:`) |
