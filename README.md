@@ -74,6 +74,37 @@ open -n --env STATS_SETTINGS_DESTINATION=Settings --env STATS_OPEN_PRESET_MENU=1
 
 Use a disposable `XCTestConfigurationFilePath` environment value when running captures alongside the installed app so chart storage is isolated from the live database.
 
+### Verification rig
+
+The automated checks that gate shipping. Run order: tests, release,
+smoke, perf.
+
+```bash
+# 1. Unit tests (attention thresholds, Kit, RAM) - must be green
+xcodebuild test -project Stats.xcodeproj -scheme Stats \
+  -destination 'platform=macOS' -derivedDataPath /tmp/stats-test
+
+# 2. Release: build, helper contract, de-dup Spotlight apps, install to
+#    /Applications, relaunch, smoke test. The ONLY supported install path.
+Scripts/release.sh
+
+# 3. Post-install smoke (also run standalone any time)
+Scripts/smoke-test.sh
+
+# 4. CPU guardrail on the running app (8% budget; baseline ~3.6% idle)
+Scripts/perf-check.sh
+
+# 5. Fan-helper contract (run by release.sh; standalone after plist edits)
+Scripts/check-helper-contract.sh /Applications/Stats.app
+```
+
+Smoke-test exercises the harness end to end: unified panel opens,
+the SMC helper answers over XPC, a real fan auto→manual→auto cycle
+(`STATS_QA_FAN_CYCLE=1`) round-trips without a crash report, the app
+quits cleanly, and the helper contract holds. QA builds live under
+`/tmp` (`-derivedDataPath /tmp/stats-build`); the installed app is
+always Release.
+
 ## Fan control & code signing
 
 Fan control talks to the SMC through a privileged helper (`eu.exelban.Stats.SMC.Helper`) registered via `SMAppService`. macOS only registers the helper when the app and the helper are signed by the same development team, so ad-hoc builds cannot enable fan control — the "Install fan helper" flow will fail with an unsigned-build message.
