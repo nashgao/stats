@@ -1219,17 +1219,23 @@ public class SMCHelper {
     
     // SMAppService can report `.enabled` while the daemon is missing from the system launchd domain
     // (stale background-task state), which would leave fan control silently dead.
+    // smd can also materialize a broken launchd entry from a stale BTM record:
+    // the entry exists (exit 0) but the job is spawn-failed and can never run.
+    // Health therefore requires an actually running process, not just an entry.
     private func daemonIsLoaded() -> Bool {
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/bin/launchctl")
         task.arguments = ["print", "system/eu.exelban.Stats.SMC.Helper"]
+        let pipe = Pipe()
+        task.standardOutput = pipe
         do {
             try task.run()
         } catch {
-            return true
+            return false
         }
         task.waitUntilExit()
-        return task.terminationStatus == 0
+        let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        return task.terminationStatus == 0 && output.contains("state = running")
     }
     
     public func install(completion: @escaping (_ state: SMCHelperInstallState) -> Void) {
