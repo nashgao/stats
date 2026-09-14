@@ -96,6 +96,7 @@ final class UnifiedPopupController {
         // the helper; establish the XPC connection here (idempotent, no-op
         // unless the daemon is registered and loaded).
         SMCHelper.shared.checkForUpdate()
+        SMCHelper.shared.healIfNeeded()
         NSLog("[UnifiedPopup] status item installed (unified_widget=on) helper=%d",
               SMCHelper.shared.isActive() ? 1 : 0)
     }

@@ -1165,7 +1165,22 @@ public class SMCHelper {
         DispatchQueue.main.async { [weak self] in
             guard let self, state != self.reachability else { return }
             self.reachability = state
+            if state {
+                Store.shared.set(key: "SMC.helperWorked", value: true)
+            }
             NotificationCenter.default.post(name: .fanHelperState, object: nil, userInfo: ["state": state])
+        }
+    }
+    
+    /// Launch-time self-heal (unified mode included): if the helper worked
+    /// before but is unreachable now, attempt one silent re-register through
+    /// the hardened install path. A requiresApproval outcome is honest - the
+    /// fan views surface the Install button state.
+    public func healIfNeeded() {
+        guard Store.shared.bool(key: "SMC.helperWorked", defaultValue: false) else { return }
+        guard !self.fansControllable else { return }
+        self.install { state in
+            print("SMC helper self-heal attempt finished with state: \(state)")
         }
     }
     

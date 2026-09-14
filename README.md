@@ -85,6 +85,25 @@ One-time setup for a local fork build:
 3. Build and run once from Xcode. Approve the "Stats" daemon when macOS asks (System Settings ▸ Login Items).
 4. Fan control is live from then on, including for subsequently installed local builds.
 
+### Fan helper contract — do not break
+
+- The daemon label is `eu.exelban.Stats.SMC.Helper`. Renaming it orphans every
+  installed helper (stale BTM records resurrect as zombies); never change it.
+- The app and the helper must be signed by the **same team**. The requirement
+  macros (`SMPrivilegedExecutables` in the app's Info.plist, `SMAuthorizedClients`
+  in the helper's) may carry the concrete team or `$(DEVELOPMENT_TEAM)` — anything
+  else breaks registration or the connection.
+- **Rebuilds do not re-register the helper**; only renaming, team, or plist
+  changes do. After any of those, verify before shipping:
+
+  ```bash
+  Scripts/check-helper-contract.sh /path/to/Stats.app
+  ```
+
+  The script checks same-team signing, both requirement plists, the daemon
+  label, and `codesign --verify`. Run it against the Release bundle from the
+  repo root; it exits non-zero on any violation.
+
 ## Features
 Stats is an application that allows you to monitor your macOS system.
 
