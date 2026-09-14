@@ -46,6 +46,7 @@ STATS_POPUP_CAPTURE=1 \
 STATS_POPUP_CAPTURE_PATH="$CAPTURE" \
 STATS_QA_FAN_CYCLE=1 \
 STATS_QA_ALERT=1 \
+STATS_QA_PANEL_TOGGLE=1 \
 ./Stats >"$QA_LOG" 2>&1 &
 QA_PID=$!
 
@@ -71,6 +72,9 @@ grep -q "\[QA\] fan cycle: rpm target set" "$QA_LOG" && pass "fan rpm target sen
 grep -q "\[QA\] fan cycle: helper accepted" "$QA_LOG" && pass "helper accepted the rpm target" || fail "$HELPER_GUIDANCE"
 grep -q "\[QA\] alert:" "$QA_LOG" && pass "attention alert composed (QA log)" || fail "attention alert never composed"
 grep -q "\[Attention\]" "$QA_LOG" && pass "attention evaluator active" || fail "attention evaluator silent"
+grep -q "\[QA\] panel toggle: open effective=1 visible=1" "$QA_LOG" && pass "panel toggle: open state effective" || fail "panel toggle: open state not effective"
+grep -q "\[QA\] panel toggle: closed effective=0 visible=0" "$QA_LOG" && pass "panel toggle: click closes panel" || fail "panel toggle: click did not close the panel"
+grep -q "\[QA\] panel toggle: reopen effective=1 visible=1" "$QA_LOG" && pass "panel toggle: second click reopens" || fail "panel toggle: second click did not reopen"
 
 # --- 5. spin-up read-back vs the commanded target, then return to auto ---
 # Floor is max(baseline, target/2): auto fan drift cannot satisfy it.

@@ -89,3 +89,4 @@ from agent code — the hardened smoke test is expected to fail with the
 | `STATS_POPUP_PERF=1` | per-tick timing signposts (`[UnifiedPerf]`) |
 | `STATS_QA_FAN_CYCLE=1` | drive a real fan auto→manual→RPM target→read-back→auto via XPC (smoke test) |
 | `STATS_QA_ALERT=1` | force a synthetic RAM attention edge and log the composed notification (`[QA] alert:`) |
+| `STATS_QA_PANEL_TOGGLE=1` | drive the status-item toggle path open→closed→open and log the state transitions (`[QA] panel toggle:`) |
