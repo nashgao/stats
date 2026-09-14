@@ -59,20 +59,25 @@ done
 [ "$ALIVE" = "1" ] && pass "unified panel opened (self capture written at +${i}s)" || fail "panel capture missing"
 ps -p "$QA_PID" >/dev/null 2>&1 && pass "process alive at +${i}s" || fail "process died within ${i}s of launch"
 
-# --- 4. helper reachable, fan commands fired, alert composed ---
+# --- 4. real helper replies: version probe, mode reply, rpm acceptance ---
+# The version probe and the command replies are genuine XPC round trips —
+# without them the fan lines below would be fire-and-forget lies.
+HELPER_GUIDANCE="helper unreachable — open Stats Settings → Fan control setup → Install"
 sleep 8
-grep -q "helper active=1" "$QA_LOG" && pass "SMC helper reachable (active=1)" || fail "helper not reachable: $(grep 'helper' "$QA_LOG" | tail -1)"
-grep -q "\[QA\] fan cycle: manual" "$QA_LOG" && pass "fan command round trip (manual) completed" || fail "fan manual command never fired"
+grep -q "\[QA\] helper version reply: OK" "$QA_LOG" && pass "helper XPC round trip (version reply)" || fail "$HELPER_GUIDANCE"
+grep -q "\[QA\] fan cycle: manual" "$QA_LOG" && pass "fan mode command sent (manual)" || fail "fan manual command never fired"
+grep -q "\[QA\] fan cycle: mode reply" "$QA_LOG" && pass "fan mode reply (real XPC reply)" || fail "$HELPER_GUIDANCE"
 grep -q "\[QA\] fan cycle: rpm target set" "$QA_LOG" && pass "fan rpm target sent through the slider path" || fail "fan rpm target never sent"
-grep -q "\[QA\] fan cycle: helper accepted" "$QA_LOG" && pass "helper accepted the rpm target" || fail "helper never accepted the rpm target"
+grep -q "\[QA\] fan cycle: helper accepted" "$QA_LOG" && pass "helper accepted the rpm target" || fail "$HELPER_GUIDANCE"
 grep -q "\[QA\] alert:" "$QA_LOG" && pass "attention alert composed (QA log)" || fail "attention alert never composed"
 grep -q "\[Attention\]" "$QA_LOG" && pass "attention evaluator active" || fail "attention evaluator silent"
 
-# --- 5. spin-up read-back and return to auto (fan idles at 0 RPM;
-#        the read-back polls for spin-up until +17s, auto at +20s) ---
+# --- 5. spin-up read-back vs the commanded target, then return to auto ---
+# Floor is max(baseline, target/2): auto fan drift cannot satisfy it.
+# (Read-back poll until +17s, auto at +20s.) ---
 sleep 15
-grep -q "\[QA\] fan cycle: read-back speed .* (non-zero)" "$QA_LOG" && pass "fan speed read-back non-zero" || fail "fan speed read-back missing or zero"
-grep -q "\[QA\] fan cycle: automatic" "$QA_LOG" && pass "fan command round trip (automatic) completed" || fail "fan automatic command never fired"
+grep -q "\[QA\] fan cycle: read-back speed .* (meets target" "$QA_LOG" && pass "fan speed read-back meets target" || fail "fan read-back below target or missing — the command had no effect"
+grep -q "\[QA\] fan cycle: automatic" "$QA_LOG" && pass "fan mode command sent (automatic)" || fail "fan automatic command never fired"
 
 # --- 6. stay alive through the whole QA window ---
 sleep 5

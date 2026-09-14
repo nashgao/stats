@@ -57,20 +57,23 @@ final class UnifiedPopupController {
     }
     
     private var qaReadBackLogged = false
+    private var qaReadBackFloor: Double = 0
     
-    /// Poll for the first non-zero fan speed after the RPM target; logs
-    /// once — "(non-zero)" when the spin-up shows up in the reader data,
-    /// "(zero)" when the deadline passes without it.
+    /// Poll for the spin-up read-back after the RPM target; logs once —
+    /// "(meets target)" when the speed reaches max(baseline, target/2),
+    /// "(below target)" at the deadline otherwise. The floor anchors the
+    /// check to the commanded value so auto fan control cannot satisfy
+    /// it by drifting.
     private func qaReadBackPoll(deadline: Date) {
         guard !self.qaReadBackLogged else { return }
-        if self.qaFanSpeed > 0 {
+        if self.qaFanSpeed > 0 && self.qaFanSpeed >= self.qaReadBackFloor {
             self.qaReadBackLogged = true
-            NSLog("[QA] fan cycle: read-back speed %d RPM (non-zero)", Int(self.qaFanSpeed.rounded()))
+            NSLog("[QA] fan cycle: read-back speed %d RPM (meets target, floor %d)", Int(self.qaFanSpeed.rounded()), Int(self.qaReadBackFloor.rounded()))
             return
         }
         guard Date() < deadline else {
             self.qaReadBackLogged = true
-            NSLog("[QA] fan cycle: read-back speed 0 RPM (zero)")
+            NSLog("[QA] fan cycle: read-back speed %d RPM (below target, floor %d)", Int(self.qaFanSpeed.rounded()), Int(self.qaReadBackFloor.rounded()))
             return
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
@@ -346,10 +349,24 @@ final class UnifiedPopupController {
             // (helper -> XPC reply block) that crashed on thread affinity,
             // then the manual RPM path the slider uses. Apple-silicon fans
             // idle at 0 RPM, so the read-back polls for the spin-up
-            // instead of sampling a single instant.
+            // against a floor of max(baseline, target/2) — auto-fan drift
+            // can never satisfy it.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                // Real reachability probe: the version reply is a genuine
+                // XPC round trip (no reply = helper really is broken).
+                SMCHelper.shared.helperVersion { version in
+                    if let version {
+                        NSLog("[QA] helper version reply: OK (%@)", version)
+                    } else {
+                        NSLog("[QA] helper version reply: FAILED")
+                    }
+                }
+            }
             DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
                 NSLog("[QA] fan cycle: manual (forced)")
-                SMCHelper.shared.setFanMode(0, mode: 1)
+                SMCHelper.shared.setFanMode(0, mode: 1) { result in
+                    NSLog("[QA] fan cycle: mode reply (result=%@)", result ?? "empty")
+                }
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
                 // Manual RPM target through the same SMCHelper.setFanSpeed
@@ -360,10 +377,12 @@ final class UnifiedPopupController {
                     return
                 }
                 let target = Int(min(self.qaFanMin + 2000, self.qaFanMax).rounded())
-                NSLog("[QA] fan cycle: rpm target set (%d RPM)", target)
+                let baseline = self.qaFanSpeed
+                NSLog("[QA] fan cycle: rpm target set (%d RPM, baseline %d RPM)", target, Int(baseline.rounded()))
                 SMCHelper.shared.setFanSpeed(0, speed: target) { result in
                     NSLog("[QA] fan cycle: helper accepted rpm target (result=%@)", result ?? "empty")
                 }
+                self.qaReadBackFloor = max(baseline, Double(target) * 0.5)
                 self.qaReadBackLogged = false
                 DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
                     self.qaReadBackPoll(deadline: Date().addingTimeInterval(12))
