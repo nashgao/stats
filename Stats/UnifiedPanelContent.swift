@@ -693,6 +693,7 @@ final class UnifiedPanelContent: NSView {
     private var expandedSection: String? = nil
     private var lastVerdictKey: String = ""
     private var lastContentFrame: NSRect = .zero
+    private var lastFanAttention: Date? = nil
     
     // latest samples
     private var cpuLoad: CPU_Load?
@@ -823,9 +824,14 @@ final class UnifiedPanelContent: NSView {
         }
         y += 4
         
-        // Fan attention surfaces the controls: the Sensors row expands.
-        let fanAttention = attentions.contains(where: { $0.kind == .fan })
-        self.sensorsRow.setExpanded(self.expandedSection == "Sensors" || fanAttention)
+        // Fan attention surfaces the controls: the Sensors row expands and
+        // stays expanded through the island's resolved-note window, so a
+        // value flapping at the threshold cannot pump the panel height.
+        if attentions.contains(where: { $0.kind == .fan }) {
+            self.lastFanAttention = Date()
+        }
+        let fanSticky = self.lastFanAttention.map { Date().timeIntervalSince($0) < 6 } ?? false
+        self.sensorsRow.setExpanded(self.expandedSection == "Sensors" || fanSticky)
         
         for (index, row) in [self.diskRow, self.netRow, self.sensorsRow, self.batteryRow].enumerated() {
             row.frame = NSRect(x: margin, y: y, width: w - margin * 2, height: row.totalHeight)
@@ -1162,6 +1168,7 @@ final class UnifiedPanelContent: NSView {
     }
     
     private var fanKeys: [String] = []
+    private var fanHeights: [CGFloat] = []
     
     private func rebuildFans() {
         guard let sensors = self.sensorsList else { return }
@@ -1196,21 +1203,28 @@ final class UnifiedPanelContent: NSView {
             }
         }
         self.layoutFanContainer()
-        // FanViews size themselves after entering the hierarchy; re-stack once more.
+        // FanViews size themselves after entering the hierarchy; measure once
+        // and cache - their self-height can jitter by fractions of a point,
+        // which must not become a per-tick document height change.
         DispatchQueue.main.async { [weak self] in
-            self?.layoutFanContainer()
-            self?.relayout()
-            self?.onLayoutChange?()
+            guard let self else { return }
+            let fans = self.sensorsFansContainer.subviews.compactMap({ $0 as? FanView })
+            self.fanHeights = fans.map({ max(ceil($0.frame.height), 64) })
+            self.layoutFanContainer()
+            self.relayout()
+            self.onLayoutChange?()
         }
     }
     
     private func layoutFanContainer() {
         let width = max(self.sensorsRow.expandContainer.bounds.width, 100)
         var y: CGFloat = 0
+        var index = 0
         for case let fanView as FanView in self.sensorsFansContainer.subviews {
-            let height = max(fanView.frame.height, 64)
+            let height = index < self.fanHeights.count ? self.fanHeights[index] : max(ceil(fanView.frame.height), 64)
             fanView.frame = NSRect(x: 0, y: y, width: width, height: height)
             y += height + 6
+            index += 1
         }
         for view in self.sensorsFansContainer.subviews where view.identifier?.rawValue == "temp" {
             if view is NSTextField, let field = view as? NSTextField {
@@ -1219,7 +1233,7 @@ final class UnifiedPanelContent: NSView {
                 if !isValue { y += 18 }
             }
         }
-        let height = max(y, 30)
+        let height = max(ceil(y), 30)
         self.sensorsFansContainer.frame = NSRect(x: 0, y: 0, width: width, height: height)
         self.sensorsRow.detailHeight = height
         self.sensorsRow.expandContainer.frame = NSRect(x: 8, y: 44, width: self.sensorsRow.bounds.width - 16, height: height)

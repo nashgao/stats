@@ -79,6 +79,9 @@ final class UnifiedPopupController {
         if self.glyphTimer == nil {
             self.glyphTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
                 self?.updateGlyph()
+                if SMCHelper.shared.reachabilityRefreshDue(maxAge: 5) {
+                    SMCHelper.shared.refreshReachability()
+                }
                 if self?.panel.isVisible == true {
                     withoutImplicitAnimation {
                         self?.panel.refreshContent()
@@ -210,6 +213,7 @@ final class UnifiedPopupController {
         // (Re)establish the SMC helper connection when the panel opens: covers
         // the app having launched before the helper was registered/approved.
         SMCHelper.shared.checkForUpdate()
+        SMCHelper.shared.refreshReachability()
         NSLog("[UnifiedPopup] helper active=%d installed=%d signed=%d",
               SMCHelper.shared.isActive() ? 1 : 0,
               SMCHelper.shared.isInstalled ? 1 : 0,
@@ -428,7 +432,13 @@ private final class UnifiedPopupPanel: NSPanel, NSWindowDelegate {
     /// scrolling; the top edge stays put.
     func syncSize() {
         let needed = self.requiredContentSize
-        guard self.contentView?.frame.size != needed else { return }
+        let current = self.contentView?.frame.size ?? .zero
+        let heightDelta = abs(needed.height - current.height)
+        guard needed.width != current.width || heightDelta >= 1.5 else { return }
+        if UnifiedPerf.enabled {
+            UnifiedPerf.frameSet("syncResize")
+            NSLog("[UnifiedPerf] syncResize %.1f -> %.1f", current.height, needed.height)
+        }
         let top = self.frame.maxY
         self.setContentSize(needed)
         var frame = self.frame
