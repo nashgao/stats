@@ -2,13 +2,16 @@
 #
 # perf-check.sh — guardrail on the running app's CPU cost.
 #
-# Samples the running Stats (via `sample`, which reports wall-clock
-# state percentages) and asserts the running-state share stays under
-# budget. Budget: 8% — baseline measured ~3.6% at idle on the target
-# machine (M5 Max, unified panel open, helper connected); the headroom
-# covers this dev machine's heavy background load (docker, indexing,
-# agent processes). This is a guardrail against regressions (poll
-# loops, per-tick layout storms), not a benchmark.
+# Samples the running Stats with `top` and asserts the per-process CPU
+# share stays under budget. Budget: 8% of one core — baseline measured
+# ~2.7% at idle on the target machine (M5 Max, Release build, helper
+# connected); the headroom covers this dev machine's heavy background
+# load (docker, indexing, agent processes). This is a guardrail against
+# regressions (poll loops, per-tick layout storms), not a benchmark.
+#
+# Note: `sample`'s "running: N% of wallclock" footer was removed in
+# recent macOS (sample Report Version 7), so this uses top's
+# per-process %CPU instead.
 #
 # Usage: Scripts/perf-check.sh [pid]   (default: the running /Applications Stats)
 # Exit non-zero on breach.
@@ -27,17 +30,16 @@ if ! ps -p "$PID" >/dev/null 2>&1; then
   exit 1
 fi
 
-OUT=/tmp/stats-sample.txt
-sample "$PID" 3 -file "$OUT" >/dev/null 2>&1 || { echo "FAIL: sample failed"; exit 1; }
-
-RUNNING=$(grep -oE "running: [0-9.]+%" "$OUT" | head -1 | grep -oE "[0-9.]+")
-if [ -z "$RUNNING" ]; then
-  echo "FAIL: could not parse running-state percentage from sample output"
+# top's first-sample %CPU is a lifetime average; later samples are
+# deltas. Take the last of three 1s samples.
+CPU=$(top -pid "$PID" -l 3 -s 1 | grep -E "^\s*$PID\s" | tail -1 | awk '{print $3}')
+if [ -z "$CPU" ]; then
+  echo "FAIL: could not parse %CPU from top output"
   exit 1
 fi
 
-echo "Stats pid $PID: running-state ${RUNNING}% of wallclock (budget ${BUDGET}%)"
-if python3 -c "exit(0 if float('$RUNNING') < $BUDGET else 1)"; then
+echo "Stats pid $PID: ${CPU}% CPU of one core (budget ${BUDGET}%)"
+if python3 -c "exit(0 if float('$CPU') < $BUDGET else 1)"; then
   echo "PASS: within budget"
 else
   echo "FAIL: over budget"

@@ -91,7 +91,7 @@ Scripts/release.sh
 # 3. Post-install smoke (also run standalone any time)
 Scripts/smoke-test.sh
 
-# 4. CPU guardrail on the running app (8% budget; baseline ~3.6% idle)
+# 4. CPU guardrail on the running app (8% budget; baseline ~2.7% idle)
 Scripts/perf-check.sh
 
 # 5. Fan-helper contract (run by release.sh; standalone after plist edits)
