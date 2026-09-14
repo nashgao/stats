@@ -1160,16 +1160,20 @@ public class SMCHelper {
     }
     
     private func updateReachability(_ state: Bool) {
-        guard state != self.reachability else { return }
-        self.reachability = state
-        NotificationCenter.default.post(name: .fanHelperState, object: nil, userInfo: ["state": state])
+        // XPC reply blocks run on the connection queue; fan views observe
+        // this notification and touch AppKit, so publish on the main thread.
+        DispatchQueue.main.async { [weak self] in
+            guard let self, state != self.reachability else { return }
+            self.reachability = state
+            NotificationCenter.default.post(name: .fanHelperState, object: nil, userInfo: ["state": state])
+        }
     }
     
     public func setFanSpeed(_ id: Int, speed: Int) {
         guard let helper = self.helper(nil) else { return }
         helper.setFanSpeed(id: id, value: speed) { result in
             if let result, !result.isEmpty {
-                NSLog("set fan speed: \(result)")
+                NSLog("%@", "set fan speed: \(result)")
             }
         }
     }
@@ -1178,7 +1182,7 @@ public class SMCHelper {
         guard let helper = self.helper(nil) else { return }
         helper.setFanMode(id: id, mode: mode) { result in
             if let result, !result.isEmpty {
-                NSLog("set fan mode: \(result)")
+                NSLog("%@", "set fan mode: \(result)")
             }
         }
     }
@@ -1206,12 +1210,14 @@ public class SMCHelper {
         helper.version { installedHelperVersion in
             guard installedHelperVersion != helperVersion else { return }
             print("new version of SMC helper is detected (\(installedHelperVersion) -> \(helperVersion)), going to update...")
-            self.uninstall(silent: true)
-            self.install { state in
-                if case .enabled = state {
-                    print("the new version of SMC helper was successfully installed")
-                } else {
-                    print("error when installing a new version of the SMC helper")
+            DispatchQueue.main.async {
+                self.uninstall(silent: true)
+                self.install { state in
+                    if case .enabled = state {
+                        print("the new version of SMC helper was successfully installed")
+                    } else {
+                        print("error when installing a new version of the SMC helper")
+                    }
                 }
             }
         }
