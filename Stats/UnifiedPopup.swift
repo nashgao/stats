@@ -73,6 +73,7 @@ final class UnifiedPopupController {
                 self?.updateGlyph()
                 if self?.panel.isVisible == true {
                     self?.panel.refreshContent()
+                    self?.panel.syncSize()
                 }
             }
         }
@@ -192,8 +193,9 @@ final class UnifiedPopupController {
     func show(origin: NSPoint, center: CGFloat = 0, scrollTo: String? = nil) {
         self.panel.refreshContent()
         
+        // document + pinned island + pinned footer
         let screenHeight = NSScreen.main?.visibleFrame.height ?? 800
-        let height = max(320, min(self.panel.contentHeight, screenHeight * 0.7))
+        let height = max(348, min(self.panel.contentHeight + self.panel.islandSpace + 28, screenHeight * 0.7))
         let width = UnifiedPopupPanel.panelWidth
         var x = origin.x - width/2 + center
         let y = origin.y - height - 3
@@ -208,7 +210,15 @@ final class UnifiedPopupController {
             }
         }
         
-        self.panel.setFrame(NSRect(x: x, y: y, width: width, height: height), display: true)
+        // size the content area directly: the frame's content rect carries
+        // hidden insets on modern macOS, so setFrame-based math undercounts
+        self.panel.setContentSize(NSSize(width: width, height: height))
+        var frame = self.panel.frame
+        frame.origin.x = x
+        frame.origin.y = y - (frame.height - height)
+        self.panel.setFrameOrigin(frame.origin)
+        self.panel.setContentSize(NSSize(width: width, height: height))
+        self.panel.refreshContent()
         if let expand = ProcessInfo.processInfo.environment["STATS_POPUP_EXPAND"] {
             self.panel.expandSection(expand)
         }
@@ -225,22 +235,71 @@ final class UnifiedPopupController {
                 self.panel.scrollToOffset(offset)
             }
         }
+        if ProcessInfo.processInfo.environment["STATS_POPUP_DEBUG_PAINT"] == "1" {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
+                self?.panel.debugFrames()
+            }
+        }
         if ProcessInfo.processInfo.environment["STATS_POPUP_CAPTURE"] == "1" {
             DispatchQueue.main.asyncAfter(deadline: .now() + 8) { [weak self] in
                 self?.panel.writeSelfCapture()
             }
         }
-        NSLog("[UnifiedPopup] shown: content %.0fpt, panel %.0fpt", self.panel.contentHeight, height)
+        NSLog("[UnifiedPopup] shown: content %.0fpt, panel %.0fpt frame=%@", self.panel.contentHeight, height, NSStringFromRect(self.panel.frame))
     }
 }
 
-private final class UnifiedPopupPanel: NSPanel {
-    static let panelWidth: CGFloat = 360
+/// Standard system popover material with the mock's 16pt radius and
+/// 1pt panel border (white 14% dark / black 7% light).
+private final class UnifiedPanelMaterialView: NSVisualEffectView {
+    override func updateLayer() {
+        super.updateLayer() // NSVisualEffectView draws the material here
+        self.effectiveAppearance.performAsCurrentDrawingAppearance {
+            self.layer?.borderColor = UnifiedTokens.panelBorder.cgColor
+        }
+    }
+}
+
+/// Manual clip container in place of NSScrollView: the panel window hugs
+/// the menu bar and AppKit applies a variable safe-area content inset to
+/// scroll views there, which no reset reliably defeats. Full control over
+/// the offset also makes harness scroll knobs exact.
+private final class UnifiedPopupScrollContainer: NSView {
+    private weak var document: NSView?
+    var offset: CGFloat = 0
     
-    private let effectView = NSVisualEffectView()
-    private let backgroundView = UnifiedPopupBackgroundView()
-    private let scrollView = NSScrollView()
-    private let content = UnifiedPanelContent(width: panelWidth - Constants.Popup.margins * 2)
+    override var isFlipped: Bool { true }
+    
+    func host(_ document: NSView) {
+        self.document = document
+        self.addSubview(document)
+    }
+    
+    var maxOffset: CGFloat {
+        max((self.document?.frame.height ?? 0) - self.bounds.height, 0)
+    }
+    
+    func scrollTo(_ value: CGFloat) {
+        self.offset = min(max(value, 0), self.maxOffset)
+        self.layoutContent()
+    }
+    
+    func layoutContent() {
+        guard let document = self.document else { return }
+        document.frame = NSRect(x: 0, y: -self.offset, width: self.bounds.width, height: document.frame.height)
+    }
+    
+    override func scrollWheel(with event: NSEvent) {
+        self.scrollTo(self.offset + event.scrollingDeltaY)
+    }
+}
+
+private final class UnifiedPopupPanel: NSPanel, NSWindowDelegate {
+    static let panelWidth: CGFloat = 380
+    
+    private let effectView = UnifiedPanelMaterialView()
+    private let scrollContainer = UnifiedPopupScrollContainer()
+    private let content = UnifiedPanelContent(width: panelWidth)
     private let footerBar = NSView()
     
     var contentHeight: CGFloat {
@@ -255,40 +314,42 @@ private final class UnifiedPopupPanel: NSPanel {
         self.level = .normal
         self.collectionBehavior = .moveToActiveSpace
         self.backgroundColor = .clear
+        // opaque + behindWindow material (the classic popup recipe): a
+        // non-opaque panel inherits the desktop safe area and the scroll
+        // view gets a variable top content inset that hides the header
+        self.isOpaque = true
         self.hasShadow = true
+        self.delegate = self
         
         let chrome = UnifiedPopupContentView(frame: NSRect(x: 0, y: 0, width: contentRect.width, height: contentRect.height))
+        if ProcessInfo.processInfo.environment["STATS_POPUP_DEBUG_PAINT"] == "1" {
+            chrome.wantsLayer = true
+            chrome.layer?.backgroundColor = NSColor.systemPurple.cgColor
+        }
         chrome.onEscape = { [weak self] in
             guard let self else { return }
             self.orderOut(nil)
         }
         self.contentView = chrome
         
-        self.effectView.material = .titlebar
+        self.effectView.material = .popover
         self.effectView.blendingMode = .behindWindow
         self.effectView.state = .active
         self.effectView.wantsLayer = true
-        self.effectView.layer?.cornerRadius = Constants.Popup.radius
+        self.effectView.layer?.cornerRadius = UnifiedTokens.panelRadius
+        self.effectView.layer?.borderWidth = 1
         self.effectView.layer?.masksToBounds = true
         self.effectView.frame = content.bounds
         self.effectView.autoresizingMask = [.width, .height]
         
-        self.backgroundView.wantsLayer = true
-        self.backgroundView.frame = self.effectView.bounds
-        self.backgroundView.autoresizingMask = [.width, .height]
-        self.effectView.addSubview(self.backgroundView)
+        self.effectView.addSubview(self.content.islandView)
         
-        self.scrollView.drawsBackground = false
-        self.scrollView.borderType = .noBorder
-        self.scrollView.hasVerticalScroller = true
-        self.scrollView.hasHorizontalScroller = false
-        self.scrollView.autohidesScrollers = true
-        self.scrollView.horizontalScrollElasticity = .none
-        self.scrollView.scrollerStyle = .overlay
-        self.scrollView.frame = NSRect(x: 0, y: 28, width: contentRect.width, height: contentRect.height - 28)
-        self.scrollView.autoresizingMask = [.width, .height]
-        self.scrollView.documentView = self.content
-        self.effectView.addSubview(self.scrollView)
+        self.scrollContainer.wantsLayer = true
+        self.scrollContainer.layer?.masksToBounds = true
+        self.scrollContainer.frame = NSRect(x: 0, y: 28, width: contentRect.width, height: contentRect.height - 28)
+        self.scrollContainer.autoresizingMask = [.width, .height]
+        self.scrollContainer.host(self.content)
+        self.effectView.addSubview(self.scrollContainer)
         
         self.footerBar.frame = NSRect(x: 0, y: 0, width: contentRect.width, height: 28)
         self.footerBar.autoresizingMask = [.width, .maxYMargin]
@@ -333,8 +394,48 @@ private final class UnifiedPopupPanel: NSPanel {
         fatalError("init(coder:) has not been implemented")
     }
     
+    var islandSpace: CGFloat { self.content.islandSpace }
+    
+    /// Total content size the panel needs: document + island + footer.
+    var requiredContentSize: NSSize {
+        NSSize(width: Self.panelWidth, height: self.content.frame.height + self.content.islandSpace + 28)
+    }
+    
+    /// Resize the window so the document, island, and footer fit without
+    /// scrolling; the top edge stays put.
+    func syncSize() {
+        let needed = self.requiredContentSize
+        guard self.contentView?.frame.size != needed else { return }
+        let top = self.frame.maxY
+        self.setContentSize(needed)
+        var frame = self.frame
+        frame.origin.y = top - frame.height
+        self.setFrameOrigin(frame.origin)
+    }
+    
+    func debugFrames() {
+        NSLog("[UnifiedPopup] window=%@ contentView=%@ effect=%@ container=%@ island=%@ islandHidden=%d",
+              NSStringFromRect(self.frame),
+              NSStringFromRect(self.contentView?.frame ?? .zero),
+              NSStringFromRect(self.effectView.frame),
+              NSStringFromRect(self.scrollContainer.frame),
+              NSStringFromRect(self.content.islandView.frame),
+              self.content.islandView.isHidden ? 1 : 0)
+    }
+    
     func refreshContent() {
+        // the window's content rect can carry system insets that autoresizing
+        // does not track; pin the material to the full content view explicitly
+        if let bounds = self.contentView?.bounds {
+            self.effectView.frame = bounds
+        }
         self.content.relayout()
+        let island = self.content.islandSpace
+        self.content.layoutIsland(width: Self.panelWidth)
+        let height = self.contentView?.frame.height ?? 0
+        self.content.islandView.frame.origin.y = height - island
+        self.scrollContainer.frame = NSRect(x: 0, y: 28, width: Self.panelWidth, height: max(height - 28 - island, 60))
+        self.scrollContainer.layoutContent()
     }
     
     func expandSection(_ module: String) {
@@ -351,15 +452,15 @@ private final class UnifiedPopupPanel: NSPanel {
     }
     
     func scrollToTop() {
-        self.content.scroll(NSPoint(x: 0, y: 0))
+        self.scrollContainer.scrollTo(0)
     }
     
     func scrollToBottom() {
-        self.content.scroll(NSPoint(x: 0, y: self.content.frame.height))
+        self.scrollContainer.scrollTo(self.content.frame.height)
     }
     
     func scrollToOffset(_ offset: Double) {
-        self.content.scroll(NSPoint(x: 0, y: offset))
+        self.scrollContainer.scrollTo(offset)
     }
     
     @objc private func openActivityMonitor() {
@@ -397,14 +498,6 @@ private extension NSView {
         for subview in self.subviews {
             subview.setNeedsDisplayRecursively()
         }
-    }
-}
-
-private final class UnifiedPopupBackgroundView: NSView {
-    override func updateLayer() {
-        self.layer?.backgroundColor = self.isDarkMode
-            ? .clear
-            : Constants.Design.surfaceElevated.cgColor
     }
 }
 
