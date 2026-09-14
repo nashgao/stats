@@ -1122,10 +1122,13 @@ public class SMCHelper {
     private var reachabilityToken: UInt64 = 0
     private var lastReachabilityCheck: Date? = nil
     
-    /// Fan commands can only work when the helper daemon is registered,
-    /// loaded, AND answers a version ping. The BTM record alone can be
-    /// stale (enabled disposition while no daemon exists), which would
-    /// render dead controls with no visible path to fix it.
+    /// Fan commands work when the helper answers an XPC round trip. The
+    /// helper is an ON-DEMAND launchd service that exits when idle, so
+    /// "registered but not loaded" is its normal healthy state — launchd
+    /// activates it on the next connection. Before any reachability check
+    /// has completed, a demonstrably running daemon is accepted as a fast
+    /// path; everything else stays false until the version ping replies
+    /// (which also triggers the on-demand activation).
     public var fansControllable: Bool {
         if self.lastReachabilityCheck == nil {
             return self.isInstalled && self.daemonIsLoaded()
@@ -1139,12 +1142,14 @@ public class SMCHelper {
     
     /// Ping the helper over XPC and cache the result; notifies
     /// `.fanHelperState` when controllability changes so fan views can
-    /// switch between controls and the install prompt.
+    /// switch between controls and the install prompt. The connection
+    /// attempt IS the activation probe: no launchd-state gate, because
+    /// an unloaded on-demand helper is healthy, not absent.
     public func refreshReachability() {
         self.reachabilityToken &+= 1
         let token = self.reachabilityToken
         self.lastReachabilityCheck = Date()
-        guard self.isInstalled, self.daemonIsLoaded(), let helper = self.helper(nil) else {
+        guard self.isInstalled, let helper = self.helper(nil) else {
             self.updateReachability(false)
             return
         }
@@ -1172,16 +1177,16 @@ public class SMCHelper {
         }
     }
     
-    /// Launch-time self-heal (unified mode included): if the helper worked
-    /// before but is unreachable now, attempt one silent re-register through
-    /// the hardened install path. A requiresApproval outcome is honest - the
-    /// fan views surface the Install button state.
+    /// Launch-time activation only: one XPC round trip, which activates
+    /// the on-demand helper through launchd. On failure the honest state
+    /// is published via `.fanHelperState` and the UI (Fan control setup,
+    /// fan controls install affordance) surfaces the Install button.
+    /// Never registers, never drops the record: registration outside an
+    /// explicit user action fails headless ("Operation not permitted")
+    /// and was the root cause of the recurring dead-helper saga.
     public func healIfNeeded() {
-        guard Store.shared.bool(key: "SMC.helperWorked", defaultValue: false) else { return }
         guard !self.fansControllable else { return }
-        self.install { state in
-            print("SMC helper self-heal attempt finished with state: \(state)")
-        }
+        self.refreshReachability()
     }
     
     /// completion is optional and additive: the UI slider path ignores it,
@@ -1199,12 +1204,34 @@ public class SMCHelper {
         }
     }
     
-    public func setFanMode(_ id: Int, mode: Int) {
-        guard let helper = self.helper(nil) else { return }
+    public func setFanMode(_ id: Int, mode: Int, completion: ((String?) -> Void)? = nil) {
+        guard let helper = self.helper(nil) else {
+            completion?(nil)
+            return
+        }
         helper.setFanMode(id: id, mode: mode) { result in
             if let result, !result.isEmpty {
                 NSLog("%@", "set fan mode: \(result)")
             }
+            completion?(result)
+        }
+    }
+    
+    /// One-shot version probe for the QA harness: the truth about a REAL
+    /// XPC round trip (on-demand activation included). nil when no reply
+    /// arrives within the deadline.
+    public func helperVersion(completion: @escaping (String?) -> Void) {
+        guard let helper = self.helper(nil) else {
+            completion(nil)
+            return
+        }
+        var replied = false
+        helper.version { version in
+            replied = true
+            completion(version.isEmpty ? nil : version)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            if !replied { completion(nil) }
         }
     }
     
@@ -1217,6 +1244,11 @@ public class SMCHelper {
         return self.connection != nil
     }
     
+    /// Version note only. Refreshing the installed helper would require
+    /// unregister + register, which must never happen outside the
+    /// explicit Install action — the launch-time auto-update was part of
+    /// the dead-helper saga (see AGENTS.md). When versions differ, the
+    /// user refreshes via Settings → Fan control setup → Install.
     public func checkForUpdate() {
         if #available(macOS 13, *) {
             self.cleanupLegacyInstall()
@@ -1226,21 +1258,12 @@ public class SMCHelper {
         let helperURL = Bundle.main.bundleURL.appendingPathComponent("Contents/Library/LaunchServices/eu.exelban.Stats.SMC.Helper")
         guard let helperBundleInfo = CFBundleCopyInfoDictionaryForURL(helperURL as CFURL) as? [String: Any],
               let helperVersion = helperBundleInfo["CFBundleShortVersionString"] as? String,
+              self.fansControllable,
               let helper = self.helper(nil) else { return }
         
         helper.version { installedHelperVersion in
             guard installedHelperVersion != helperVersion else { return }
-            print("new version of SMC helper is detected (\(installedHelperVersion) -> \(helperVersion)), going to update...")
-            DispatchQueue.main.async {
-                self.uninstall(silent: true)
-                self.install { state in
-                    if case .enabled = state {
-                        print("the new version of SMC helper was successfully installed")
-                    } else {
-                        print("error when installing a new version of the SMC helper")
-                    }
-                }
-            }
+            print("SMC helper \(installedHelperVersion) is older than the bundled \(helperVersion); run Settings → Fan control setup → Install to refresh it")
         }
     }
     
@@ -1249,6 +1272,9 @@ public class SMCHelper {
     // smd can also materialize a broken launchd entry from a stale BTM record:
     // the entry exists (exit 0) but the job is spawn-failed and can never run.
     // Health therefore requires an actually running process, not just an entry.
+    // NOTE: this is a positive-evidence fast path only ("the daemon process
+    // demonstrably runs"). The inverse — "not running" — is NOT evidence of
+    // breakage: the helper is an on-demand service that exits when idle.
     private func daemonIsLoaded() -> Bool {
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/bin/launchctl")
@@ -1265,81 +1291,122 @@ public class SMCHelper {
         return task.terminationStatus == 0 && output.contains("state = running")
     }
     
+    /// A helper record is only genuinely broken when launchd has no job
+    /// for it, or the job's last exit was abnormal (the helper itself
+    /// always exits 0 when its connections drain). "Enabled but not
+    /// loaded" with a clean last exit is the normal on-demand idle state
+    /// and must NOT be dropped.
+    private func helperEntryIsBroken() -> Bool {
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/bin/launchctl")
+        task.arguments = ["print", "system/\(self.id)"]
+        let pipe = Pipe()
+        task.standardOutput = pipe
+        do {
+            try task.run()
+        } catch {
+            return true
+        }
+        task.waitUntilExit()
+        guard task.terminationStatus == 0 else {
+            // launchd has no such service: the BTM record is orphaned
+            return true
+        }
+        let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        if output.contains("spawn failed") {
+            return true
+        }
+        if let marker = output.range(of: "last exit code = ") {
+            let codeText = output[marker.upperBound...].prefix(while: { $0.isNumber || $0 == "-" })
+            if let code = Int(codeText), code != 0 {
+                return true
+            }
+        }
+        return false
+    }
+    
+    /// Real XPC round trip: creating the connection activates the
+    /// on-demand helper, and a non-empty version reply within the
+    /// deadline proves it actually works. This — not launchd state — is
+    /// the source of truth for "the helper works".
+    private func probeHelper(completion: @escaping (Bool) -> Void) {
+        guard let helper = self.helper(nil) else {
+            completion(false)
+            return
+        }
+        var replied = false
+        helper.version { version in
+            replied = true
+            completion(!version.isEmpty)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            if !replied { completion(false) }
+        }
+    }
+    
+    /// EXPLICIT USER ACTION ONLY (Settings → Fan control setup, or the
+    /// fan controls' install affordance). Never call headless: register()
+    /// without a user session fails with "Operation not permitted" and a
+    /// failed re-register after a drop destroys a healthy record.
+    ///
+    /// Order of operations:
+    /// 1. A live XPC round trip means the helper works — nothing to do.
+    ///    "Enabled but not loaded" is the on-demand idle state, not a
+    ///    zombie; the connection itself is the activation probe.
+    /// 2. Only a GENUINELY broken record (no launchd job, or an abnormal
+    ///    last exit) may be dropped before re-registering. A healthy-
+    ///    looking record that simply did not answer is left alone and
+    ///    reported as failed so the user can retry.
     public func install(completion: @escaping (_ state: SMCHelperInstallState) -> Void) {
         if #available(macOS 13, *) {
             self.cleanupLegacyInstall()
             let service = SMAppService.daemon(plistName: self.plistName)
-            if service.status == .enabled && self.daemonIsLoaded() {
-                completion(.enabled)
-                return
-            }
-            
-            // A stale BTM record (enabled disposition but no launchd entry,
-            // e.g. left by an old install under a different team) makes smd
-            // treat register() as a no-op: silent success, no approval, no
-            // daemon. Drop the zombie first so the registration is genuine.
-            let zombie = service.status == .enabled && !self.daemonIsLoaded()
-            if zombie {
-                print("SMC helper record is stale (enabled but not loaded); dropping it before registering")
+            self.probeHelper { live in
+                if live {
+                    completion(.enabled)
+                    return
+                }
+                if service.status == .enabled && !self.helperEntryIsBroken() {
+                    print("SMC helper record is present and its launchd entry looks healthy, but it did not answer; leaving the record alone")
+                    completion(.failed)
+                    return
+                }
+                print("SMC helper record is missing or broken; registering (explicit user action)")
                 try? service.unregister()
-            }
-            
-            do {
-                try service.register()
-            } catch {
-                print("failed to register SMC helper daemon: \(error.localizedDescription)")
-                if service.status == .requiresApproval {
+                do {
+                    try service.register()
+                } catch {
+                    print("failed to register SMC helper daemon: \(error.localizedDescription)")
+                    if service.status == .requiresApproval {
+                        print("SMC helper requires approval in System Settings > Login Items")
+                        completion(.requiresApproval)
+                        return
+                    }
+                    print("resetting and retrying")
+                    try? service.unregister()
+                    do {
+                        try service.register()
+                    } catch {
+                        print("failed to register SMC helper daemon after reset: \(error.localizedDescription)")
+                        if service.status == .requiresApproval {
+                            print("SMC helper requires approval in System Settings > Login Items")
+                            completion(.requiresApproval)
+                            return
+                        }
+                        completion(.failed)
+                        return
+                    }
+                }
+                switch service.status {
+                case .enabled:
+                    completion(.enabled)
+                case .requiresApproval:
                     print("SMC helper requires approval in System Settings > Login Items")
                     completion(.requiresApproval)
-                    return
-                }
-                print("resetting and retrying")
-                try? service.unregister()
-                do {
-                    try service.register()
-                } catch {
-                    print("failed to register SMC helper daemon after reset: \(error.localizedDescription)")
-                    if service.status == .requiresApproval {
-                        print("SMC helper requires approval in System Settings > Login Items")
-                        completion(.requiresApproval)
-                        return
-                    }
+                default:
                     completion(.failed)
-                    return
                 }
             }
-            
-            // register() can still no-op if the zombie raced back in: the
-            // signature is enabled with no launchd entry. Re-drop and retry
-            // once, only when we started from the zombie state (a healthy
-            // registration whose daemon is still loading must not be touched).
-            if zombie && service.status == .enabled && !self.daemonIsLoaded() {
-                print("SMC helper register() no-op'd against the stale record; re-registering")
-                try? service.unregister()
-                do {
-                    try service.register()
-                } catch {
-                    print("failed to re-register SMC helper daemon after dropping the stale record: \(error.localizedDescription)")
-                    if service.status == .requiresApproval {
-                        print("SMC helper requires approval in System Settings > Login Items")
-                        completion(.requiresApproval)
-                        return
-                    }
-                    completion(.failed)
-                    return
-                }
-            }
-            
-            switch service.status {
-            case .enabled:
-                completion(.enabled)
-            case .requiresApproval:
-                print("SMC helper requires approval in System Settings > Login Items")
-                completion(.requiresApproval)
-            default:
-                completion(.failed)
-            }
-            
             return
         }
         
