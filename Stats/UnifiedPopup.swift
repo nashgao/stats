@@ -114,6 +114,16 @@ final class UnifiedPopupController {
         self.panel.isVisible
     }
     
+    /// True only when the user can actually see the panel: ordered in,
+    /// not miniaturized, and on the active Space. NSWindow.isVisible
+    /// alone stays true for windows stranded on another Space (or
+    /// ordered in while occluded), which made the toggle eat every other
+    /// click — the classic "sometimes nothing happens" wedge.
+    private var isEffectivelyVisible: Bool {
+        guard self.panel.isVisible, !self.panel.isMiniaturized else { return false }
+        return self.panel.isOnActiveSpace
+    }
+    
     /// App-level menu bar item. Toggleable via the unified_widget defaults
     /// key (default: on). Coexists with the per-module widgets.
     func setupStatusItem() {
@@ -227,7 +237,7 @@ final class UnifiedPopupController {
     }
     
     private func toggleFromItem() {
-        if self.panel.isVisible {
+        if self.isEffectivelyVisible {
             self.hide()
             return
         }
@@ -283,7 +293,7 @@ final class UnifiedPopupController {
         let anchor = notification.userInfo?["module"] as? String
         let target = AttentionEvaluator.shared.primary?.module ?? anchor
         
-        if self.panel.isVisible {
+        if self.isEffectivelyVisible {
             if let target {
                 self.panel.scrollToSection(target)
             }
@@ -409,12 +419,40 @@ final class UnifiedPopupController {
                 ))
             }
         }
+        if ProcessInfo.processInfo.environment["STATS_QA_PANEL_TOGGLE"] == "1" {
+            // Smoke-test path: drive the toggle decision the way a real
+            // status-item click does (open -> closed -> open) and log the
+            // state transitions, so a wedge — e.g. isVisible stuck true
+            // while the panel is stranded or occluded — fails loudly
+            // instead of looking like a click that "does nothing".
+            DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in
+                guard let self else { return }
+                NSLog("[QA] panel toggle: open effective=%d visible=%d", self.isEffectivelyVisible ? 1 : 0, self.panel.isVisible ? 1 : 0)
+                self.toggleFromItem()
+                NSLog("[QA] panel toggle: closed effective=%d visible=%d", self.isEffectivelyVisible ? 1 : 0, self.panel.isVisible ? 1 : 0)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+                    guard let self else { return }
+                    self.toggleFromItem()
+                    NSLog("[QA] panel toggle: reopen effective=%d visible=%d", self.isEffectivelyVisible ? 1 : 0, self.panel.isVisible ? 1 : 0)
+                }
+            }
+        }
         if let scrollTo, let offset = self.panel.sectionOffset(for: scrollTo) {
             self.panel.scrollToOffset(offset)
         } else {
             self.panel.scrollToTop()
         }
-        self.panel.orderFrontRegardless()
+        // Take focus and make the panel key. Activating tears down any
+        // other app's open menu/dropdown (an accessory-policy app becoming
+        // active ends the previous app's menu tracking) and brings our
+        // window above its transient UI; makeKeyAndOrderFront additionally
+        // puts the panel in the responder chain so Escape closes it.
+        if #available(macOS 14, *) {
+            NSApp.activate()
+        } else {
+            NSApp.activate(ignoringOtherApps: true)
+        }
+        self.panel.makeKeyAndOrderFront(nil)
         if let scrollToEnv = ProcessInfo.processInfo.environment["STATS_POPUP_SCROLL_TO"] {
             if scrollToEnv == "bottom" {
                 self.panel.scrollToBottom()
