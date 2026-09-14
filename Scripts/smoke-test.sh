@@ -45,6 +45,7 @@ STATS_POPUP_MODULE=All \
 STATS_POPUP_CAPTURE=1 \
 STATS_POPUP_CAPTURE_PATH="$CAPTURE" \
 STATS_QA_FAN_CYCLE=1 \
+STATS_QA_ALERT=1 \
 ./Stats >"$QA_LOG" 2>&1 &
 QA_PID=$!
 
@@ -58,15 +59,24 @@ done
 [ "$ALIVE" = "1" ] && pass "unified panel opened (self capture written at +${i}s)" || fail "panel capture missing"
 ps -p "$QA_PID" >/dev/null 2>&1 && pass "process alive at +${i}s" || fail "process died within ${i}s of launch"
 
-# --- 4. helper reachable through the real XPC path ---
+# --- 4. helper reachable, fan commands fired, alert composed ---
 sleep 8
 grep -q "helper active=1" "$QA_LOG" && pass "SMC helper reachable (active=1)" || fail "helper not reachable: $(grep 'helper' "$QA_LOG" | tail -1)"
 grep -q "\[QA\] fan cycle: manual" "$QA_LOG" && pass "fan command round trip (manual) completed" || fail "fan manual command never fired"
+grep -q "\[QA\] fan cycle: rpm target set" "$QA_LOG" && pass "fan rpm target sent through the slider path" || fail "fan rpm target never sent"
+grep -q "\[QA\] fan cycle: helper accepted" "$QA_LOG" && pass "helper accepted the rpm target" || fail "helper never accepted the rpm target"
+grep -q "\[QA\] alert:" "$QA_LOG" && pass "attention alert composed (QA log)" || fail "attention alert never composed"
+grep -q "\[Attention\]" "$QA_LOG" && pass "attention evaluator active" || fail "attention evaluator silent"
+
+# --- 5. spin-up read-back and return to auto (fan idles at 0 RPM;
+#        the read-back polls for spin-up until +17s, auto at +20s) ---
+sleep 15
+grep -q "\[QA\] fan cycle: read-back speed .* (non-zero)" "$QA_LOG" && pass "fan speed read-back non-zero" || fail "fan speed read-back missing or zero"
 grep -q "\[QA\] fan cycle: automatic" "$QA_LOG" && pass "fan command round trip (automatic) completed" || fail "fan automatic command never fired"
 
-# --- 5. stay alive through the fan cycle window ---
-sleep 10
-ps -p "$QA_PID" >/dev/null 2>&1 && pass "process alive after fan cycle window (~25s)" || fail "process died during fan cycle"
+# --- 6. stay alive through the whole QA window ---
+sleep 5
+ps -p "$QA_PID" >/dev/null 2>&1 && pass "process alive after QA window (~28s)" || fail "process died during QA window"
 
 # --- 6. no new crash reports ---
 AFTER=$(ls -t "$DIAG" 2>/dev/null | grep '^Stats' | head -1)

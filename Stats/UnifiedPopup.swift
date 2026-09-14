@@ -17,6 +17,7 @@
 
 import Cocoa
 import Kit
+import Sensors
 
 private func withoutImplicitAnimation(_ block: () -> Void) {
     NSAnimationContext.runAnimationGroup { context in
@@ -35,6 +36,47 @@ final class UnifiedPopupController {
     private var statusItem: NSStatusItem? = nil
     private var glyphTimer: Timer?
     private var glyphState: String = ""
+    
+    /// QA fan-cycle state (STATS_QA_FAN_CYCLE=1): latest real specs and
+    /// speed of fan 0 from the sensors reader, captured off
+    /// .unifiedPanelSample so the harness can pick a mid-range RPM
+    /// target and verify the read-back without touching the UI.
+    private var qaFanMin: Double = 0
+    private var qaFanMax: Double = 0
+    private var qaFanSpeed: Double = 0
+    private var qaFanSeen: Bool = false
+    
+    @objc private func qaFanSample(_ notification: Notification) {
+        guard let list = notification.object as? Sensors_List,
+              let fan = list.sensors.compactMap({ $0 as? Fan }).first(where: { $0.id == 0 })
+        else { return }
+        self.qaFanMin = fan.minSpeed
+        self.qaFanMax = fan.maxSpeed
+        self.qaFanSpeed = fan.value
+        self.qaFanSeen = true
+    }
+    
+    private var qaReadBackLogged = false
+    
+    /// Poll for the first non-zero fan speed after the RPM target; logs
+    /// once — "(non-zero)" when the spin-up shows up in the reader data,
+    /// "(zero)" when the deadline passes without it.
+    private func qaReadBackPoll(deadline: Date) {
+        guard !self.qaReadBackLogged else { return }
+        if self.qaFanSpeed > 0 {
+            self.qaReadBackLogged = true
+            NSLog("[QA] fan cycle: read-back speed %d RPM (non-zero)", Int(self.qaFanSpeed.rounded()))
+            return
+        }
+        guard Date() < deadline else {
+            self.qaReadBackLogged = true
+            NSLog("[QA] fan cycle: read-back speed 0 RPM (zero)")
+            return
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+            self.qaReadBackPoll(deadline: deadline)
+        }
+    }
     
     private init() {
         self.panel = UnifiedPopupPanel(
@@ -55,6 +97,14 @@ final class UnifiedPopupController {
             name: .toggleUnifiedPopup,
             object: nil
         )
+        if ProcessInfo.processInfo.environment["STATS_QA_FAN_CYCLE"] == "1" {
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(self.qaFanSample(_:)),
+                name: .unifiedPanelSample,
+                object: nil
+            )
+        }
     }
     
     var isVisible: Bool {
@@ -293,12 +343,33 @@ final class UnifiedPopupController {
         }
         if ProcessInfo.processInfo.environment["STATS_QA_FAN_CYCLE"] == "1" {
             // Smoke-test path: exercise the real fan-command round trip
-            // (helper -> XPC reply block) that crashed on thread affinity.
+            // (helper -> XPC reply block) that crashed on thread affinity,
+            // then the manual RPM path the slider uses. Apple-silicon fans
+            // idle at 0 RPM, so the read-back polls for the spin-up
+            // instead of sampling a single instant.
             DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
                 NSLog("[QA] fan cycle: manual (forced)")
                 SMCHelper.shared.setFanMode(0, mode: 1)
             }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 12) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+                // Manual RPM target through the same SMCHelper.setFanSpeed
+                // path the slider uses, mid-range within the fan's real
+                // limits (clamped to min+2000 .. max).
+                guard self.qaFanSeen, self.qaFanMax > 1 else {
+                    NSLog("[QA] fan cycle: rpm target skipped (no fan specs yet)")
+                    return
+                }
+                let target = Int(min(self.qaFanMin + 2000, self.qaFanMax).rounded())
+                NSLog("[QA] fan cycle: rpm target set (%d RPM)", target)
+                SMCHelper.shared.setFanSpeed(0, speed: target) { result in
+                    NSLog("[QA] fan cycle: helper accepted rpm target (result=%@)", result ?? "empty")
+                }
+                self.qaReadBackLogged = false
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                    self.qaReadBackPoll(deadline: Date().addingTimeInterval(12))
+                }
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 20) {
                 NSLog("[QA] fan cycle: automatic")
                 SMCHelper.shared.setFanMode(0, mode: 0)
             }

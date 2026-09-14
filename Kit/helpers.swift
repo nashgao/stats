@@ -1184,12 +1184,18 @@ public class SMCHelper {
         }
     }
     
-    public func setFanSpeed(_ id: Int, speed: Int) {
-        guard let helper = self.helper(nil) else { return }
+    /// completion is optional and additive: the UI slider path ignores it,
+    /// the QA fan-cycle harness uses it to confirm the helper accepted.
+    public func setFanSpeed(_ id: Int, speed: Int, completion: ((String?) -> Void)? = nil) {
+        guard let helper = self.helper(nil) else {
+            completion?(nil)
+            return
+        }
         helper.setFanSpeed(id: id, value: speed) { result in
             if let result, !result.isEmpty {
                 NSLog("%@", "set fan speed: \(result)")
             }
+            completion?(result)
         }
     }
     
