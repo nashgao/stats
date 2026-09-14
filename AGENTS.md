@@ -41,15 +41,36 @@ Failure modes this machinery has survived:
 - The 2026-09-15 dead-helper incident: the launch-time "zombie drop"
   misclassified the healthy idle-unloaded state as broken, dropped the
   record, and headless `register()` then failed ("Operation not
-  permitted" — daemon registration needs the user's consent). The fix:
-  `healIfNeeded()` is activation-only (one XPC round trip, no
-  register/drop); `install()` probes with a real XPC round trip first
-  and only drops a record that is genuinely broken (no launchd job, or
-  abnormal last exit — never "not loaded" alone); `checkForUpdate()` is
-  a version note only.
+  permitted" — daemon registration needs the user's consent). Forensics
+  on the recurrence the same night caught the exact signature in the
+  unified log: `launchd ... removing job: caller = smd` immediately
+  followed by `registerLaunchItem: found existing item` — an unregister
+  whose re-register no-op'd against the still-existing BTM item, leaving
+  [enabled] with no launchd job ("Could not find service") and an
+  Install-prompt loop. The fix: `healIfNeeded()` is activation-only (one
+  XPC round trip, no register/drop); `install()` probes with a real XPC
+  round trip first and only unregisters a record confirmed broken (no
+  launchd job or spawn failure, checked TWICE ~3s apart — never exit
+  codes, which are negative for plain signal kills); `checkForUpdate()`
+  is a version note only. Every unregister/register decision logs with
+  NSLog under `[SMC]` so the next incident is greppable.
+- Exit-code misclassification: launchd records SIGKILL/SIGTERM as
+  negative "last exit code" (-9/-15); using `code != 0` as broken
+  evidence turned normal lifecycle kills into wrongful drops.
+- Probe flapping: the on-demand spawn can exceed the 2s probe deadline
+  under load, so reachability failures are debounced (2 consecutive
+  misses ≈10s before the UI flips to broken; one success restores
+  instantly).
+- TWO BUILDS, ONE BUNDLE ID: a /tmp Debug Stats running while the
+  installed Stats runs makes backgroundtaskmanagementd re-attribute the
+  shared BTM items back and forth (`_bundleURLForAuditToken: updating
+  item ... URL to: <other path>` in the unified log). Never run a QA
+  /tmp instance concurrently with the installed app when the helper
+  record matters; release.sh quits the installed app first for exactly
+  this reason.
 - Stale BTM records (enabled disposition, no launchd entry) make
-  `register()` a silent no-op — the genuine-broken check in `install()`
-  covers exactly that case.
+  `register()` a silent no-op — the confirmed-broken check in
+  `install()` covers exactly that case.
 - XPC reply blocks run on the **connection queue** — anything that
   touches AppKit from a helper reply must hop to the main thread first
   (see `SMCHelper.updateReachability`; the fan-settings crash was this).
