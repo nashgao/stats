@@ -1107,13 +1107,13 @@ public class SMCHelper {
     /// privileged helper — SMAppService rejects them at `register()` — so
     /// fan control silently no-ops unless the app is signed.
     public var isProperlySigned: Bool {
-        var staticCode: SecStaticCode?
-        guard SecStaticCodeCreateWithPath(Bundle.main.bundleURL as CFURL, [], &staticCode) == errSecSuccess, let staticCode else {
-            return false
-        }
-        var info: CFDictionary?
-        guard SecCodeCopySigningInformation(staticCode, [], &info) == errSecSuccess, let info else { return false }
-        return ((info as? [String: Any])?["teamid"] as? String)?.isEmpty == false
+        // SecCodeCopySigningInformation no longer surfaces the team
+        // identifier on modern macOS (no "teamid"/"cert" keys, even after
+        // successful validation), so consult codesign, which reports
+        // TeamIdentifier for any properly signed bundle and omits it for
+        // ad-hoc signatures.
+        let output = syncShell("/usr/bin/codesign -dv --verbose=2 \(Bundle.main.bundleURL.path) 2>&1")
+        return output.contains("TeamIdentifier=") && !output.contains("TeamIdentifier=not set")
     }
     
     private var connection: NSXPCConnection? = nil

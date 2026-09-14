@@ -89,7 +89,12 @@ final class UnifiedPopupController {
             }
         }
         self.updateGlyph()
-        NSLog("[UnifiedPopup] status item installed (unified_widget=on)")
+        // Unified mode hides the module widgets, so nothing else may touch
+        // the helper; establish the XPC connection here (idempotent, no-op
+        // unless the daemon is registered and loaded).
+        SMCHelper.shared.checkForUpdate()
+        NSLog("[UnifiedPopup] status item installed (unified_widget=on) helper=%d",
+              SMCHelper.shared.isActive() ? 1 : 0)
     }
     
     /// Adaptive glyph + tint, evaluated on a ~1s cadence from the shared
@@ -202,6 +207,13 @@ final class UnifiedPopupController {
     }
     
     func show(origin: NSPoint, center: CGFloat = 0, scrollTo: String? = nil) {
+        // (Re)establish the SMC helper connection when the panel opens: covers
+        // the app having launched before the helper was registered/approved.
+        SMCHelper.shared.checkForUpdate()
+        NSLog("[UnifiedPopup] helper active=%d installed=%d signed=%d",
+              SMCHelper.shared.isActive() ? 1 : 0,
+              SMCHelper.shared.isInstalled ? 1 : 0,
+              SMCHelper.shared.isProperlySigned ? 1 : 0)
         self.panel.refreshContent()
         
         // document + pinned island + pinned footer
