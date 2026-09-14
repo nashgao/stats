@@ -607,6 +607,7 @@ private final class UnifiedGrammarRow: NSView {
     }
     
     func setExpanded(_ state: Bool) {
+        guard state != self.expanded else { return }
         self.expanded = state
         self.expandContainer.isHidden = !state
         self.chevron.image = unifiedSymbol(state ? "chevron.down" : "chevron.right", scale: .small)
@@ -821,6 +822,10 @@ final class UnifiedPanelContent: NSView {
             y += hero.totalHeight + 8
         }
         y += 4
+        
+        // Fan attention surfaces the controls: the Sensors row expands.
+        let fanAttention = attentions.contains(where: { $0.kind == .fan })
+        self.sensorsRow.setExpanded(self.expandedSection == "Sensors" || fanAttention)
         
         for (index, row) in [self.diskRow, self.netRow, self.sensorsRow, self.batteryRow].enumerated() {
             row.frame = NSRect(x: margin, y: y, width: w - margin * 2, height: row.totalHeight)
