@@ -1087,14 +1087,13 @@ public class FanView: NSStackView {
         self.approvalPollTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] timer in
             elapsed += 2
             if SMCHelper.shared.isInstalled {
-                timer.invalidate()
-                self?.approvalPollTimer = nil
+                SMCHelper.shared.refreshReachability()
                 DispatchQueue.main.async {
                     self?.helperButton?.title = localizedString("Install fan helper")
                     self?.helperButton?.action = #selector(FanView.installHelper)
-                    self?.setupControls(true)
                 }
-            } else if elapsed >= 60 {
+            }
+            if elapsed >= 60 {
                 timer.invalidate()
                 self?.approvalPollTimer = nil
             }
@@ -1102,7 +1101,7 @@ public class FanView: NSStackView {
     }
     
     private func setupControls(_ isInstalled: Bool? = nil) {
-        let helperState = isInstalled ?? SMCHelper.shared.isInstalled
+        let helperState = isInstalled ?? SMCHelper.shared.fansControllable
         self.helperInstalled = helperState
         
         if !self.controlState {
@@ -1138,7 +1137,7 @@ public class FanView: NSStackView {
     }
     
     @objc private func recheckHelperState() {
-        guard SMCHelper.shared.isInstalled != self.helperInstalled else { return }
+        guard SMCHelper.shared.fansControllable != self.helperInstalled else { return }
         self.setupControls()
     }
     

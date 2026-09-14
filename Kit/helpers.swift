@@ -1118,6 +1118,53 @@ public class SMCHelper {
     
     private var connection: NSXPCConnection? = nil
     
+    private var reachability: Bool = false
+    private var reachabilityToken: UInt64 = 0
+    private var lastReachabilityCheck: Date? = nil
+    
+    /// Fan commands can only work when the helper daemon is registered,
+    /// loaded, AND answers a version ping. The BTM record alone can be
+    /// stale (enabled disposition while no daemon exists), which would
+    /// render dead controls with no visible path to fix it.
+    public var fansControllable: Bool {
+        if self.lastReachabilityCheck == nil {
+            return self.isInstalled && self.daemonIsLoaded()
+        }
+        return self.reachability
+    }
+    
+    public func reachabilityRefreshDue(maxAge: TimeInterval = 5) -> Bool {
+        self.lastReachabilityCheck.map { Date().timeIntervalSince($0) > maxAge } ?? true
+    }
+    
+    /// Ping the helper over XPC and cache the result; notifies
+    /// `.fanHelperState` when controllability changes so fan views can
+    /// switch between controls and the install prompt.
+    public func refreshReachability() {
+        self.reachabilityToken &+= 1
+        let token = self.reachabilityToken
+        self.lastReachabilityCheck = Date()
+        guard self.isInstalled, self.daemonIsLoaded(), let helper = self.helper(nil) else {
+            self.updateReachability(false)
+            return
+        }
+        helper.version { [weak self] version in
+            guard let self, self.reachabilityToken == token else { return }
+            self.updateReachability(!version.isEmpty)
+        }
+        // no answer means the daemon is not really there
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+            guard let self, self.reachabilityToken == token else { return }
+            self.updateReachability(false)
+        }
+    }
+    
+    private func updateReachability(_ state: Bool) {
+        guard state != self.reachability else { return }
+        self.reachability = state
+        NotificationCenter.default.post(name: .fanHelperState, object: nil, userInfo: ["state": state])
+    }
+    
     public func setFanSpeed(_ id: Int, speed: Int) {
         guard let helper = self.helper(nil) else { return }
         helper.setFanSpeed(id: id, value: speed) { result in
