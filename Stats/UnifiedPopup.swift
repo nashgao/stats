@@ -18,6 +18,14 @@
 import Cocoa
 import Kit
 
+private func withoutImplicitAnimation(_ block: () -> Void) {
+    NSAnimationContext.runAnimationGroup { context in
+        context.allowsImplicitAnimation = false
+        context.duration = 0
+        block()
+    }
+}
+
 final class UnifiedPopupController {
     static let shared = UnifiedPopupController()
     
@@ -72,9 +80,12 @@ final class UnifiedPopupController {
             self.glyphTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
                 self?.updateGlyph()
                 if self?.panel.isVisible == true {
-                    self?.panel.refreshContent()
-                    self?.panel.syncSize()
+                    withoutImplicitAnimation {
+                        self?.panel.refreshContent()
+                        self?.panel.syncSize()
+                    }
                 }
+                UnifiedPerf.tick()
             }
         }
         self.updateGlyph()
@@ -426,7 +437,8 @@ private final class UnifiedPopupPanel: NSPanel, NSWindowDelegate {
     func refreshContent() {
         // the window's content rect can carry system insets that autoresizing
         // does not track; pin the material to the full content view explicitly
-        if let bounds = self.contentView?.bounds {
+        if let bounds = self.contentView?.bounds, self.effectView.frame != bounds {
+            UnifiedPerf.frameSet("effect")
             self.effectView.frame = bounds
         }
         self.content.relayout()
@@ -434,7 +446,11 @@ private final class UnifiedPopupPanel: NSPanel, NSWindowDelegate {
         self.content.layoutIsland(width: Self.panelWidth)
         let height = self.contentView?.frame.height ?? 0
         self.content.islandView.frame.origin.y = height - island
-        self.scrollContainer.frame = NSRect(x: 0, y: 28, width: Self.panelWidth, height: max(height - 28 - island, 60))
+        let containerFrame = NSRect(x: 0, y: 28, width: Self.panelWidth, height: max(height - 28 - island, 60))
+        if self.scrollContainer.frame != containerFrame {
+            UnifiedPerf.frameSet("container")
+            self.scrollContainer.frame = containerFrame
+        }
         self.scrollContainer.layoutContent()
     }
     

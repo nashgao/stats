@@ -20,6 +20,41 @@ import Net
 import Sensors
 import Battery
 
+// MARK: - perf instrumentation (env STATS_POPUP_PERF=1)
+enum UnifiedPerf {
+    static let enabled = ProcessInfo.processInfo.environment["STATS_POPUP_PERF"] == "1"
+    private static var acc: [String: (ms: Double, n: Int, frames: Int)] = [:]
+    
+    static func measure(_ label: String, _ block: () -> Void) {
+        guard self.enabled else { block(); return }
+        let start = CFAbsoluteTimeGetCurrent()
+        block()
+        let ms = (CFAbsoluteTimeGetCurrent() - start) * 1000
+        var e = self.acc[label] ?? (0, 0, 0)
+        e.ms += ms
+        e.n += 1
+        self.acc[label] = e
+    }
+    
+    static func frameSet(_ label: String) {
+        guard self.enabled else { return }
+        var e = self.acc[label] ?? (0, 0, 0)
+        e.frames += 1
+        self.acc[label] = e
+    }
+    
+    static func tick() {
+        guard self.enabled, !self.acc.isEmpty else { return }
+        var line: [String] = []
+        for (key, e) in self.acc.sorted(by: { $0.key < $1.key }) where e.n > 0 || e.frames > 0 {
+            let avg = e.n > 0 ? e.ms / Double(e.n) : 0
+            line.append(String(format: "%@ avg %.2fms n=%d frameSets=%d", key, avg, e.n, e.frames))
+        }
+        self.acc = [:]
+        NSLog("[UnifiedPerf] %@", line.joined(separator: " | "))
+    }
+}
+
 // MARK: - design tokens
 //
 // Extracted from stats-unified-redesign.html (column E). Light and dark
@@ -276,13 +311,17 @@ private final class UnifiedPillRow: NSView {
             self.addSubview(view)
             self.pills.append((view, label))
         }
+        var changed = false
         for (index, text) in texts.enumerated() {
             let pill = self.pills[index]
+            guard pill.label.stringValue != text else { continue }
+            changed = true
             pill.label.stringValue = text
             pill.label.sizeToFit()
-            pill.view.frame = NSRect(x: 0, y: 0, width: pill.label.frame.width + 16, height: 18)
+            pill.view.frame = NSRect(x: 0, y: 0, width: ceil(pill.label.frame.width) + 16, height: 18)
             pill.label.frame = NSRect(x: 8, y: 4, width: pill.label.frame.width, height: 11)
         }
+        guard changed else { return }
         var x: CGFloat = 0
         for pill in self.pills {
             pill.view.frame.origin.x = x
@@ -294,6 +333,13 @@ private final class UnifiedPillRow: NSView {
 
 /// "Top processes" block: title + name/share-bar/value rows.
 private final class UnifiedTopProcesses: NSView {
+    private struct Row {
+        let name: NSTextField
+        let value: NSTextField
+        let fill: NSView
+    }
+    private var rows: [Row] = []
+    
     override var isFlipped: Bool { true }
     
     init(title: String, rows: [(name: String, share: Double, value: String)]) {
@@ -302,9 +348,9 @@ private final class UnifiedTopProcesses: NSView {
         self.addSubview(titleField)
         titleField.frame = NSRect(x: 0, y: 0, width: 240, height: 12)
         var y: CGFloat = 16
-        for row in rows {
-            let name = unifiedLabel(row.name, font: .systemFont(ofSize: 11, weight: .regular), color: .secondaryLabelColor)
-            let value = unifiedLabel(row.value, font: .monospacedDigitSystemFont(ofSize: 11, weight: .semibold), color: .labelColor, alignment: .right)
+        for _ in rows {
+            let name = unifiedLabel(font: .systemFont(ofSize: 11, weight: .regular), color: .secondaryLabelColor)
+            let value = unifiedLabel(font: .monospacedDigitSystemFont(ofSize: 11, weight: .semibold), color: .labelColor, alignment: .right)
             let track = NSView()
             let fill = NSView()
             track.wantsLayer = true
@@ -319,15 +365,42 @@ private final class UnifiedTopProcesses: NSView {
             self.addSubview(value)
             name.frame = NSRect(x: 0, y: y + 1, width: 110, height: 14)
             track.frame = NSRect(x: 114, y: y + 6, width: 130, height: 4)
-            fill.frame = NSRect(x: 114, y: y + 6, width: 130 * CGFloat(min(max(row.share, 0), 1)), height: 4)
             value.frame = NSRect(x: 248, y: y + 1, width: 76, height: 14)
+            self.rows.append(Row(name: name, value: value, fill: fill))
             y += 19
         }
         self.frame = NSRect(x: 0, y: 0, width: 324, height: y)
+        self.update(rows: rows)
     }
     
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+    
+    /// In-place per-tick refresh: no view churn when the process set is stable.
+    func update(rows: [(name: String, share: Double, value: String)]) {
+        for index in 0..<self.rows.count {
+            let view = self.rows[index]
+            guard index < rows.count else {
+                view.name.stringValue = ""
+                view.value.stringValue = ""
+                if view.fill.frame.width != 0 {
+                    view.fill.frame = NSRect(x: 114, y: view.fill.frame.origin.y, width: 0, height: 4)
+                }
+                continue
+            }
+            let row = rows[index]
+            if view.name.stringValue != row.name {
+                view.name.stringValue = row.name
+            }
+            if view.value.stringValue != row.value {
+                view.value.stringValue = row.value
+            }
+            let width = 130 * CGFloat(min(max(row.share, 0), 1))
+            if abs(view.fill.frame.width - width) > 0.5 {
+                view.fill.frame = NSRect(x: 114, y: view.fill.frame.origin.y, width: width, height: 4)
+            }
+        }
     }
 }
 
@@ -339,7 +412,7 @@ private final class UnifiedHeroCard: UnifiedCardView {
     let valueField = unifiedLabel(font: .monospacedDigitSystemFont(ofSize: 26, weight: .semibold), color: .labelColor, alignment: .right)
     let pillRow = UnifiedPillRow()
     let chevron = NSButton()
-    private var valuePercentage: Int = 0
+    private var valuePercentage: Int = -1
     private var valueInk: NSColor = .labelColor
     private let iconView = NSImageView()
     private var bulletTrack: NSView?
@@ -379,7 +452,8 @@ private final class UnifiedHeroCard: UnifiedCardView {
     }
     
     /// Big tabular number; the unit is demoted to 14pt secondary, per the mock.
-    func setValue(_ percentage: Int) {
+    func setValue(_ percentage: Int, force: Bool = false) {
+        guard force || percentage != self.valuePercentage else { return }
         self.valuePercentage = percentage
         let text = NSMutableAttributedString(string: "\(percentage)", attributes: [
             .font: NSFont.monospacedDigitSystemFont(ofSize: 26, weight: .semibold),
@@ -451,9 +525,10 @@ private final class UnifiedHeroCard: UnifiedCardView {
     
     /// Redundant encoding for attention: tint plus ink, never hue alone.
     func setStatus(level: Int) {
+        guard level != self.statusLevel else { return }
         self.statusLevel = level
         self.valueInk = level == 2 ? UnifiedTokens.redInk : (level == 1 ? UnifiedTokens.amberInk : .labelColor)
-        self.setValue(self.valuePercentage)
+        self.setValue(self.valuePercentage, force: true)
         self.updateLayer()
     }
     
@@ -555,6 +630,7 @@ private final class UnifiedGrammarRow: NSView {
     
     /// Redundant encoding for attention: tint plus glyph, never hue alone.
     func setStatus(level: Int) {
+        guard level != self.statusLevel else { return }
         self.statusLevel = level
         if level == 0 {
             self.glyphField.stringValue = "✓"
@@ -614,6 +690,8 @@ final class UnifiedPanelContent: NSView {
     private let batteryRow = UnifiedGrammarRow(module: "Battery", label: localizedString("Battery"), icon: "battery.75percent", expandable: false)
     
     private var expandedSection: String? = nil
+    private var lastVerdictKey: String = ""
+    private var lastContentFrame: NSRect = .zero
     
     // latest samples
     private var cpuLoad: CPU_Load?
@@ -701,6 +779,13 @@ final class UnifiedPanelContent: NSView {
     
     @discardableResult
     func relayout() -> CGFloat {
+        UnifiedPerf.measure("relayout") {
+            self.relayoutInner()
+        }
+        return self.frame.height
+    }
+    
+    private func relayoutInner() {
         let margin: CGFloat = UnifiedTokens.contentMargin
         let w = self.bounds.width
         let wasAtTop = self.bounds.minY < 8
@@ -717,8 +802,13 @@ final class UnifiedPanelContent: NSView {
         
         self.brandIcon.frame = NSRect(x: margin + 2, y: y + 3, width: 14, height: 14)
         self.brandLabel.frame = NSRect(x: margin + 20, y: y + 1, width: 120, height: 18)
-        self.verdictChip.level = attentions.map({ $0.level.rawValue }).max() ?? 0
-        self.verdictChip.setAttributed(Self.attributedVerdict(quiet: attentions.isEmpty))
+        let level = attentions.map({ $0.level.rawValue }).max() ?? 0
+        let verdictKey = attentions.isEmpty ? "quiet" : "alert-\(level)"
+        if verdictKey != self.lastVerdictKey {
+            self.lastVerdictKey = verdictKey
+            self.verdictChip.level = level
+            self.verdictChip.setAttributed(Self.attributedVerdict(quiet: attentions.isEmpty))
+        }
         self.verdictChip.frame.origin = NSPoint(x: w - margin - self.verdictChip.frame.width, y: y)
         y += 30
         
@@ -741,7 +831,11 @@ final class UnifiedPanelContent: NSView {
             y += row.totalHeight
         }
         y += margin
-        self.frame = NSRect(x: 0, y: 0, width: w, height: max(y, 1))
+        let newFrame = NSRect(x: 0, y: 0, width: w, height: max(y, 1))
+        if newFrame != self.frame {
+            UnifiedPerf.frameSet("content")
+            self.frame = newFrame
+        }
         if wasAtTop {
             // Inserting/removing the island grows the document and AppKit
             // shifts the bounds to keep content stable; re-assert the top
@@ -750,7 +844,6 @@ final class UnifiedPanelContent: NSView {
                 self.scroll(NSPoint(x: 0, y: 0))
             }
         }
-        return self.frame.height
     }
     
     private func toggleSection(_ module: String) {
@@ -816,8 +909,10 @@ final class UnifiedPanelContent: NSView {
         }
         self.island.isHidden = self.islandDismissed
         let level = attentions.map({ $0.level.rawValue }).max() ?? 1
-        self.island.statusLevel = level
-        self.island.layer?.borderColor = UnifiedTokens.amberBorder.cgColor
+        if self.island.statusLevel != level {
+            self.island.statusLevel = level
+            self.island.layer?.borderColor = UnifiedTokens.amberBorder.cgColor
+        }
         self.islandGlyph.stringValue = "▲"
         self.islandGlyph.textColor = level == 2 ? UnifiedTokens.redInk : UnifiedTokens.amberInk
         self.islandTitle.stringValue = attentions.first?.label ?? ""
@@ -953,7 +1048,10 @@ final class UnifiedPanelContent: NSView {
     @objc private func sample(_ notification: Notification) {
         guard let value = notification.object else { return }
         DispatchQueue.main.async { [weak self] in
-            self?.handle(value, userInfo: notification.userInfo)
+            guard let self else { return }
+            UnifiedPerf.measure("handle") {
+                self.handle(value, userInfo: notification.userInfo)
+            }
         }
     }
     
@@ -1052,13 +1150,8 @@ final class UnifiedPanelContent: NSView {
     
     private func replaceTops(_ identifier: String, title: String, rows: [(name: String, share: Double, value: String)]) {
         for hero in [self.cpuHero, self.gpuHero, self.ramHero] {
-            if let old = hero.expandContainer.findView(withIdentifier: identifier) {
-                let frame = old.frame
-                old.removeFromSuperview()
-                let tops = UnifiedTopProcesses(title: title, rows: rows)
-                tops.identifier = NSUserInterfaceItemIdentifier(identifier)
-                hero.expandContainer.addSubview(tops)
-                tops.frame = frame
+            if let tops = hero.expandContainer.findView(withIdentifier: identifier) as? UnifiedTopProcesses {
+                tops.update(rows: rows)
             }
         }
     }
