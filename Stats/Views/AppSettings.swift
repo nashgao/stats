@@ -448,12 +448,25 @@ class ApplicationSettings: NSStackView {
     
     @objc private func installFanHelper() {
         self.fanSetupInstallButton?.isEnabled = false
-        SMCHelper.shared.install { [weak self] _ in
+        SMCHelper.shared.install { [weak self] state in
             DispatchQueue.main.async {
                 // Reachability re-check publishes .fanHelperState, which
                 // refreshes this section through the existing observer.
                 SMCHelper.shared.refreshReachability()
-                self?.refreshFanSetup()
+                switch state {
+                case .enabled:
+                    self?.refreshFanSetup()
+                case .requiresApproval:
+                    // Present once; the user must flip the switch in
+                    // System Settings — no retry loop from here.
+                    self?.fanSetupStatusField?.stringValue = localizedString("Approve Stats in System Settings → Login Items")
+                    self?.fanSetupInstallButton?.title = localizedString("Reinstall")
+                    self?.fanSetupInstallButton?.isHidden = false
+                case .failed:
+                    self?.fanSetupStatusField?.stringValue = localizedString("Install did not complete — click Install to retry")
+                    self?.fanSetupInstallButton?.title = localizedString("Install")
+                    self?.fanSetupInstallButton?.isHidden = false
+                }
                 self?.fanSetupInstallButton?.isEnabled = true
             }
         }
