@@ -74,6 +74,7 @@ final class UnifiedPopupController {
         button.image = image
         button.target = self
         button.action = #selector(self.togglePanel)
+        button.sendAction(on: [.leftMouseDown, .rightMouseDown])
         button.toolTip = localizedString("Open unified popup")
         self.statusItem = item
         if self.glyphTimer == nil {
@@ -165,6 +166,14 @@ final class UnifiedPopupController {
     }
     
     @objc private func togglePanel() {
+        if NSApp.currentEvent?.type == .rightMouseDown {
+            self.showStatusMenu()
+            return
+        }
+        self.toggleFromItem()
+    }
+    
+    private func toggleFromItem() {
         if self.panel.isVisible {
             self.hide()
             return
@@ -175,6 +184,38 @@ final class UnifiedPopupController {
         
         guard let window = self.statusItem?.button?.window else { return }
         self.show(origin: window.frame.origin, center: window.frame.width/2)
+    }
+    
+    /// Right-click affordance: with a single menu bar item and no app menu,
+    /// this is the other way to reach Settings or quit.
+    private func showStatusMenu() {
+        guard let button = self.statusItem?.button else { return }
+        let menu = NSMenu()
+        
+        let open = NSMenuItem(title: localizedString("Open Stats"), action: #selector(self.menuOpen), keyEquivalent: "")
+        open.target = self
+        menu.addItem(open)
+        menu.addItem(.separator())
+        let settings = NSMenuItem(title: "\(localizedString("Settings"))…", action: #selector(self.menuSettings), keyEquivalent: "")
+        settings.target = self
+        menu.addItem(settings)
+        let quit = NSMenuItem(title: localizedString("Quit Stats"), action: #selector(self.menuQuit), keyEquivalent: "")
+        quit.target = self
+        menu.addItem(quit)
+        
+        menu.popUp(positioning: nil, at: NSPoint(x: button.bounds.minX, y: button.bounds.maxY + 2), in: button)
+    }
+    
+    @objc private func menuOpen() {
+        self.toggleFromItem()
+    }
+    
+    @objc private func menuSettings() {
+        NotificationCenter.default.post(name: .toggleSettings, object: nil, userInfo: ["module": "Dashboard"])
+    }
+    
+    @objc private func menuQuit() {
+        NSApp.terminate(nil)
     }
     
     /// Module widget click routed to the unified panel: opens it under the
@@ -409,7 +450,23 @@ private final class UnifiedPopupPanel: NSPanel, NSWindowDelegate {
         settings.target = self
         settings.action = #selector(self.openSettings)
         settings.sizeToFit()
-        settings.frame = NSRect(x: contentRect.width - 12 - settings.frame.width, y: 3, width: settings.frame.width, height: 20)
+        
+        // Quit is the destructive action and sits rightmost, red per macOS
+        // convention; it terminates the app gracefully.
+        let quit = NSButton()
+        quit.isBordered = false
+        quit.attributedTitle = NSAttributedString(string: localizedString("Quit Stats"), attributes: [
+            .font: NSFont.systemFont(ofSize: 12, weight: .medium),
+            .foregroundColor: NSColor.systemRed
+        ])
+        quit.target = self
+        quit.action = #selector(self.quitApp)
+        quit.sizeToFit()
+        quit.frame = NSRect(x: contentRect.width - 12 - quit.frame.width, y: 3, width: quit.frame.width, height: 20)
+        quit.autoresizingMask = [.minXMargin]
+        self.footerBar.addSubview(quit)
+        
+        settings.frame = NSRect(x: quit.frame.origin.x - 8 - settings.frame.width, y: 3, width: settings.frame.width, height: 20)
         settings.autoresizingMask = [.minXMargin]
         self.footerBar.addSubview(settings)
         
@@ -509,6 +566,10 @@ private final class UnifiedPopupPanel: NSPanel, NSWindowDelegate {
     
     @objc private func openSettings() {
         NotificationCenter.default.post(name: .toggleSettings, object: nil, userInfo: ["module": "Dashboard"])
+    }
+    
+    @objc private func quitApp() {
+        NSApp.terminate(nil)
     }
     
     /// Harness QA (STATS_POPUP_CAPTURE=1): renders the panel content into a
