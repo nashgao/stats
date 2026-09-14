@@ -88,9 +88,16 @@ final class AttentionEvaluator {
     }
     
     private func evaluate() -> [Attention] {
+        Self.evaluate(self.samples)
+    }
+    
+    /// Pure threshold evaluation over the latest sample per metric; kept
+    /// free of instance state so the rules are unit-testable. Priority
+    /// order: fan, temperature, memory, gpu, battery, cpu.
+    static func evaluate(_ samples: [TelemetryMetric: TelemetrySample]) -> [Attention] {
         var result: [Attention] = []
         
-        if let fan = self.samples[.fan] {
+        if let fan = samples[.fan] {
             let percentage = fan.value * 100
             let manual = (fan.secondaryValue ?? 0) > 0
             if manual || percentage >= Threshold.fanPercentage {
@@ -103,7 +110,7 @@ final class AttentionEvaluator {
             }
         }
         
-        if let temperature = self.samples[.temperature],
+        if let temperature = samples[.temperature],
            temperature.value >= Threshold.temperatureAttentionCelsius {
             result.append(Attention(
                 kind: .temperature,
@@ -113,7 +120,7 @@ final class AttentionEvaluator {
             ))
         }
         
-        if let memory = self.samples[.memory], memory.value >= Threshold.memoryAttention {
+        if let memory = samples[.memory], memory.value >= Threshold.memoryAttention {
             result.append(Attention(
                 kind: .memory,
                 module: "RAM",
@@ -122,7 +129,7 @@ final class AttentionEvaluator {
             ))
         }
         
-        if let gpu = self.samples[.gpu], gpu.value >= Threshold.gpuAttention {
+        if let gpu = samples[.gpu], gpu.value >= Threshold.gpuAttention {
             result.append(Attention(
                 kind: .gpu,
                 module: "GPU",
@@ -131,7 +138,7 @@ final class AttentionEvaluator {
             ))
         }
         
-        if let battery = self.samples[.battery],
+        if let battery = samples[.battery],
            (battery.secondaryValue ?? 1) == 0,
            abs(battery.power ?? 0) >= Threshold.batteryDrainWatts {
             result.append(Attention(
@@ -142,7 +149,7 @@ final class AttentionEvaluator {
             ))
         }
         
-        if let cpu = self.samples[.cpu], cpu.value >= Threshold.cpuAttention {
+        if let cpu = samples[.cpu], cpu.value >= Threshold.cpuAttention {
             result.append(Attention(
                 kind: .cpu,
                 module: "CPU",
