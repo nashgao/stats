@@ -52,9 +52,16 @@ rm -rf "$APP"
 ditto "$BUILT_APP" "$APP"
 
 step "Verify single Spotlight entry"
-SPOTLIGHT=$(mdfind "kMDItemCFBundleIdentifier == 'eu.exelban.Stats'" 2>/dev/null)
+# mdfind lags a few seconds behind a fresh ditto — retry before failing.
+SPOTLIGHT=""
+COUNT=0
+for attempt in 1 2 3 4 5 6; do
+  SPOTLIGHT=$(mdfind "kMDItemCFBundleIdentifier == 'eu.exelban.Stats'" 2>/dev/null)
+  COUNT=$(echo "$SPOTLIGHT" | sed '/^$/d' | wc -l | tr -d ' ')
+  if [ "$COUNT" = "1" ]; then break; fi
+  sleep 3
+done
 echo "$SPOTLIGHT"
-COUNT=$(echo "$SPOTLIGHT" | sed '/^$/d' | wc -l | tr -d ' ')
 [ "$COUNT" = "1" ] || { echo "FAIL: expected 1 Spotlight entry, got $COUNT"; exit 1; }
 echo "$SPOTLIGHT" | grep -q "^/Applications/Stats.app$" || { echo "FAIL: Spotlight entry is not /Applications/Stats.app"; exit 1; }
 
