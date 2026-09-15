@@ -613,10 +613,11 @@ final class UnifiedPopupController {
             NSApp.activate(ignoringOtherApps: true)
         }
         self.panel.makeKeyAndOrderFront(nil)
-        NSLog("[UnifiedPanelTrace] show done visible=%d key=%d active=%d",
+        NSLog("[UnifiedPanelTrace] show done visible=%d key=%d active=%d level=%d",
               self.panel.isVisible ? 1 : 0,
               self.panel.isKeyWindow ? 1 : 0,
-              NSApp.isActive ? 1 : 0)
+              NSApp.isActive ? 1 : 0,
+              self.panel.level.rawValue)
         if let scrollToEnv = ProcessInfo.processInfo.environment["STATS_POPUP_SCROLL_TO"] {
             if scrollToEnv == "bottom" {
                 self.panel.scrollToBottom()
@@ -737,7 +738,15 @@ private final class UnifiedPopupPanel: NSPanel, NSWindowDelegate {
     override init(contentRect: NSRect, styleMask: NSWindow.StyleMask, backing: NSWindow.BackingStoreType, defer flag: Bool) {
         super.init(contentRect: contentRect, styleMask: styleMask, backing: backing, defer: flag)
         
-        self.level = .normal
+        // Status-item popups live at NSStatusWindowLevel, not .normal:
+        // the opening click activates Stats and the system bounces a
+        // deactivate back (traced), and the moment Stats deactivates,
+        // other apps' regular windows restack ABOVE a .normal-level
+        // panel and bury it — the open-then-vanish flash. At .statusBar
+        // the panel floats above app windows even while Stats is
+        // inactive (same as the Wi-Fi/Battery popups). Activation on
+        // open stays: it is what dismisses another app's open dropdown.
+        self.level = .statusBar
         self.collectionBehavior = .moveToActiveSpace
         self.backgroundColor = .clear
         // NSPanel's default is true; with activation-on-open (show())
