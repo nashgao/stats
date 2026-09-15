@@ -619,24 +619,48 @@ final class UnifiedPopupController {
                 }
             }
         }
-        if ProcessInfo.processInfo.environment["STATS_QA_EXPAND"] == "1" && !Self.qaExpandArmed {
+        if let expandValue = ProcessInfo.processInfo.environment["STATS_QA_EXPAND"], expandValue != "0", !Self.qaExpandArmed {
             Self.qaExpandArmed = true
-            // Expand-phase probe: expand the Sensors section ~8s after
-            // open (the panel has live data by then, like a real manual
-            // click) and sample the heights across the next 1.2s — a
-            // two-phase expand shows up as a later height increase.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 8) { [weak self] in
-                guard let self else { return }
-                NSLog("[QA] expand: before content=%.0f panel=%.0f", self.panel.contentHeight, self.panel.frame.height)
-                self.panel.expandSection("Sensors")
-                NSLog("[QA] expand: immediate content=%.0f panel=%.0f", self.panel.contentHeight, self.panel.frame.height)
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+            // Single mode (value = module name, "1" = Sensors): the
+            // original probe with before/immediate/+0.3s/+1.2s samples.
+            // All mode: expand every expandable section in sequence
+            // (+7/+11/+15/+19s), one line per section with the panel
+            // height immediately and after 1.2s — a two-phase expand
+            // shows up as a height change.
+            let modules: [String] = expandValue == "All" ? ["CPU", "GPU", "RAM", "Sensors"] : [expandValue == "1" ? "Sensors" : expandValue]
+            if modules.count == 1 {
+                let module = modules[0]
+                DispatchQueue.main.asyncAfter(deadline: .now() + 7) { [weak self] in
                     guard let self else { return }
-                    NSLog("[QA] expand: +0.3s content=%.0f panel=%.0f", self.panel.contentHeight, self.panel.frame.height)
+                    NSLog("[QA] expand: before content=%.0f panel=%.0f", self.panel.contentHeight, self.panel.frame.height)
+                    self.panel.expandSection(module)
+                    NSLog("[QA] expand: immediate content=%.0f panel=%.0f", self.panel.contentHeight, self.panel.frame.height)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                        guard let self else { return }
+                        NSLog("[QA] expand: +0.3s content=%.0f panel=%.0f", self.panel.contentHeight, self.panel.frame.height)
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
+                        guard let self else { return }
+                        NSLog("[QA] expand: +1.2s content=%.0f panel=%.0f", self.panel.contentHeight, self.panel.frame.height)
+                    }
                 }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
-                    guard let self else { return }
-                    NSLog("[QA] expand: +1.2s content=%.0f panel=%.0f", self.panel.contentHeight, self.panel.frame.height)
+            } else {
+                for (index, module) in modules.enumerated() {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 7 + Double(index) * 4) { [weak self] in
+                        guard let self else { return }
+                        if !self.isEffectivelyVisible, let button = self.statusItem?.button?.window {
+                            self.show(origin: button.frame.origin, center: button.frame.width / 2)
+                        }
+                        let t = CFAbsoluteTimeGetCurrent()
+                        self.panel.expandSection(module)
+                        let expandMs = (CFAbsoluteTimeGetCurrent() - t) * 1000
+                        let startHeight = self.panel.frame.height
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
+                            guard let self else { return }
+                            NSLog("[QA] expand-seq: %@ latency=%.1fms panel %.0f->%.0f",
+                                  module, expandMs, startHeight, self.panel.frame.height)
+                        }
+                    }
                 }
             }
         }
