@@ -642,7 +642,25 @@ private final class UnifiedGrammarRow: NSView {
             self.addSubview(self.chevron)
             self.addSubview(self.expandContainer)
             self.expandContainer.isHidden = true
+            // The whole header row toggles the section — not just the
+            // 14pt chevron. Clicks in the detail area (fan sliders, mode
+            // buttons) and on the chevron itself are excluded.
+            let tap = NSClickGestureRecognizer(target: self, action: #selector(self.headerTapped(_:)))
+            self.addGestureRecognizer(tap)
         }
+    }
+    
+    /// QA hook: drives the exact same toggle path as a header tap.
+    func simulateHeaderTap() {
+        guard self.expandable else { return }
+        self.onToggle?()
+    }
+    
+    @objc private func headerTapped(_ recognizer: NSClickGestureRecognizer) {
+        let point = recognizer.location(in: self)
+        guard point.y <= 46 else { return }
+        guard !self.chevron.frame.contains(point) else { return }
+        self.onToggle?()
     }
     
     required init?(coder: NSCoder) {
@@ -761,6 +779,10 @@ final class UnifiedPanelContent: NSView {
     private var lastVerdictKey: String = ""
     private var lastContentFrame: NSRect = .zero
     private var lastFanAttention: Date? = nil
+    /// Set when the user explicitly collapses the Sensors section; the
+    /// fan-attention sticky must not fight an explicit collapse for the
+    /// rest of the sticky window.
+    private var sensorsUserCollapsed = false
     
     // latest samples
     private var cpuLoad: CPU_Load?
@@ -907,14 +929,24 @@ final class UnifiedPanelContent: NSView {
         }
         y += 4
         
-        // Fan attention surfaces the controls: the Sensors row expands and
-        // stays expanded through the island's resolved-note window, so a
-        // value flapping at the threshold cannot pump the panel height.
+        // Fan attention surfaces the controls: the Sensors row expands for
+        // the sticky window after a fan attention event. The sticky goes
+        // through the shared expandedSection state (never a bare
+        // setExpanded) so the header tap computes the toggle correctly,
+        // and an explicit user collapse wins for the rest of the window —
+        // otherwise a manual fan (held attention) re-opened the section
+        // every tick and the panel could never collapse.
         if attentions.contains(where: { $0.kind == .fan }) {
             self.lastFanAttention = Date()
         }
         let fanSticky = self.lastFanAttention.map { Date().timeIntervalSince($0) < 6 } ?? false
-        self.sensorsRow.setExpanded(self.expandedSection == "Sensors" || fanSticky)
+        if !fanSticky {
+            self.sensorsUserCollapsed = false
+        }
+        if fanSticky && !self.sensorsUserCollapsed && self.expandedSection == nil {
+            self.expandedSection = "Sensors"
+        }
+        self.sensorsRow.setExpanded(self.expandedSection == "Sensors")
         
         for (index, row) in [self.diskRow, self.netRow, self.sensorsRow, self.thermalRow, self.batteryRow].enumerated() {
             row.frame = NSRect(x: margin, y: y, width: w - margin * 2, height: row.totalHeight)
@@ -961,6 +993,9 @@ final class UnifiedPanelContent: NSView {
         let heightBefore = self.frame.height
         let target = self.expandedSection == module ? nil : module
         self.expandedSection = target
+        if module == "Sensors" {
+            self.sensorsUserCollapsed = target == nil
+        }
         for hero in [self.cpuHero, self.gpuHero, self.ramHero] {
             hero.setExpanded(hero.module == target)
         }
@@ -1058,6 +1093,16 @@ final class UnifiedPanelContent: NSView {
             self.toggleSection(module)
         }
     }
+    
+    /// QA hook for the header-tap path.
+    func simulateHeaderTap(_ module: String) {
+        for row in [self.sensorsRow, self.batteryRow] where row.module == module {
+            row.simulateHeaderTap()
+        }
+    }
+    
+    /// QA accessor: whether any section is expanded (collapse assertion).
+    var expandedSectionForQA: String? { self.expandedSection }
     
     /// Scroll offset so the named module's section sits near the top.
     func sectionOffset(for module: String) -> CGFloat? {
