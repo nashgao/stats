@@ -69,6 +69,9 @@ final class UnifiedPopupController {
     /// STATS_QA_EXPAND=1: drive a Sensors expand at +8s and sample the
     /// heights across the next 1.2s (two-phase expand detector).
     private static var qaExpandArmed = false
+    /// STATS_QA_ISLAND=1: force an island appearance and sample its frame
+    /// (`[QA] island:`) — island jump detector.
+    private static var qaIslandArmed = false
     
     /// Poll for the spin-up read-back after the RPM target; logs once —
     /// "(meets target)" when the speed reaches max(baseline, target/2),
@@ -649,6 +652,33 @@ final class UnifiedPopupController {
                 }
             }
         }
+        if ProcessInfo.processInfo.environment["STATS_QA_ISLAND"] == "1" && !Self.qaIslandArmed {
+            Self.qaIslandArmed = true
+            // Island one-pass probe: force an attention crossing (island
+            // appears) and sample the island frame every 0.25s. The first
+            // visible sample must already be pinned at the panel top
+            // (non-zero y) and identical to the following samples — the
+            // "appears in the wrong spot, then jumps" defect shows up as
+            // a frame change after appearance.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+                NotificationCenter.default.post(name: .telemetrySample, object: TelemetrySample(
+                    metric: .temperature, value: 80, displayValue: "80°C", detail: "QA"
+                ))
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 6) {
+                NotificationCenter.default.post(name: .telemetrySample, object: TelemetrySample(
+                    metric: .temperature, value: 94, displayValue: "94°C", detail: "QA"
+                ))
+            }
+            for step in 0..<12 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 6.5 + Double(step) * 0.25) { [weak self] in
+                    guard let self else { return }
+                    NSLog("[QA] island: sample visible=%d frame=%@",
+                          self.panel.islandIsHidden ? 0 : 1,
+                          NSStringFromRect(self.panel.islandFrame))
+                }
+            }
+        }
         if let expandValue = ProcessInfo.processInfo.environment["STATS_QA_EXPAND"], expandValue != "0", !Self.qaExpandArmed {
             Self.qaExpandArmed = true
             // Single mode (value = module name, "1" = Sensors): the
@@ -982,7 +1012,10 @@ private final class UnifiedPopupPanel: NSPanel, NSWindowDelegate {
         let needed = self.requiredContentSize
         let current = self.contentView?.frame.size ?? .zero
         let heightDelta = abs(needed.height - current.height)
-        guard needed.width != current.width || heightDelta >= 1.5 else { return }
+        guard needed.width != current.width || heightDelta >= 1.5 else {
+            self.layoutChrome()
+            return
+        }
         if UnifiedPerf.enabled {
             UnifiedPerf.frameSet("syncResize")
             NSLog("[UnifiedPerf] syncResize %.1f -> %.1f", current.height, needed.height)
@@ -992,6 +1025,11 @@ private final class UnifiedPopupPanel: NSPanel, NSWindowDelegate {
         var frame = self.frame
         frame.origin.y = top - frame.height
         self.setFrameOrigin(frame.origin)
+        // Re-pin against the FINAL height in the same pass — pinning
+        // against the pre-resize height leaves the island mis-placed for
+        // one visible frame (the "appears in the wrong spot, then jumps"
+        // defect).
+        self.layoutChrome()
     }
     
     func debugFrames() {
@@ -1012,6 +1050,15 @@ private final class UnifiedPopupPanel: NSPanel, NSWindowDelegate {
             self.effectView.frame = bounds
         }
         self.content.relayout()
+        self.layoutChrome()
+        self.scrollContainer.layoutContent()
+    }
+    
+    /// Pin the island and size the scroll container against the CURRENT
+    /// window height. Must run AFTER any window resize: pinning against a
+    /// stale height places the island wrong for one visible frame and the
+    /// correction reads as a jump.
+    func layoutChrome() {
         let island = self.content.islandSpace
         self.content.layoutIsland(width: Self.panelWidth)
         let height = self.contentView?.frame.height ?? 0
@@ -1021,8 +1068,11 @@ private final class UnifiedPopupPanel: NSPanel, NSWindowDelegate {
             UnifiedPerf.frameSet("container")
             self.scrollContainer.frame = containerFrame
         }
-        self.scrollContainer.layoutContent()
     }
+    
+    /// QA accessors for the island phase probe.
+    var islandFrame: CGRect { self.content.islandView.frame }
+    var islandIsHidden: Bool { self.content.islandView.isHidden }
     
     func expandSection(_ module: String) {
         self.content.expandSection(module)
