@@ -665,6 +665,10 @@ final class UnifiedPopupController {
                     metric: .temperature, value: 80, displayValue: "80°C", detail: "QA"
                 ))
             }
+            // The evaluator latches this synthetic crossing under
+            // STATS_QA_ISLAND (see AttentionEvaluator), so one post keeps
+            // the island visible for the whole sampling window regardless
+            // of real reader samples.
             DispatchQueue.main.asyncAfter(deadline: .now() + 6) {
                 NotificationCenter.default.post(name: .telemetrySample, object: TelemetrySample(
                     metric: .temperature, value: 94, displayValue: "94°C", detail: "QA"
