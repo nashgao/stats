@@ -59,7 +59,7 @@ for i in $(seq 1 12); do
     for pid in $PIDS; do kill -9 "$pid" 2>/dev/null || true; done
   else
     QUIET=$((QUIET + 1))
-    [ "$QUIET" -ge 2 ] && break
+    if [ "$QUIET" -ge 2 ]; then break; fi
   fi
   sleep 1
 done
