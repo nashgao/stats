@@ -343,7 +343,8 @@ private final class UnifiedPillRow: NSView {
             let view = NSView()
             view.wantsLayer = true
             view.layer?.cornerRadius = 6
-            let label = unifiedLabel(font: .systemFont(ofSize: 10, weight: .medium), color: .secondaryLabelColor)
+            // monospaced digits: live values must not reflow the pills
+            let label = unifiedLabel(font: .monospacedDigitSystemFont(ofSize: 10, weight: .medium), color: .secondaryLabelColor)
             view.addSubview(label)
             self.addSubview(view)
             self.pills.append((view, label))
@@ -1085,7 +1086,8 @@ final class UnifiedPanelContent: NSView {
         idle.identifier = NSUserInterfaceItemIdentifier("cpu.idle")
         view.addSubview(container)
         container.frame = NSRect(x: 0, y: 0, width: 324, height: 32)
-        let tops = UnifiedTopProcesses(title: localizedString("Top processes"), rows: [])
+        let tops = UnifiedTopProcesses(title: localizedString("Top processes"),
+                                       rows: [("", 0, ""), ("", 0, ""), ("", 0, ""), ("", 0, "")])
         tops.identifier = NSUserInterfaceItemIdentifier("cpu.tops")
         view.addSubview(tops)
         tops.frame = NSRect(x: 0, y: 40, width: 324, height: 132)
@@ -1124,7 +1126,8 @@ final class UnifiedPanelContent: NSView {
         app.frame = NSRect(x: 0, y: 0, width: 100, height: 32)
         wired.frame = NSRect(x: 112, y: 0, width: 100, height: 32)
         compressed.frame = NSRect(x: 224, y: 0, width: 100, height: 32)
-        let tops = UnifiedTopProcesses(title: localizedString("Top processes"), rows: [])
+        let tops = UnifiedTopProcesses(title: localizedString("Top processes"),
+                                       rows: [("", 0, ""), ("", 0, "")])
         tops.identifier = NSUserInterfaceItemIdentifier("ram.tops")
         view.addSubview(tops)
         tops.frame = NSRect(x: 0, y: 40, width: 324, height: 60)
