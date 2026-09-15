@@ -1105,15 +1105,23 @@ public class SMCHelper {
     /// True when the running app is signed by a real certificate that
     /// carries a team identifier. Ad-hoc builds can never register the
     /// privileged helper — SMAppService rejects them at `register()` — so
-    /// fan control silently no-ops unless the app is signed.
+    /// fan control silently no-ops unless the app is signed. Cached: the
+    /// answer cannot change while the process lives, and the codesign
+    /// spawn cost ~tens of ms on the panel-open path.
+    private static var properlySignedCache: Bool?
     public var isProperlySigned: Bool {
+        if let cached = Self.properlySignedCache {
+            return cached
+        }
         // SecCodeCopySigningInformation no longer surfaces the team
         // identifier on modern macOS (no "teamid"/"cert" keys, even after
         // successful validation), so consult codesign, which reports
         // TeamIdentifier for any properly signed bundle and omits it for
         // ad-hoc signatures.
         let output = syncShell("/usr/bin/codesign -dv --verbose=2 \(Bundle.main.bundleURL.path) 2>&1")
-        return output.contains("TeamIdentifier=") && !output.contains("TeamIdentifier=not set")
+        let value = output.contains("TeamIdentifier=") && !output.contains("TeamIdentifier=not set")
+        Self.properlySignedCache = value
+        return value
     }
     
     private var connection: NSXPCConnection? = nil
