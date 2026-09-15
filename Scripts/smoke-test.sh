@@ -23,14 +23,16 @@ fail() { echo "FAIL: $1"; FAILED=1; }
 echo "== smoke-test: $APP =="
 
 # --- 0. ensure a clean slate: quit any running Stats (exact PIDs only) ---
-for pid in $(pgrep -f "Stats.app/Contents/MacOS/Stats"); do kill "$pid" 2>/dev/null; done
+# -x matches the process NAME, not the cmdline — shell-launched instances
+# show as "./Stats" and a full-path pattern misses them.
+for pid in $(pgrep -x Stats); do kill "$pid" 2>/dev/null; done
 sleep 2
-REMAIN=$(pgrep -f "Stats.app/Contents/MacOS/Stats" | wc -l | tr -d ' ')
+REMAIN=$(pgrep -x Stats | wc -l | tr -d ' ')
 if [ "$REMAIN" != "0" ]; then
-  for pid in $(pgrep -f "Stats.app/Contents/MacOS/Stats"); do kill "$pid" 2>/dev/null; done
+  for pid in $(pgrep -x Stats); do kill "$pid" 2>/dev/null; done
   sleep 2
 fi
-REMAIN=$(pgrep -f "Stats.app/Contents/MacOS/Stats" | wc -l | tr -d ' ')
+REMAIN=$(pgrep -x Stats | wc -l | tr -d ' ')
 [ "$REMAIN" = "0" ] && pass "no Stats processes running" || fail "$REMAIN Stats processes still running"
 
 # --- 1. crash-report snapshot ---

@@ -15,7 +15,7 @@ they exist because every one was learned from a user-visible failure.
 
 ## Process rules
 
-- **Never `pkill`.** Kill only exact PIDs (`pgrep -f ...` then `kill <pid>`),
+- **Never `pkill`.** Kill only exact PIDs (`pgrep -x Stats` then `kill <pid>`),
   and only the QA instance you launched. The user's instance is off limits
   unless the task explicitly says to swap it.
 - **Never `defaults write` against the shared `eu.exelban.Stats` domain.**

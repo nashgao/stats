@@ -42,10 +42,15 @@ done
 [ "$REMOVED" = "1" ] || echo "no DerivedData copies found"
 
 step "Quit running Stats (exact PIDs only)"
-for pid in $(pgrep -f "Stats.app/Contents/MacOS/Stats"); do kill "$pid" 2>/dev/null || true; done
+# -x matches the process NAME regardless of how it was launched — a
+# shell-launched instance shows as "./Stats" in its cmdline and the
+# full-path pattern misses it, leaving a ghost menu bar icon.
+for pid in $(pgrep -x Stats); do kill "$pid" 2>/dev/null || true; done
 sleep 2
-for pid in $(pgrep -f "Stats.app/Contents/MacOS/Stats"); do kill "$pid" 2>/dev/null || true; done
+for pid in $(pgrep -x Stats); do kill "$pid" 2>/dev/null || true; done
 sleep 1
+REMAINING=$(pgrep -x Stats | wc -l | tr -d ' ')
+[ "$REMAINING" = "0" ] || { echo "FAIL: $REMAINING Stats processes still running: $(pgrep -x Stats | tr '\n' ' ')"; exit 1; }
 
 step "Install to $APP"
 rm -rf "$APP"
@@ -68,7 +73,7 @@ echo "$SPOTLIGHT" | grep -q "^/Applications/Stats.app$" || { echo "FAIL: Spotlig
 step "Relaunch"
 open -n "$APP"
 sleep 8
-PIDS=$(pgrep -f "Stats.app/Contents/MacOS/Stats")
+PIDS=$(pgrep -x Stats)
 COUNT=$(echo "$PIDS" | sed '/^$/d' | wc -l | tr -d ' ')
 [ "$COUNT" = "1" ] || { echo "FAIL: expected 1 running Stats, got: $PIDS"; exit 1; }
 echo "single instance: $PIDS"
