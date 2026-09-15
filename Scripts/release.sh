@@ -48,7 +48,11 @@ step "Quit running Stats (exact PIDs only)"
 for pid in $(pgrep -x Stats); do kill "$pid" 2>/dev/null || true; done
 sleep 2
 for pid in $(pgrep -x Stats); do kill "$pid" 2>/dev/null || true; done
-sleep 1
+sleep 2
+# SMAppService login items can be respawned by launchd after an
+# unexpected TERM; escalate to KILL on any survivor before failing.
+for pid in $(pgrep -x Stats); do kill -9 "$pid" 2>/dev/null || true; done
+sleep 2
 REMAINING=$(pgrep -x Stats | wc -l | tr -d ' ')
 [ "$REMAINING" = "0" ] || { echo "FAIL: $REMAINING Stats processes still running: $(pgrep -x Stats | tr '\n' ' ')"; exit 1; }
 
