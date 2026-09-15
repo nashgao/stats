@@ -546,7 +546,9 @@ private final class UnifiedHeroCard: UnifiedCardView {
         self.layer?.masksToBounds = false
         self.nameLabel.stringValue = module
         
-        self.iconView.image = unifiedSymbol(icon)
+        // macOS 12-safe fallback: newer symbols resolve nil on older
+        // systems and the hero must never show a bare label.
+        self.iconView.image = unifiedSymbol(icon) ?? unifiedSymbol("rectangle.on.rectangle")
         self.iconView.contentTintColor = .controlAccentColor
         self.addSubview(self.iconView)
         self.addSubview(self.nameLabel)
@@ -842,7 +844,7 @@ final class UnifiedPanelContent: NSView {
     private let verdictChip = UnifiedChipView()
     
     private let cpuHero = UnifiedHeroCard(module: "CPU", icon: "cpu", detailHeight: 142)
-    private let gpuHero = UnifiedHeroCard(module: "GPU", icon: "gpu.card", detailHeight: 36)
+    private let gpuHero = UnifiedHeroCard(module: "GPU", icon: "display", detailHeight: 36)
     private let ramHero = UnifiedHeroCard(module: "RAM", icon: "memorychip", detailHeight: 106)
     private let diskRow = UnifiedGrammarRow(module: "Disk", label: localizedString("Disk"), icon: "internaldrive", expandable: true)
     private let netRow = UnifiedGrammarRow(module: "Network", label: localizedString("Network"), icon: "arrow.up.arrow.down", expandable: true)
@@ -1411,6 +1413,7 @@ final class UnifiedPanelContent: NSView {
         case let ram as RAM_Usage:
             self.ramUsage = ram
             self.ramHero.setValue(Int((ram.usage * 100).rounded()))
+            self.ramHero.spark.add(ram.usage * 100)
             let used = Units(bytes: Int64(ram.used)).getReadableMemory(style: .memory)
             let total = Units(bytes: Int64(ram.total)).getReadableMemory(style: .memory)
             let swap = Units(bytes: Int64(ram.swap.used)).getReadableMemory(style: .memory)
