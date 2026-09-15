@@ -75,6 +75,7 @@ grep -q "\[Attention\]" "$QA_LOG" && pass "attention evaluator active" || fail "
 grep -q "\[QA\] panel toggle: open effective=1 visible=1" "$QA_LOG" && pass "panel toggle: open state effective" || fail "panel toggle: open state not effective"
 grep -q "\[QA\] panel toggle: closed effective=0 visible=0" "$QA_LOG" && pass "panel toggle: click closes panel" || fail "panel toggle: click did not close the panel"
 grep -q "\[QA\] panel toggle: reopen effective=1 visible=1" "$QA_LOG" && pass "panel toggle: second click reopens" || fail "panel toggle: second click did not reopen"
+grep -q "\[QA\] panel toggle: settled effective=1 visible=1" "$QA_LOG" && pass "panel stays open after opening (no flash)" || fail "panel vanished after opening — flash regression"
 
 # --- 5. spin-up read-back vs the commanded target, then return to auto ---
 # Floor is max(baseline, target/2): auto fan drift cannot satisfy it.

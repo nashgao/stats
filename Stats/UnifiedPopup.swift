@@ -103,6 +103,7 @@ final class UnifiedPopupController {
             name: .toggleUnifiedPopup,
             object: nil
         )
+        self.installOutsideClickDismissal()
         if ProcessInfo.processInfo.environment["STATS_QA_FAN_CYCLE"] == "1" {
             NotificationCenter.default.addObserver(
                 self,
@@ -111,6 +112,38 @@ final class UnifiedPopupController {
                 object: nil
             )
         }
+    }
+    
+    /// Deliberate outside-click dismissal, replacing what
+    /// hidesOnDeactivate used to provide before it had to be disabled:
+    /// any click outside the panel and outside our own status-item
+    /// button closes it. A global monitor sees clicks delivered to other
+    /// apps; a local one sees clicks inside our own windows, keeping
+    /// panel clicks (Escape/scroll) and status-item clicks (the toggle)
+    /// for their normal handlers. Both no-op unless the panel is
+    /// effectively visible, and neither fires on the transient
+    /// deactivate bounce that accompanies the opening click.
+    private var outsideClickMonitors: [Any] = []
+    
+    private func installOutsideClickDismissal() {
+        let global = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+            self?.dismissForOutsideClick(event: nil)
+        }
+        let local = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
+            self?.dismissForOutsideClick(event: event)
+            return event
+        }
+        if let global { self.outsideClickMonitors.append(global) }
+        if let local { self.outsideClickMonitors.append(local) }
+    }
+    
+    private func dismissForOutsideClick(event: NSEvent?) {
+        guard self.isEffectivelyVisible else { return }
+        if let event {
+            if event.window === self.panel { return }
+            if event.window === self.statusItem?.button?.window { return }
+        }
+        self.hide()
     }
     
     var isVisible: Bool {
@@ -438,6 +471,18 @@ final class UnifiedPopupController {
                     guard let self else { return }
                     self.toggleFromItem()
                     NSLog("[QA] panel toggle: reopen effective=%d visible=%d", self.isEffectivelyVisible ? 1 : 0, self.panel.isVisible ? 1 : 0)
+                    // The flash regression hid the panel asynchronously,
+                    // right after the open resolved; sample again once
+                    // the bounce would have landed, and once more after
+                    // 5s for the "stays open" guarantee.
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+                        guard let self else { return }
+                        NSLog("[QA] panel toggle: settled effective=%d visible=%d", self.isEffectivelyVisible ? 1 : 0, self.panel.isVisible ? 1 : 0)
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 6) { [weak self] in
+                        guard let self else { return }
+                        NSLog("[QA] panel toggle: stays effective=%d visible=%d", self.isEffectivelyVisible ? 1 : 0, self.panel.isVisible ? 1 : 0)
+                    }
                 }
             }
         }
@@ -543,6 +588,13 @@ private final class UnifiedPopupPanel: NSPanel, NSWindowDelegate {
         self.level = .normal
         self.collectionBehavior = .moveToActiveSpace
         self.backgroundColor = .clear
+        // NSPanel's default is true; with activation-on-open (show())
+        // the menu-bar click flow bounces a deactivate right after the
+        // opening click, and AppKit would order this panel out on it —
+        // the open-then-instantly-vanish flash. Outside clicks close the
+        // panel through explicit monitors in UnifiedPopupController
+        // instead, which are immune to that transient bounce.
+        self.hidesOnDeactivate = false
         // opaque + behindWindow material (the classic popup recipe): a
         // non-opaque panel inherits the desktop safe area and the scroll
         // view gets a variable top content inset that hides the header
