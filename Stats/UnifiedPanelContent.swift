@@ -459,6 +459,9 @@ private final class UnifiedHeroCard: UnifiedCardView {
     let valueField = unifiedLabel(font: .monospacedDigitSystemFont(ofSize: 26, weight: .semibold), color: .labelColor, alignment: .right)
     let pillRow = UnifiedPillRow()
     let chevron = NSButton()
+    /// Always-visible utilization chart; utilization % history at a
+    /// glance, fixed 0–100 scale like the grammar-row charts.
+    let spark = UnifiedSparklineView()
     private var valuePercentage: Int = -1
     private var valueInk: NSColor = .labelColor
     private let iconView = NSImageView()
@@ -484,7 +487,9 @@ private final class UnifiedHeroCard: UnifiedCardView {
         self.iconView.contentTintColor = .controlAccentColor
         self.addSubview(self.iconView)
         self.addSubview(self.nameLabel)
+        self.addSubview(self.spark)
         self.addSubview(self.valueField)
+        self.spark.scale = .fixed
         
         self.chevron.isBordered = false
         self.chevron.imageScaling = .scaleProportionallyDown
@@ -593,6 +598,7 @@ private final class UnifiedHeroCard: UnifiedCardView {
         self.nameLabel.frame = NSRect(x: 36, y: 13, width: 120, height: 18)
         self.valueField.frame = NSRect(x: w - 12 - 14 - 8 - 100, y: 8, width: 100, height: 30)
         self.chevron.frame = NSRect(x: w - 12 - 14, y: 15, width: 14, height: 14)
+        self.spark.frame = NSRect(x: 80, y: 10, width: max(self.valueField.frame.origin.x - 8 - 80, 40), height: 26)
         self.pillRow.frame = NSRect(x: 36, y: 42, width: w - 48, height: 18)
         self.expandContainer.frame = NSRect(x: 12, y: self.collapsedHeight - 6, width: w - 24, height: self.detailHeight)
     }
@@ -1233,6 +1239,7 @@ final class UnifiedPanelContent: NSView {
         case let load as CPU_Load:
             self.cpuLoad = load
             self.cpuHero.setValue(Int((load.totalUsage * 100).rounded()))
+            self.cpuHero.spark.add(load.totalUsage * 100)
             let loadStr = self.cpuAvg.map { "\($0.load1.rounded(toPlaces: 1)) / \($0.load5.rounded(toPlaces: 1)) / \($0.load15.rounded(toPlaces: 1))" } ?? "–"
             let freqStr = self.cpuFreqValue.map { "\(($0/1000).rounded(toPlaces: 2)) GHz" } ?? "–"
             let tempStr = self.cpuTempValue.map { "\(Int($0))°C" } ?? "–"
@@ -1267,6 +1274,7 @@ final class UnifiedPanelContent: NSView {
             self.gpuInfo = gpu
             let usage = gpu.utilization ?? 0
             self.gpuHero.setValue(Int((usage * 100).rounded()))
+            self.gpuHero.spark.add(usage * 100)
             let fps = gpu.fps.map { "\(Int($0)) FPS" } ?? "–"
             let render = gpu.renderUtilization.map { "\(Int(($0 * 100).rounded()))" } ?? "–"
             let tiler = gpu.tilerUtilization.map { "\(Int(($0 * 100).rounded()))" } ?? "–"
