@@ -615,9 +615,11 @@ private final class UnifiedGrammarRow: NSView {
     var expanded: Bool = false
     var onToggle: (() -> Void)?
     var detailHeight: CGFloat = 0
+    private let expandable: Bool
     
     init(module: String, label: String, icon: String, expandable: Bool) {
         self.module = module
+        self.expandable = expandable
         super.init(frame: .zero)
         self.wantsLayer = true
         self.layer?.cornerRadius = 8
@@ -697,7 +699,6 @@ private final class UnifiedGrammarRow: NSView {
         self.hairline.frame = NSRect(x: 0, y: 0, width: w, height: 1)
         self.iconView.frame = NSRect(x: 4, y: 15, width: 16, height: 16)
         self.nameLabel.frame = NSRect(x: 26, y: 15, width: 70, height: 16)
-        self.glyphField.frame = NSRect(x: w - 4 - 14, y: 16, width: 14, height: 14)
         self.chevron.frame = NSRect(x: w - 4 - 14, y: 16, width: 14, height: 14)
         // Value field sized to its actual text: the sparkline must end
         // before the TEXT (right-aligned), not before an arbitrary fixed
@@ -706,8 +707,23 @@ private final class UnifiedGrammarRow: NSView {
         let textWidth = (self.valueField.stringValue as NSString).size(withAttributes: [.font: self.valueField.font ?? NSFont.systemFont(ofSize: 12)]).width
         let valueWidth = max(ceil(textWidth) + 4, 44)
         self.valueField.frame = NSRect(x: w - 4 - 14 - 8 - valueWidth, y: 15, width: valueWidth, height: 16)
+        // Status glyph placement: the chevron owns the trailing slot on
+        // expandable rows, so the glyph (✓/▲) sits just LEFT of the value
+        // and only while collapsed — the two glyphs never share a slot.
+        // Non-expandable rows keep the glyph in the trailing slot.
         let sparkX: CGFloat = 100
-        let sparkEnd = self.valueField.frame.origin.x - 8
+        let sparkEnd: CGFloat
+        if self.expandable {
+            self.glyphField.isHidden = self.expanded
+            self.glyphField.frame = NSRect(x: self.valueField.frame.origin.x - 18, y: 16, width: 14, height: 14)
+            sparkEnd = self.expanded
+                ? self.valueField.frame.origin.x - 8
+                : self.glyphField.frame.origin.x - 8
+        } else {
+            self.glyphField.isHidden = false
+            self.glyphField.frame = NSRect(x: w - 4 - 14, y: 16, width: 14, height: 14)
+            sparkEnd = self.valueField.frame.origin.x - 8
+        }
         self.spark.frame = NSRect(x: sparkX, y: 9, width: max(sparkEnd - sparkX, 40), height: 28)
         self.expandContainer.frame = NSRect(x: 8, y: 50, width: w - 16, height: self.detailHeight)
     }
