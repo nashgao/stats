@@ -124,6 +124,18 @@ enum UnifiedInfoFormatters {
         }
     }
     
+    /// One-line plain-language impact per thermal state (detail row);
+    /// kept short enough for the detail value column.
+    static func thermalStateDescription(_ state: ProcessInfo.ThermalState) -> String {
+        switch state {
+        case .nominal: return "Thermals normal"
+        case .fair: return "Slightly reduced"
+        case .serious: return "Performance reduced"
+        case .critical: return "Reduce load now"
+        @unknown default: return "Thermal state unknown"
+        }
+    }
+    
     /// Grammar-row status level (0/1/2) for a thermal state. Display
     /// tint only — thermal pressure is deliberately NOT wired into the
     /// attention evaluator.
@@ -368,6 +380,57 @@ private final class UnifiedPillRow: NSView {
             x += pill.view.frame.width + 6
         }
         self.frame = NSRect(x: self.frame.origin.x, y: self.frame.origin.y, width: max(x - 6, 0), height: 18)
+    }
+}
+
+/// Design-E grammar detail block: name/value row pairs with fixed
+/// frames, shared by the expandable grammar rows (Disk, Network,
+/// Thermal, Battery). Rows beyond the live data set are hidden, never
+/// removed — the expanded height stays constant (one-pass expand).
+private final class UnifiedDetailRows: NSView {
+    private var names: [NSTextField] = []
+    private(set) var values: [NSTextField] = []
+    
+    override var isFlipped: Bool { true }
+    
+    /// Adds a row; returns the value field for per-tick updates.
+    @discardableResult
+    func addRow(_ label: String) -> NSTextField {
+        let name = unifiedLabel(label, font: .systemFont(ofSize: 11, weight: .regular), color: .secondaryLabelColor)
+        let value = unifiedLabel(font: .monospacedDigitSystemFont(ofSize: 11, weight: .semibold), color: .labelColor, alignment: .right)
+        self.addSubview(name)
+        self.addSubview(value)
+        self.names.append(name)
+        self.values.append(value)
+        return value
+    }
+    
+    /// Fixed layout; returns the content height for detailHeight sizing.
+    @discardableResult
+    func layoutRows(width: CGFloat) -> CGFloat {
+        var y: CGFloat = 0
+        for index in 0..<self.names.count {
+            self.names[index].frame = NSRect(x: 0, y: y + 1, width: 180, height: 14)
+            self.values[index].frame = NSRect(x: width - 150, y: y + 1, width: 150, height: 14)
+            y += 18
+        }
+        self.frame = NSRect(x: 0, y: 0, width: width, height: max(ceil(y), 30))
+        return max(ceil(y), 30)
+    }
+    
+    /// Shows the first `count` rows, hides the rest (reserved height is
+    /// kept so the card does not change size).
+    func setLiveRows(_ count: Int) {
+        for index in 0..<self.names.count {
+            self.names[index].isHidden = index >= count
+            self.values[index].isHidden = index >= count
+        }
+    }
+    
+    /// Updates a row's label (volume names arrive with the sample).
+    func setName(_ index: Int, _ value: String) {
+        guard index < self.names.count else { return }
+        self.names[index].stringValue = value
     }
 }
 
@@ -735,8 +798,9 @@ private final class UnifiedGrammarRow: NSView {
         self.valueField.frame = NSRect(x: w - 4 - 14 - 8 - valueWidth, y: 15, width: valueWidth, height: 16)
         // Status glyph placement: the chevron owns the trailing slot on
         // expandable rows, so the glyph (✓/▲) sits just LEFT of the value
-        // and only while collapsed — the two glyphs never share a slot.
-        // Non-expandable rows keep the glyph in the trailing slot.
+        // in BOTH collapsed and expanded states — the two glyphs never
+        // share a slot. Non-expandable rows keep the glyph in the
+        // trailing slot.
         let sparkX: CGFloat = 100
         let sparkEnd: CGFloat
         if self.expandable {
@@ -777,10 +841,10 @@ final class UnifiedPanelContent: NSView {
     private let cpuHero = UnifiedHeroCard(module: "CPU", icon: "cpu", detailHeight: 142)
     private let gpuHero = UnifiedHeroCard(module: "GPU", icon: "gpu.card", detailHeight: 36)
     private let ramHero = UnifiedHeroCard(module: "RAM", icon: "memorychip", detailHeight: 106)
-    private let diskRow = UnifiedGrammarRow(module: "Disk", label: localizedString("Disk"), icon: "internaldrive", expandable: false)
-    private let netRow = UnifiedGrammarRow(module: "Network", label: localizedString("Network"), icon: "arrow.up.arrow.down", expandable: false)
+    private let diskRow = UnifiedGrammarRow(module: "Disk", label: localizedString("Disk"), icon: "internaldrive", expandable: true)
+    private let netRow = UnifiedGrammarRow(module: "Network", label: localizedString("Network"), icon: "arrow.up.arrow.down", expandable: true)
     private let sensorsRow = UnifiedGrammarRow(module: "Sensors", label: localizedString("Sensors"), icon: "thermometer.medium", expandable: true)
-    private let thermalRow = UnifiedGrammarRow(module: "Thermal", label: localizedString("Thermal"), icon: "thermometer.low", expandable: false)
+    private let thermalRow = UnifiedGrammarRow(module: "Thermal", label: localizedString("Thermal"), icon: "thermometer.low", expandable: true)
     private let batteryRow = UnifiedGrammarRow(module: "Battery", label: localizedString("Battery"), icon: "battery.75percent", expandable: true)
     
     private var expandedSection: String? = nil
@@ -811,6 +875,20 @@ final class UnifiedPanelContent: NSView {
     private var batteryCyclesField: NSTextField?
     private var batteryHealthField: NSTextField?
     private var batteryConditionField: NSTextField?
+    // expandable grammar-row details (Disk / Network / Thermal)
+    private var diskDetail: UnifiedDetailRows!
+    private var diskReadField: NSTextField?
+    private var diskWriteField: NSTextField?
+    private var diskVolumeFields: [NSTextField] = []
+    private var netDetail: UnifiedDetailRows!
+    private var netDownField: NSTextField?
+    private var netUpField: NSTextField?
+    private var netTotalInField: NSTextField?
+    private var netTotalOutField: NSTextField?
+    private var netInterfaceField: NSTextField?
+    private var thermalDetail: UnifiedDetailRows!
+    private var thermalStateField: NSTextField?
+    private var thermalImpactField: NSTextField?
     
     override var isFlipped: Bool { true }
     
@@ -872,6 +950,45 @@ final class UnifiedPanelContent: NSView {
         self.batteryHealthField = self.batteryDetailRow(localizedString("Health"))
         self.batteryConditionField = self.batteryDetailRow(localizedString("Condition"))
         self.layoutBatteryDetail()
+        
+        // Disk / Network / Thermal details: fixed-height grammar blocks
+        // updated per tick. Row counts are fixed at build (volumes beyond
+        // the live set are hidden, height reserved) so expanding is a
+        // single layout pass.
+        self.diskDetail = UnifiedDetailRows()
+        self.diskRow.expandContainer.addSubview(self.diskDetail)
+        self.diskRow.detailHeight = 90
+        self.diskReadField = self.diskDetail.addRow(localizedString("Read"))
+        self.diskWriteField = self.diskDetail.addRow(localizedString("Write"))
+        self.diskReadField?.stringValue = "–"
+        self.diskWriteField?.stringValue = "–"
+        for _ in 0..<3 {
+            let field = self.diskDetail.addRow("")
+            field.stringValue = "–"
+            self.diskVolumeFields.append(field)
+        }
+        self.diskDetail.setLiveRows(2)
+        
+        self.netDetail = UnifiedDetailRows()
+        self.netRow.expandContainer.addSubview(self.netDetail)
+        self.netRow.detailHeight = 90
+        self.netDownField = self.netDetail.addRow(localizedString("Download"))
+        self.netUpField = self.netDetail.addRow(localizedString("Upload"))
+        self.netTotalInField = self.netDetail.addRow(localizedString("Total in (since open)"))
+        self.netTotalOutField = self.netDetail.addRow(localizedString("Total out (since open)"))
+        self.netInterfaceField = self.netDetail.addRow(localizedString("Interface"))
+        for field in [self.netDownField, self.netUpField, self.netTotalInField, self.netTotalOutField, self.netInterfaceField] {
+            field?.stringValue = "–"
+        }
+        
+        self.thermalDetail = UnifiedDetailRows()
+        self.thermalRow.expandContainer.addSubview(self.thermalDetail)
+        self.thermalRow.detailHeight = 40
+        self.thermalStateField = self.thermalDetail.addRow(localizedString("Thermal state"))
+        self.thermalImpactField = self.thermalDetail.addRow(localizedString("Impact"))
+        self.thermalStateField?.stringValue = "–"
+        self.thermalImpactField?.stringValue = "–"
+        self.thermalDetail.setLiveRows(2)
         
         self.verdictChip.setAttributed(Self.attributedVerdict(quiet: true))
         
@@ -971,6 +1088,9 @@ final class UnifiedPanelContent: NSView {
         }
         self.updateThermalRow()
         self.layoutBatteryDetail()
+        self.diskDetail.layoutRows(width: max(self.diskRow.expandContainer.bounds.width, 100))
+        self.netDetail.layoutRows(width: max(self.netRow.expandContainer.bounds.width, 100))
+        self.thermalDetail.layoutRows(width: max(self.thermalRow.expandContainer.bounds.width, 100))
         y += margin
         let newFrame = NSRect(x: 0, y: 0, width: w, height: max(y, 1))
         if newFrame != self.frame {
@@ -1014,6 +1134,9 @@ final class UnifiedPanelContent: NSView {
         }
         self.sensorsRow.setExpanded(target == "Sensors")
         self.batteryRow.setExpanded(target == "Battery")
+        self.diskRow.setExpanded(target == "Disk")
+        self.netRow.setExpanded(target == "Network")
+        self.thermalRow.setExpanded(target == "Thermal")
         self.relayout()
         NSLog("[UnifiedPerf] expand %@ latency=%.1fms content %.0f->%.0f detail=%.0f",
               module, (CFAbsoluteTimeGetCurrent() - t0) * 1000, heightBefore, self.frame.height,
@@ -1109,7 +1232,7 @@ final class UnifiedPanelContent: NSView {
     
     /// QA hook for the header-tap path.
     func simulateHeaderTap(_ module: String) {
-        for row in [self.sensorsRow, self.batteryRow] where row.module == module {
+        for row in [self.sensorsRow, self.batteryRow, self.diskRow, self.netRow, self.thermalRow] where row.module == module {
             row.simulateHeaderTap()
         }
     }
@@ -1300,11 +1423,29 @@ final class UnifiedPanelContent: NSView {
             let total = Double(drive.activity.read + drive.activity.write)
             self.diskRow.valueField.stringValue = Units(bytes: Int64(total)).getReadableSpeed()
             self.diskRow.spark.add(total / 1024)
+            self.diskReadField?.stringValue = Units(bytes: drive.activity.read).getReadableSpeed()
+            self.diskWriteField?.stringValue = Units(bytes: drive.activity.write).getReadableSpeed()
+            let volumes = disks.array.sorted { ($0.root ? 1 : 0) > ($1.root ? 1 : 0) }
+            for (index, field) in self.diskVolumeFields.enumerated() {
+                guard index < volumes.count else { continue }
+                let volume = volumes[index]
+                let used = volume.size - volume.free
+                let title = volume.mediaName.isEmpty ? volume.BSDName : volume.mediaName
+                self.diskDetail.setName(2 + index, title)
+                field.stringValue = "\(Units(bytes: used).getReadableMemory(style: .memory)) of \(Units(bytes: volume.size).getReadableMemory(style: .memory))"
+                field.toolTip = title
+            }
+            self.diskDetail.setLiveRows(min(2 + volumes.count, 5))
         case let net as Network_Usage:
             let down = Units(bytes: net.bandwidth.download).getReadableSpeed(omitUnits: true)
             let up = Units(bytes: net.bandwidth.upload).getReadableSpeed(omitUnits: true)
             self.netRow.valueField.stringValue = "\(down)↓ \(up)↑"
             self.netRow.spark.add(Double(net.bandwidth.download + net.bandwidth.upload) / 1024)
+            self.netDownField?.stringValue = Units(bytes: net.bandwidth.download).getReadableSpeed()
+            self.netUpField?.stringValue = Units(bytes: net.bandwidth.upload).getReadableSpeed()
+            self.netTotalInField?.stringValue = Units(bytes: net.total.download).getReadableMemory(style: .memory)
+            self.netTotalOutField?.stringValue = Units(bytes: net.total.upload).getReadableMemory(style: .memory)
+            self.netInterfaceField?.stringValue = net.interface?.displayName ?? "–"
         case let sensors as Sensors_List:
             self.sensorsList = sensors
             let temps = sensors.sensors.filter({ $0.type == .temperature && $0.popupState && $0.value.isFinite })
@@ -1396,6 +1537,12 @@ final class UnifiedPanelContent: NSView {
         if self.thermalRow.spark.strokeColor != stroke {
             self.thermalRow.spark.strokeColor = stroke
         }
+        // Detail rows: state word + plain-language impact, tinted per
+        // state, updated in place.
+        self.thermalStateField?.stringValue = name
+        let impact = localizedString(UnifiedInfoFormatters.thermalStateDescription(state))
+        self.thermalImpactField?.stringValue = impact
+        self.thermalImpactField?.textColor = stroke
     }
     
     private func rebuildFans() {

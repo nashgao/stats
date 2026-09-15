@@ -42,4 +42,13 @@ final class PanelInfoTests: XCTestCase {
         XCTAssertEqual(UnifiedInfoFormatters.thermalStatusLevel(.serious), 2)
         XCTAssertEqual(UnifiedInfoFormatters.thermalStatusLevel(.critical), 2)
     }
+    
+    func testThermalStateDescriptions() {
+        // short enough for the detail value column
+        for state: ProcessInfo.ThermalState in [.nominal, .fair, .serious, .critical] {
+            let text = UnifiedInfoFormatters.thermalStateDescription(state)
+            XCTAssertFalse(text.isEmpty)
+            XCTAssertLessThanOrEqual(text.count, 22, "\(state) description too long")
+        }
+    }
 }

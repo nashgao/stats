@@ -23,8 +23,8 @@ public enum Network_t: String, Codable {
 
 public struct Network_interface: Codable {
     var status: Bool = false
-    var displayName: String = ""
-    var BSDName: String = ""
+    public var displayName: String = ""
+    public var BSDName: String = ""
     var address: String = ""
     var transmitRate: Double = 0
 }
@@ -81,7 +81,7 @@ public struct Network_Usage: Codable, RemoteType {
     
     var dns: [String] = []
     
-    var interface: Network_interface? = nil
+    public var interface: Network_interface? = nil
     var connectionType: Network_t? = nil
     var status: Bool = false
     
