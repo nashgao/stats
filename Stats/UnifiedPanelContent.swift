@@ -801,14 +801,17 @@ private final class UnifiedGrammarRow: NSView {
         // in BOTH collapsed and expanded states — the two glyphs never
         // share a slot. Non-expandable rows keep the glyph in the
         // trailing slot.
+        // Status glyph placement: the chevron owns the trailing slot on
+        // expandable rows, so the glyph (✓/▲) sits just LEFT of the value
+        // in BOTH collapsed and expanded states — the two glyphs never
+        // share a slot. Non-expandable rows keep the glyph in the
+        // trailing slot.
         let sparkX: CGFloat = 100
         let sparkEnd: CGFloat
         if self.expandable {
-            self.glyphField.isHidden = self.expanded
+            self.glyphField.isHidden = false
             self.glyphField.frame = NSRect(x: self.valueField.frame.origin.x - 18, y: 16, width: 14, height: 14)
-            sparkEnd = self.expanded
-                ? self.valueField.frame.origin.x - 8
-                : self.glyphField.frame.origin.x - 8
+            sparkEnd = self.glyphField.frame.origin.x - 8
         } else {
             self.glyphField.isHidden = false
             self.glyphField.frame = NSRect(x: w - 4 - 14, y: 16, width: 14, height: 14)
