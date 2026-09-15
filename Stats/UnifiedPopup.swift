@@ -212,7 +212,20 @@ final class UnifiedPopupController {
     /// alone stays true for windows stranded on another Space (or
     /// ordered in while occluded), which made the toggle eat every other
     /// click — the classic "sometimes nothing happens" wedge.
+    /// Source of truth for "the panel is presented", set by show() and
+    /// cleared by hide(). AppKit's isOnActiveSpace returns false
+    /// transiently while a .moveToActiveSpace window is mid-resize, and
+    /// the toggle decision based purely on window state could conclude
+    /// "hidden" right after show() and wedge the panel. Once presented,
+    /// AppKit's isVisible is the reliable signal (it does not flake);
+    /// before the first show() of the session the full window-state
+    /// check is the fallback.
+    private var panelPresented = false
+    
     private var isEffectivelyVisible: Bool {
+        if self.panelPresented {
+            return self.panel.isVisible && !self.panel.isMiniaturized
+        }
         guard self.panel.isVisible, !self.panel.isMiniaturized else { return false }
         return self.panel.isOnActiveSpace
     }
@@ -428,6 +441,7 @@ final class UnifiedPopupController {
     func hide() {
         NSLog("[UnifiedPanelTrace] hide() visible=%d", self.panel.isVisible ? 1 : 0)
         guard self.panel.isVisible else { return }
+        self.panelPresented = false
         self.panel.orderOut(nil)
     }
     
@@ -681,6 +695,7 @@ final class UnifiedPopupController {
             NSApp.activate(ignoringOtherApps: true)
         }
         self.panel.makeKeyAndOrderFront(nil)
+        self.panelPresented = true
         let contentMs = (tPresent - t0) * 1000
         let presentMs = (CFAbsoluteTimeGetCurrent() - tPresent) * 1000
         let totalMs = (CFAbsoluteTimeGetCurrent() - showStart) * 1000
