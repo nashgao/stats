@@ -192,6 +192,39 @@ fi
 ps -p "$QA_PID" >/dev/null 2>&1 && pass "process alive through phase 4" || fail "process died during phase 4"
 quit_phase "phase 4 (layout+latency)"
 
+# --- phase 5: island settles in one pass ---
+# The first visible island frame must be pinned at the panel top and
+# identical to the following samples — a correction after appearance is
+# the "wrong spot, then jumps" defect.
+echo "-- phase 5: island --"
+if launch_phase STATS_QA_ISLAND=1; then
+  pass "panel opened"
+else
+  fail "panel did not open"
+fi
+wait_for_log "\[QA\] island: sample visible=1" 22 || true
+ISLAND_RESULT=$(grep "\[QA\] island: sample" "$QA_LOG" | python3 -c '
+import sys, re
+frames = []
+for line in sys.stdin:
+    m = re.search(r"visible=1 frame=\{\{[\d.]+, ([\d.]+)\}, \{([\d.]+),", line)
+    if m:
+        frames.append((float(m.group(1)), float(m.group(2))))
+if not frames:
+    print("never-visible")
+elif frames[0][0] <= 0:
+    print("unpinned")
+elif any(f != frames[0] for f in frames[1:]):
+    print("moved")
+else:
+    print("stable@%d" % frames[0][0])
+')
+case "$ISLAND_RESULT" in
+  stable@*) pass "island settles in one pass (first visible frame pinned at y${ISLAND_RESULT#stable@})" ;;
+  *) fail "island placement defect: $ISLAND_RESULT" ;;
+esac
+quit_phase "phase 5 (island)"
+
 # --- helper contract ---
 "$SCRIPT_DIR/check-helper-contract.sh" "$APP" && pass "helper contract" || fail "helper contract"
 
