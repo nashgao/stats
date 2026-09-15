@@ -45,14 +45,24 @@ step "Quit running Stats (exact PIDs only)"
 # -x matches the process NAME regardless of how it was launched — a
 # shell-launched instance shows as "./Stats" in its cmdline and the
 # full-path pattern misses it, leaving a ghost menu bar icon.
+# The app is also a SMAppService login item: launchd RESPAWNS it after
+# an unexpected death, so a single kill round can never win. Kill every
+# appearance and only proceed once none has existed for ~2s (launchd
+# throttles respawns after a few rapid deaths).
 for pid in $(pgrep -x Stats); do kill "$pid" 2>/dev/null || true; done
 sleep 2
-for pid in $(pgrep -x Stats); do kill "$pid" 2>/dev/null || true; done
-sleep 2
-# SMAppService login items can be respawned by launchd after an
-# unexpected TERM; escalate to KILL on any survivor before failing.
-for pid in $(pgrep -x Stats); do kill -9 "$pid" 2>/dev/null || true; done
-sleep 2
+QUIET=0
+for i in $(seq 1 12); do
+  PIDS=$(pgrep -x Stats)
+  if [ -n "$PIDS" ]; then
+    QUIET=0
+    for pid in $PIDS; do kill -9 "$pid" 2>/dev/null || true; done
+  else
+    QUIET=$((QUIET + 1))
+    [ "$QUIET" -ge 2 ] && break
+  fi
+  sleep 1
+done
 REMAINING=$(pgrep -x Stats | wc -l | tr -d ' ')
 [ "$REMAINING" = "0" ] || { echo "FAIL: $REMAINING Stats processes still running: $(pgrep -x Stats | tr '\n' ' ')"; exit 1; }
 

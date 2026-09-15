@@ -24,14 +24,23 @@ echo "== smoke-test: $APP =="
 
 # --- 0. ensure a clean slate: quit any running Stats (exact PIDs only) ---
 # -x matches the process NAME, not the cmdline — shell-launched instances
-# show as "./Stats" and a full-path pattern misses them.
+# show as "./Stats" and a full-path pattern misses them. The app is a
+# SMAppService login item: launchd respawns it after an unexpected death,
+# so kill every appearance until none has existed for ~2s.
 for pid in $(pgrep -x Stats); do kill "$pid" 2>/dev/null; done
 sleep 2
-REMAIN=$(pgrep -x Stats | wc -l | tr -d ' ')
-if [ "$REMAIN" != "0" ]; then
-  for pid in $(pgrep -x Stats); do kill "$pid" 2>/dev/null; done
-  sleep 2
-fi
+QUIET=0
+for i in $(seq 1 12); do
+  PIDS=$(pgrep -x Stats)
+  if [ -n "$PIDS" ]; then
+    QUIET=0
+    for pid in $PIDS; do kill -9 "$pid" 2>/dev/null; done
+  else
+    QUIET=$((QUIET + 1))
+    if [ "$QUIET" -ge 2 ]; then ALIVE=0; break; fi
+  fi
+  sleep 1
+done
 REMAIN=$(pgrep -x Stats | wc -l | tr -d ' ')
 [ "$REMAIN" = "0" ] && pass "no Stats processes running" || fail "$REMAIN Stats processes still running"
 
