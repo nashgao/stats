@@ -726,6 +726,31 @@ final class UnifiedPopupController {
                         }
                     }
                 }
+                // Collapse round trip: hold a manual-fan attention (the
+                // sticky auto-expand is active) and tap the Sensors header
+                // — the user collapse must win and stay collapsed.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 22.7) {
+                    NotificationCenter.default.post(name: .telemetrySample, object: TelemetrySample(
+                        metric: .fan, value: 0.5, secondaryValue: 1, displayValue: "1,650 RPM", detail: "QA"
+                    ))
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 23) { [weak self] in
+                    guard let self else { return }
+                    if !self.isEffectivelyVisible, let button = self.statusItem?.button?.window {
+                        self.show(origin: button.frame.origin, center: button.frame.width / 2)
+                    }
+                    self.panel.expandSection("Sensors")
+                    let t = CFAbsoluteTimeGetCurrent()
+                    let before = self.panel.frame.height
+                    self.panel.simulateHeaderTap("Sensors")
+                    let collapseMs = (CFAbsoluteTimeGetCurrent() - t) * 1000
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
+                        guard let self else { return }
+                        NSLog("[QA] expand-seq: collapse Sensors latency=%.1fms panel %.0f->%.0f stayed=%d",
+                              collapseMs, before, self.panel.frame.height,
+                              self.panel.expandedSectionForQA == nil ? 1 : 0)
+                    }
+                }
             }
         }
         if let scrollTo, let offset = self.panel.sectionOffset(for: scrollTo) {
@@ -1077,6 +1102,9 @@ private final class UnifiedPopupPanel: NSPanel, NSWindowDelegate {
     /// QA accessors for the island phase probe.
     var islandFrame: CGRect { self.content.islandView.frame }
     var islandIsHidden: Bool { self.content.islandView.isHidden }
+    /// QA hook: drive a section header tap (same path as the gesture).
+    func simulateHeaderTap(_ module: String) { self.content.simulateHeaderTap(module) }
+    var expandedSectionForQA: String? { self.content.expandedSectionForQA }
     
     func expandSection(_ module: String) {
         self.content.expandSection(module)

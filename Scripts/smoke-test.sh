@@ -134,7 +134,7 @@ if launch_phase STATS_QA_EXPAND=All; then
 else
   fail "panel did not open"
 fi
-wait_for_log "\[QA\] expand-seq: Battery " 35 || true
+wait_for_log "\[QA\] expand-seq: collapse Sensors " 32 || true
 ISLAND_APPEARANCES=$(grep -c "island=1 " "$QA_LOG")
 for module in CPU GPU RAM Sensors Battery; do
   PAIR=$(grep "\[QA\] expand-seq: $module " "$QA_LOG" | tail -1 | grep -oE "panel [0-9]+->[0-9]+")
@@ -148,6 +148,17 @@ for module in CPU GPU RAM Sensors Battery; do
     fail "expand $module two-phase ($PAIR)"
   fi
 done
+# collapse round trip: under an active fan-attention sticky, tapping the
+# Sensors header must collapse it in one pass and STAY collapsed
+COLLAPSE=$(grep "\[QA\] expand-seq: collapse Sensors " "$QA_LOG" | tail -1)
+CPAIR=$(echo "$COLLAPSE" | grep -oE "panel [0-9]+->[0-9]+")
+CFROM=${CPAIR#panel }; CFROM=${CFROM%%->*}; CTO=${CPAIR##*->}
+CSTAYED=$(echo "$COLLAPSE" | grep -oE "stayed=[01]" | cut -d= -f2)
+if [ -n "$CFROM" ] && python3 -c "exit(0 if $CTO < $CFROM else 1)" 2>/dev/null && [ "$CSTAYED" = "1" ]; then
+  pass "collapse Sensors one-pass and stays collapsed under fan sticky ($CFROM->$CTO)"
+else
+  fail "collapse Sensors failed under fan sticky ($COLLAPSE)"
+fi
 quit_phase "phase 2 (expand)"
 
 # --- phase 3: real helper replies + attention alerts ---
