@@ -374,6 +374,7 @@ private final class UnifiedTopProcesses: NSView {
     private struct Row {
         let name: NSTextField
         let value: NSTextField
+        let track: NSView
         let fill: NSView
     }
     private var rows: [Row] = []
@@ -403,8 +404,9 @@ private final class UnifiedTopProcesses: NSView {
             self.addSubview(value)
             name.frame = NSRect(x: 0, y: y + 1, width: 110, height: 14)
             track.frame = NSRect(x: 114, y: y + 6, width: 130, height: 4)
+            fill.frame = NSRect(x: 114, y: y + 6, width: 0, height: 4)
             value.frame = NSRect(x: 248, y: y + 1, width: 76, height: 14)
-            self.rows.append(Row(name: name, value: value, fill: fill))
+            self.rows.append(Row(name: name, value: value, track: track, fill: fill))
             y += 19
         }
         self.frame = NSRect(x: 0, y: 0, width: 324, height: y)
@@ -415,19 +417,24 @@ private final class UnifiedTopProcesses: NSView {
         fatalError("init(coder:) has not been implemented")
     }
     
-    /// In-place per-tick refresh: no view churn when the process set is stable.
+    /// In-place per-tick refresh: no view churn when the process set is
+    /// stable. Rows without data are hidden — empty skeleton rows must
+    /// never be visible.
     func update(rows: [(name: String, share: Double, value: String)]) {
         for index in 0..<self.rows.count {
             let view = self.rows[index]
             guard index < rows.count else {
-                view.name.stringValue = ""
-                view.value.stringValue = ""
-                if view.fill.frame.width != 0 {
-                    view.fill.frame = NSRect(x: 114, y: view.fill.frame.origin.y, width: 0, height: 4)
-                }
+                view.name.isHidden = true
+                view.value.isHidden = true
+                view.track.isHidden = true
+                view.fill.isHidden = true
                 continue
             }
             let row = rows[index]
+            view.name.isHidden = false
+            view.value.isHidden = false
+            view.track.isHidden = false
+            view.fill.isHidden = false
             if view.name.stringValue != row.name {
                 view.name.stringValue = row.name
             }
@@ -692,7 +699,12 @@ private final class UnifiedGrammarRow: NSView {
         self.nameLabel.frame = NSRect(x: 26, y: 15, width: 70, height: 16)
         self.glyphField.frame = NSRect(x: w - 4 - 14, y: 16, width: 14, height: 14)
         self.chevron.frame = NSRect(x: w - 4 - 14, y: 16, width: 14, height: 14)
-        let valueWidth: CGFloat = 88
+        // Value field sized to its actual text: the sparkline must end
+        // before the TEXT (right-aligned), not before an arbitrary fixed
+        // field width — at larger text sizes a fixed 88pt frame left the
+        // sparkline running under the value and the chevron.
+        let textWidth = (self.valueField.stringValue as NSString).size(withAttributes: [.font: self.valueField.font ?? NSFont.systemFont(ofSize: 12)]).width
+        let valueWidth = max(ceil(textWidth) + 4, 44)
         self.valueField.frame = NSRect(x: w - 4 - 14 - 8 - valueWidth, y: 15, width: valueWidth, height: 16)
         let sparkX: CGFloat = 100
         let sparkEnd = self.valueField.frame.origin.x - 8
