@@ -103,6 +103,18 @@ final class UnifiedPopupController {
             name: .toggleUnifiedPopup,
             object: nil
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(self.appActiveChanged(_:)),
+            name: NSApplication.didBecomeActiveNotification,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(self.appActiveChanged(_:)),
+            name: NSApplication.didResignActiveNotification,
+            object: nil
+        )
         self.installOutsideClickDismissal()
         if ProcessInfo.processInfo.environment["STATS_QA_FAN_CYCLE"] == "1" {
             NotificationCenter.default.addObserver(
@@ -265,6 +277,7 @@ final class UnifiedPopupController {
     }
     
     @objc private func togglePanel() {
+        NSLog("[UnifiedPanelTrace] togglePanel event=%d", NSApp.currentEvent?.type.rawValue ?? -1)
         if NSApp.currentEvent?.type == .rightMouseDown {
             self.showStatusMenu()
             return
@@ -273,7 +286,9 @@ final class UnifiedPopupController {
     }
     
     private func toggleFromItem() {
-        if self.isEffectivelyVisible {
+        let visible = self.isEffectivelyVisible
+        NSLog("[UnifiedPanelTrace] toggleFromItem effectiveVisible=%d", visible ? 1 : 0)
+        if visible {
             self.hide()
             return
         }
@@ -341,11 +356,27 @@ final class UnifiedPopupController {
     }
     
     @objc private func modulePopupVisibilityChanged(_ notification: Notification) {
-        guard let state = notification.userInfo?["state"] as? Bool, state else { return }
+        let state = notification.userInfo?["state"] as? Bool ?? false
+        NSLog("[UnifiedPanelTrace] modulePopupVisibilityChanged state=%d visible=%d", state ? 1 : 0, self.panel.isVisible ? 1 : 0)
+        guard state else { return }
         self.hide()
     }
     
+    /// Activation churn around a menu-bar click is the prime suspect in
+    /// the flash-close: pair these lines with the orderOut stack trace
+    /// and the key/main transitions to see exactly what fires between
+    /// show() and the disappearance.
+    @objc private func appActiveChanged(_ notification: Notification) {
+        let became = notification.name == NSApplication.didBecomeActiveNotification
+        NSLog("[UnifiedPanelTrace] app %@ visible=%d key=%d ts=%.3f",
+              became ? "didBecomeActive" : "didResignActive",
+              self.panel.isVisible ? 1 : 0,
+              self.panel.isKeyWindow ? 1 : 0,
+              Date().timeIntervalSince1970)
+    }
+    
     func hide() {
+        NSLog("[UnifiedPanelTrace] hide() visible=%d", self.panel.isVisible ? 1 : 0)
         guard self.panel.isVisible else { return }
         self.panel.orderOut(nil)
     }
@@ -502,6 +533,10 @@ final class UnifiedPopupController {
             NSApp.activate(ignoringOtherApps: true)
         }
         self.panel.makeKeyAndOrderFront(nil)
+        NSLog("[UnifiedPanelTrace] show done visible=%d key=%d active=%d",
+              self.panel.isVisible ? 1 : 0,
+              self.panel.isKeyWindow ? 1 : 0,
+              NSApp.isActive ? 1 : 0)
         if let scrollToEnv = ProcessInfo.processInfo.environment["STATS_POPUP_SCROLL_TO"] {
             if scrollToEnv == "bottom" {
                 self.panel.scrollToBottom()
@@ -581,6 +616,43 @@ private final class UnifiedPopupPanel: NSPanel, NSWindowDelegate {
     }
     
     override var canBecomeKey: Bool { true }
+    
+    /// Every path that makes the panel vanish ends here. The compact
+    /// caller stack (first non-system frames) names which one — the
+    /// [UnifiedPanelTrace] lines around it (toggle decision, key/main and
+    /// active transitions) pin down the real status-item click flow.
+    override func orderOut(_ sender: Any?) {
+        let appFrames = Thread.callStackSymbols
+            .filter { frame in
+                !frame.contains("AppKit") && !frame.contains("Foundation") &&
+                !frame.contains("CoreFoundation") && !frame.contains("libswiftCore") &&
+                !frame.contains("libsystem") && !frame.contains("HIToolbox") &&
+                !frame.contains("SwiftUI") && !frame.contains("UIKitMacHelper")
+            }
+            .prefix(6)
+        NSLog("[UnifiedPanelTrace] panel orderOut (was visible=%d) callers: %@",
+              self.isVisible ? 1 : 0,
+              appFrames.joined(separator: " <- "))
+        super.orderOut(sender)
+    }
+    
+    // MARK: - NSWindowDelegate (traced)
+    
+    func windowDidBecomeKey(_ notification: Notification) {
+        NSLog("[UnifiedPanelTrace] panel didBecomeKey visible=%d", self.isVisible ? 1 : 0)
+    }
+    
+    func windowDidResignKey(_ notification: Notification) {
+        NSLog("[UnifiedPanelTrace] panel didResignKey visible=%d", self.isVisible ? 1 : 0)
+    }
+    
+    func windowDidBecomeMain(_ notification: Notification) {
+        NSLog("[UnifiedPanelTrace] panel didBecomeMain visible=%d", self.isVisible ? 1 : 0)
+    }
+    
+    func windowDidResignMain(_ notification: Notification) {
+        NSLog("[UnifiedPanelTrace] panel didResignMain visible=%d", self.isVisible ? 1 : 0)
+    }
     
     override init(contentRect: NSRect, styleMask: NSWindow.StyleMask, backing: NSWindow.BackingStoreType, defer flag: Bool) {
         super.init(contentRect: contentRect, styleMask: styleMask, backing: backing, defer: flag)
