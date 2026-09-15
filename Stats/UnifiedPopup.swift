@@ -63,6 +63,9 @@ final class UnifiedPopupController {
     private static var qaToggleArmed = false
     /// Same for the synthetic dismiss-guard exercise.
     private static var qaDismissArmed = false
+    /// STATS_QA_LAYOUT=1: log the panel content/island height once per
+    /// second so smoke can assert layout stability (no section jumping).
+    private static let qaLayoutEnabled = ProcessInfo.processInfo.environment["STATS_QA_LAYOUT"] == "1"
     
     /// Poll for the spin-up read-back after the RPM target; logs once —
     /// "(meets target)" when the speed reaches max(baseline, target/2),
@@ -237,6 +240,9 @@ final class UnifiedPopupController {
                     withoutImplicitAnimation {
                         self?.panel.refreshContent()
                         self?.panel.syncSize()
+                    }
+                    if Self.qaLayoutEnabled, let panel = self?.panel {
+                        NSLog("[QA] layout tick: content=%.1f island=%.1f", panel.contentHeight, panel.islandSpace)
                     }
                 }
                 UnifiedPerf.tick()
@@ -423,30 +429,40 @@ final class UnifiedPopupController {
     }
     
     func show(origin: NSPoint, center: CGFloat = 0, scrollTo: String? = nil) {
-        // (Re)establish the SMC helper connection when the panel opens: covers
-        // the app having launched before the helper was registered/approved.
-        SMCHelper.shared.checkForUpdate()
-        SMCHelper.shared.refreshReachability()
-        NSLog("[UnifiedPopup] helper active=%d installed=%d signed=%d",
-              SMCHelper.shared.isActive() ? 1 : 0,
-              SMCHelper.shared.isInstalled ? 1 : 0,
-              SMCHelper.shared.isProperlySigned ? 1 : 0)
+        let showStart = CFAbsoluteTimeGetCurrent()
+        // (Re)establish the SMC helper connection when the panel opens:
+        // covers the app having launched before the helper was
+        // registered/approved. Kept off the first-paint path — the panel
+        // renders now, the helper state catches up a beat later.
+        DispatchQueue.main.async {
+            SMCHelper.shared.checkForUpdate()
+            SMCHelper.shared.refreshReachability()
+            NSLog("[UnifiedPopup] helper active=%d installed=%d signed=%d",
+                  SMCHelper.shared.isActive() ? 1 : 0,
+                  SMCHelper.shared.isInstalled ? 1 : 0,
+                  SMCHelper.shared.isProperlySigned ? 1 : 0)
+        }
+        let t0 = CFAbsoluteTimeGetCurrent()
         self.panel.refreshContent()
         
         // document + pinned island + pinned footer
         let screenHeight = NSScreen.main?.visibleFrame.height ?? 800
         let height = max(348, min(self.panel.contentHeight + self.panel.islandSpace + 28, screenHeight * 0.7))
         let width = UnifiedPopupPanel.panelWidth
-        var x = origin.x - width/2 + center
+        let anchorX = origin.x + center
+        var x = anchorX - width/2
+        var clamped = false
         let y = origin.y - height - 3
         
         let buttonPoint = NSPoint(x: origin.x + center, y: origin.y)
         if let screen = NSScreen.screens.first(where: { $0.frame.contains(buttonPoint) }) ?? NSScreen.main {
             if x + width > screen.frame.maxX {
                 x = screen.frame.maxX - width - 3
+                clamped = true
             }
             if x < screen.frame.minX {
                 x = screen.frame.minX + 3
+                clamped = true
             }
         }
         
@@ -607,17 +623,24 @@ final class UnifiedPopupController {
         // active ends the previous app's menu tracking) and brings our
         // window above its transient UI; makeKeyAndOrderFront additionally
         // puts the panel in the responder chain so Escape closes it.
+        let tPresent = CFAbsoluteTimeGetCurrent()
         if #available(macOS 14, *) {
             NSApp.activate()
         } else {
             NSApp.activate(ignoringOtherApps: true)
         }
         self.panel.makeKeyAndOrderFront(nil)
+        let contentMs = (tPresent - t0) * 1000
+        let presentMs = (CFAbsoluteTimeGetCurrent() - tPresent) * 1000
+        let totalMs = (CFAbsoluteTimeGetCurrent() - showStart) * 1000
+        let panelCenterX = self.panel.frame.midX
         NSLog("[UnifiedPanelTrace] show done visible=%d key=%d active=%d level=%d",
               self.panel.isVisible ? 1 : 0,
               self.panel.isKeyWindow ? 1 : 0,
               NSApp.isActive ? 1 : 0,
               self.panel.level.rawValue)
+        NSLog("[UnifiedPerf] show latency total=%.1fms content=%.1fms present=%.1fms anchor delta=%.1fpt clamped=%d",
+              totalMs, contentMs, presentMs, panelCenterX - anchorX, clamped ? 1 : 0)
         if let scrollToEnv = ProcessInfo.processInfo.environment["STATS_POPUP_SCROLL_TO"] {
             if scrollToEnv == "bottom" {
                 self.panel.scrollToBottom()
