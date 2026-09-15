@@ -66,6 +66,9 @@ final class UnifiedPopupController {
     /// STATS_QA_LAYOUT=1: log the panel content/island height once per
     /// second so smoke can assert layout stability (no section jumping).
     private static let qaLayoutEnabled = ProcessInfo.processInfo.environment["STATS_QA_LAYOUT"] == "1"
+    /// STATS_QA_EXPAND=1: drive a Sensors expand at +8s and sample the
+    /// heights across the next 1.2s (two-phase expand detector).
+    private static var qaExpandArmed = false
     
     /// Poll for the spin-up read-back after the RPM target; logs once —
     /// "(meets target)" when the speed reaches max(baseline, target/2),
@@ -616,6 +619,27 @@ final class UnifiedPopupController {
                 }
             }
         }
+        if ProcessInfo.processInfo.environment["STATS_QA_EXPAND"] == "1" && !Self.qaExpandArmed {
+            Self.qaExpandArmed = true
+            // Expand-phase probe: expand the Sensors section ~8s after
+            // open (the panel has live data by then, like a real manual
+            // click) and sample the heights across the next 1.2s — a
+            // two-phase expand shows up as a later height increase.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 8) { [weak self] in
+                guard let self else { return }
+                NSLog("[QA] expand: before content=%.0f panel=%.0f", self.panel.contentHeight, self.panel.frame.height)
+                self.panel.expandSection("Sensors")
+                NSLog("[QA] expand: immediate content=%.0f panel=%.0f", self.panel.contentHeight, self.panel.frame.height)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                    guard let self else { return }
+                    NSLog("[QA] expand: +0.3s content=%.0f panel=%.0f", self.panel.contentHeight, self.panel.frame.height)
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
+                    guard let self else { return }
+                    NSLog("[QA] expand: +1.2s content=%.0f panel=%.0f", self.panel.contentHeight, self.panel.frame.height)
+                }
+            }
+        }
         if let scrollTo, let offset = self.panel.sectionOffset(for: scrollTo) {
             self.panel.scrollToOffset(offset)
         } else {
@@ -872,6 +896,18 @@ private final class UnifiedPopupPanel: NSPanel, NSWindowDelegate {
         self.effectView.addSubview(self.footerBar)
         
         chrome.addSubview(self.effectView)
+        
+        // Content-layout changes (section expand, fan rebuild, island)
+        // must resize the window immediately — previously this hook was
+        // never assigned, so an expand rendered partially for up to a
+        // second until the glyph timer happened to run syncSize.
+        self.content.onLayoutChange = { [weak self] in
+            guard let self, self.isVisible else { return }
+            withoutImplicitAnimation {
+                self.refreshContent()
+                self.syncSize()
+            }
+        }
     }
     
     required init?(coder: NSCoder) {

@@ -900,6 +900,20 @@ final class UnifiedPanelContent: NSView {
         y += margin
         let newFrame = NSRect(x: 0, y: 0, width: w, height: max(y, 1))
         if newFrame != self.frame {
+            if self.frame.height > 0, abs(newFrame.height - self.frame.height) > 1 {
+                // name the sections driving a real height change — the
+                // layout-jump forensics line (island flap, fan rebuild,
+                // expand): which section grew or shrank
+                let sections: [(String, CGFloat)] = [
+                    ("CPU", self.cpuHero.totalHeight), ("GPU", self.gpuHero.totalHeight),
+                    ("RAM", self.ramHero.totalHeight), ("Disk", self.diskRow.totalHeight),
+                    ("Network", self.netRow.totalHeight), ("Sensors", self.sensorsRow.totalHeight),
+                    ("Thermal", self.thermalRow.totalHeight), ("Battery", self.batteryRow.totalHeight)
+                ]
+                let dump = sections.map({ "\($0.0)=\($0.1)" }).joined(separator: " ")
+                NSLog("[UnifiedPerf] content height changed %.0f -> %.0f island=%d %@",
+                      self.frame.height, newFrame.height, self.island.isHidden ? 0 : 1, dump)
+            }
             UnifiedPerf.frameSet("content")
             self.frame = newFrame
         }
@@ -914,6 +928,8 @@ final class UnifiedPanelContent: NSView {
     }
     
     private func toggleSection(_ module: String) {
+        let t0 = CFAbsoluteTimeGetCurrent()
+        let heightBefore = self.frame.height
         let target = self.expandedSection == module ? nil : module
         self.expandedSection = target
         for hero in [self.cpuHero, self.gpuHero, self.ramHero] {
@@ -921,6 +937,9 @@ final class UnifiedPanelContent: NSView {
         }
         self.sensorsRow.setExpanded(target == "Sensors")
         self.relayout()
+        NSLog("[UnifiedPerf] expand %@ latency=%.1fms content %.0f->%.0f detail=%.0f",
+              module, (CFAbsoluteTimeGetCurrent() - t0) * 1000, heightBefore, self.frame.height,
+              self.sensorsRow.detailHeight)
         self.onLayoutChange?()
     }
     
@@ -1291,31 +1310,41 @@ final class UnifiedPanelContent: NSView {
                 }
                 self.sensorsFansContainer.addSubview(fanView)
             }
-            let temps = sensors.sensors
-                .filter({ $0.type == .temperature && $0.popupState && $0.value.isFinite })
-                .sorted(by: { $0.value > $1.value })
-                .prefix(3)
-            for temp in temps {
-                let label = unifiedLabel(temp.name, font: .systemFont(ofSize: 11, weight: .regular), color: .secondaryLabelColor)
-                let value = unifiedLabel(temp.formattedValue, font: .monospacedDigitSystemFont(ofSize: 11, weight: .semibold), color: .labelColor, alignment: .right)
-                label.identifier = NSUserInterfaceItemIdentifier("temp")
-                value.identifier = NSUserInterfaceItemIdentifier("temp")
-                self.sensorsFansContainer.addSubview(label)
-                self.sensorsFansContainer.addSubview(value)
+            // Measure synchronously so the expanded height is final in
+            // the same pass — the previous async measure produced a
+            // second layout (and a visible height jump) a beat later.
+            self.sensorsFansContainer.layoutSubtreeIfNeeded()
+            self.fanHeights = self.sensorsFansContainer.subviews
+                .compactMap({ $0 as? FanView })
+                .map({ max(ceil($0.frame.height), 64) })
+        } else {
+            // Same fan set: forward live values. The reader keeps sensor
+            // order stable, so index pairing is exact — without this the
+            // expanded card froze fan values at build time.
+            let fanViews = self.sensorsFansContainer.subviews.compactMap({ $0 as? FanView })
+            for (index, fanView) in fanViews.enumerated() where index < fans.count {
+                fanView.update(fans[index])
             }
         }
-        self.layoutFanContainer()
-        // FanViews size themselves after entering the hierarchy; measure once
-        // and cache - their self-height can jitter by fractions of a point,
-        // which must not become a per-tick document height change.
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            let fans = self.sensorsFansContainer.subviews.compactMap({ $0 as? FanView })
-            self.fanHeights = fans.map({ max(ceil($0.frame.height), 64) })
-            self.layoutFanContainer()
-            self.relayout()
-            self.onLayoutChange?()
+        // Temperature rows: rebuilt each sample so values and ordering
+        // (they sort by value) stay live under load.
+        for view in self.sensorsFansContainer.subviews where view.identifier?.rawValue == "temp" {
+            view.removeFromSuperview()
         }
+        let temps = sensors.sensors
+            .filter({ $0.type == .temperature && $0.popupState && $0.value.isFinite })
+            .sorted(by: { $0.value > $1.value })
+            .prefix(3)
+        for temp in temps {
+            let label = unifiedLabel(temp.name, font: .systemFont(ofSize: 11, weight: .regular), color: .secondaryLabelColor)
+            let value = unifiedLabel(temp.formattedValue, font: .monospacedDigitSystemFont(ofSize: 11, weight: .semibold), color: .labelColor, alignment: .right)
+            label.identifier = NSUserInterfaceItemIdentifier("temp")
+            value.identifier = NSUserInterfaceItemIdentifier("temp")
+            self.sensorsFansContainer.addSubview(label)
+            self.sensorsFansContainer.addSubview(value)
+        }
+        self.layoutFanContainer()
+        self.onLayoutChange?()
     }
     
     private func layoutFanContainer() {
