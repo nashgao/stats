@@ -51,4 +51,17 @@ final class PanelInfoTests: XCTestCase {
             XCTAssertLessThanOrEqual(text.count, 22, "\(state) description too long")
         }
     }
+    
+    // MARK: - battery health bases
+    
+    func testBatteryPercent() {
+        XCTAssertEqual(UnifiedInfoFormatters.batteryPercent(8588, of: 8588), 100)
+        XCTAssertEqual(UnifiedInfoFormatters.batteryPercent(8113, of: 8588), 94)
+        XCTAssertEqual(UnifiedInfoFormatters.batteryPercent(7789, of: 8588), 91)
+        XCTAssertEqual(UnifiedInfoFormatters.batteryPercent(90, of: 100), 90)
+        XCTAssertEqual(UnifiedInfoFormatters.batteryPercent(0, of: 100), 0)
+        XCTAssertEqual(UnifiedInfoFormatters.batteryPercent(100, of: 0), 0)
+        // toNearestOrEven rounding, matching the reader's health basis
+        XCTAssertEqual(UnifiedInfoFormatters.batteryPercent(999, of: 1000), 100)
+    }
 }

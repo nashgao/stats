@@ -136,6 +136,13 @@ enum UnifiedInfoFormatters {
         }
     }
     
+    /// part ÷ design as a whole percentage — the battery health bases
+    /// (nominal health and full-charge capability).
+    static func batteryPercent(_ part: Int, of design: Int) -> Int {
+        guard design > 0 else { return 0 }
+        return Int((Double(100 * part) / Double(design)).rounded(.toNearestOrEven))
+    }
+    
     /// Grammar-row status level (0/1/2) for a thermal state. Display
     /// tint only — thermal pressure is deliberately NOT wired into the
     /// attention evaluator.
@@ -879,6 +886,7 @@ final class UnifiedPanelContent: NSView {
     private var batteryDetailContainer: UnifiedFlippedView!
     private var batteryCyclesField: NSTextField?
     private var batteryHealthField: NSTextField?
+    private var batteryFullChargeField: NSTextField?
     private var batteryConditionField: NSTextField?
     // expandable grammar-row details (Disk / Network / Thermal)
     private var diskDetail: UnifiedDetailRows!
@@ -946,13 +954,17 @@ final class UnifiedPanelContent: NSView {
         self.sensorsRow.detailHeight = 150
         self.sensorsRow.layoutRow()
         
-        // Battery health detail: cycles / health / condition rows in the
-        // same label-left, value-right grammar as the fan temperature rows.
+        // Battery health detail: cycles / nominal health / full-charge
+        // capability / condition, in the same label-left, value-right
+        // grammar as the fan temperature rows. Both health bases are
+        // shown (stabilized nominal and momentary full-charge) so neither
+        // number looks wrong against external tools.
         self.batteryDetailContainer = UnifiedFlippedView()
         self.batteryRow.expandContainer.addSubview(self.batteryDetailContainer)
-        self.batteryRow.detailHeight = 60
+        self.batteryRow.detailHeight = 80
         self.batteryCyclesField = self.batteryDetailRow(localizedString("Cycles"))
-        self.batteryHealthField = self.batteryDetailRow(localizedString("Health"))
+        self.batteryHealthField = self.batteryDetailRow(localizedString("Health (nominal)"))
+        self.batteryFullChargeField = self.batteryDetailRow(localizedString("Full charge"))
         self.batteryConditionField = self.batteryDetailRow(localizedString("Condition"))
         self.layoutBatteryDetail()
         
@@ -1464,7 +1476,8 @@ final class UnifiedPanelContent: NSView {
             self.batteryRow.valueField.stringValue = "\(Int((abs(battery.level) * 100).rounded()))%"
             self.batteryRow.spark.add(abs(battery.level) * 100)
             self.batteryCyclesField?.stringValue = "\(battery.cycles)"
-            self.batteryHealthField?.stringValue = "\(battery.health)% of design"
+            self.batteryHealthField?.stringValue = "\(UnifiedInfoFormatters.batteryPercent(battery.maxCapacity, of: battery.designedCapacity))% of design"
+            self.batteryFullChargeField?.stringValue = "\(battery.fullChargeCapacity.formatted(.number.grouping(.automatic))) mAh · \(UnifiedInfoFormatters.batteryPercent(battery.fullChargeCapacity, of: battery.designedCapacity))% of design"
             self.batteryConditionField?.stringValue = localizedString(UnifiedInfoFormatters.batteryCondition(battery.health))
         default:
             break

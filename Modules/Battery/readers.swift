@@ -98,6 +98,17 @@ internal class UsageReader: Reader<Battery_Usage> {
                 if self.usage.maxCapacity == 0 {
                     self.usage.maxCapacity = 1
                 }
+                // Momentary full-charge capability (the reference basis
+                // full-charge ÷ design), as opposed to maxCapacity which
+                // is Apple's stabilized nominal. Falls back to the
+                // nominal when the raw key is absent.
+                self.usage.fullChargeCapacity = self.getIntValue("NominalChargeCapacity" as CFString)
+                    ?? batteryData?["NominalChargeCapacity"] as? Int
+                    ?? batteryData?["FullChargeCapacity"] as? Int
+                    ?? self.usage.maxCapacity
+                if self.usage.fullChargeCapacity == 0 {
+                    self.usage.fullChargeCapacity = self.usage.maxCapacity
+                }
                 if !isARM {
                     self.usage.state = list[kIOPSBatteryHealthKey] as? String
                 }

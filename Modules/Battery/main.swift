@@ -26,6 +26,7 @@ public struct Battery_Usage: Codable {
     
     public var designedCapacity: Int = 0
     public var maxCapacity: Int = 0
+    public var fullChargeCapacity: Int = 0
     public var currentCapacity: Int = 0
     
     public var current: Int = 0
