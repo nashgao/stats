@@ -668,11 +668,14 @@ final class UnifiedPopupController {
             // The evaluator latches this synthetic crossing under
             // STATS_QA_ISLAND (see AttentionEvaluator), so one post keeps
             // the island visible for the whole sampling window regardless
-            // of real reader samples.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 6) {
-                NotificationCenter.default.post(name: .telemetrySample, object: TelemetrySample(
-                    metric: .temperature, value: 94, displayValue: "94°C", detail: "QA"
-                ))
+            // of real reader samples. The crossing repeats a few times to
+            // win the race with real temperature samples at the boundary.
+            for crossing in [6.0, 8.0, 10.0] {
+                DispatchQueue.main.asyncAfter(deadline: .now() + crossing) {
+                    NotificationCenter.default.post(name: .telemetrySample, object: TelemetrySample(
+                        metric: .temperature, value: 94, displayValue: "94°C", detail: "QA"
+                    ))
+                }
             }
             for step in 0..<12 {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 6.5 + Double(step) * 0.25) { [weak self] in
@@ -728,13 +731,16 @@ final class UnifiedPopupController {
                 }
                 // Collapse round trip: hold a manual-fan attention (the
                 // sticky auto-expand is active) and tap the Sensors header
-                // — the user collapse must win and stay collapsed.
-                DispatchQueue.main.asyncAfter(deadline: .now() + 22.7) {
+                // — the user collapse must win and stay collapsed. The
+                // timing derives from the expand list so the two drivers
+                // can never land on the same tick.
+                let collapseAt = 7.0 + Double(modules.count) * 4.0 + 1.5
+                DispatchQueue.main.asyncAfter(deadline: .now() + collapseAt - 0.3) {
                     NotificationCenter.default.post(name: .telemetrySample, object: TelemetrySample(
                         metric: .fan, value: 0.5, secondaryValue: 1, displayValue: "1,650 RPM", detail: "QA"
                     ))
                 }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 23) { [weak self] in
+                DispatchQueue.main.asyncAfter(deadline: .now() + collapseAt) { [weak self] in
                     guard let self else { return }
                     if !self.isEffectivelyVisible, let button = self.statusItem?.button?.window {
                         self.show(origin: button.frame.origin, center: button.frame.width / 2)

@@ -134,7 +134,7 @@ if launch_phase STATS_QA_EXPAND=All; then
 else
   fail "panel did not open"
 fi
-wait_for_log "\[QA\] expand-seq: collapse Sensors " 32 || true
+wait_for_log "\[QA\] expand-seq: collapse Sensors " 40 || true
 ISLAND_APPEARANCES=$(grep -c "island=1 " "$QA_LOG")
 for module in CPU GPU RAM Sensors Battery; do
   PAIR=$(grep "\[QA\] expand-seq: $module " "$QA_LOG" | tail -1 | grep -oE "panel [0-9]+->[0-9]+")
