@@ -182,7 +182,9 @@ private final class UnifiedSparklineView: NSView {
         let h = self.bounds.height
         for (i, value) in self.values.enumerated() {
             let x = CGFloat(i) / CGFloat(self.values.count - 1) * w
-            let y = 2 + (1 - CGFloat((value - lo) / (hi - lo))) * (h - 5)
+            // Non-flipped view inside a flipped row: higher values draw
+            // toward the TOP of the band (100% up, nominal thermal low).
+            let y = 2 + CGFloat((value - lo) / (hi - lo)) * (h - 5)
             if i == 0 {
                 path.move(to: NSPoint(x: x, y: y))
             } else {
@@ -867,6 +869,11 @@ final class UnifiedPanelContent: NSView {
         
         self.verdictChip.setAttributed(Self.attributedVerdict(quiet: true))
         
+        // Fixed-scale row charts: battery percentage (0...100) and the
+        // thermal pressure level (normalized to the same range).
+        self.batteryRow.spark.scale = .fixed
+        self.thermalRow.spark.scale = .fixed
+        
         NotificationCenter.default.addObserver(self, selector: #selector(self.sample(_:)), name: .unifiedPanelSample, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(self.thermalStateChanged(_:)), name: ProcessInfo.thermalStateDidChangeNotification, object: nil)
         self.updateThermalRow()
@@ -1300,7 +1307,7 @@ final class UnifiedPanelContent: NSView {
             self.rebuildFans()
         case let battery as Battery_Usage:
             self.batteryRow.valueField.stringValue = "\(Int((abs(battery.level) * 100).rounded()))%"
-            self.batteryRow.spark.add(abs(battery.batteryPower))
+            self.batteryRow.spark.add(abs(battery.level) * 100)
             self.batteryCyclesField?.stringValue = "\(battery.cycles)"
             self.batteryHealthField?.stringValue = "\(battery.health)% of design"
             self.batteryConditionField?.stringValue = localizedString(UnifiedInfoFormatters.batteryCondition(battery.health))
@@ -1366,6 +1373,21 @@ final class UnifiedPanelContent: NSView {
             self.thermalRow.valueField.stringValue = name
         }
         self.thermalRow.setStatus(level: UnifiedInfoFormatters.thermalStatusLevel(state))
+        // Step series of the pressure level, normalized to the fixed
+        // 0...100 chart range: nominal sits at the bottom, a state change
+        // jumps the line by a third of the height. Fed per tick (this
+        // runs from every relayout) and on state-change notifications.
+        self.thermalRow.spark.add(Double(state.rawValue) * 100.0 / 3.0)
+        // Tint the stroke with the row's semantic state color.
+        let stroke: NSColor
+        switch state {
+        case .fair: stroke = UnifiedTokens.amberInk
+        case .serious, .critical: stroke = UnifiedTokens.redInk
+        default: stroke = UnifiedTokens.ok
+        }
+        if self.thermalRow.spark.strokeColor != stroke {
+            self.thermalRow.spark.strokeColor = stroke
+        }
     }
     
     private func rebuildFans() {
