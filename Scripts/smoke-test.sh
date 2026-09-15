@@ -60,6 +60,7 @@ STATS_QA_ALERT=1 \
 STATS_QA_PANEL_TOGGLE=1 \
 STATS_QA_DISMISS=1 \
 STATS_QA_LAYOUT=1 \
+STATS_QA_EXPAND=1 \
 ./Stats >"$QA_LOG" 2>&1 &
 QA_PID=$!
 
@@ -97,15 +98,24 @@ sleep 15
 grep -q "\[QA\] fan cycle: read-back speed .* (meets target" "$QA_LOG" && pass "fan speed read-back meets target" || fail "fan read-back below target or missing — the command had no effect"
 grep -q "\[QA\] dismiss: inside-button event -> visible=1" "$QA_LOG" && pass "dismiss guard: icon-area click does not close" || fail "dismiss guard: icon-area click closed the panel"
 grep -q "\[QA\] dismiss: outside event -> visible=0" "$QA_LOG" && pass "dismiss: outside click closes panel" || fail "dismiss: outside click did not close the panel"
-# layout stability: content height spread across the visible ticks must
-# stay within epsilon — section jumping shows up as a large spread
-HEIGHT_SPREAD=$(grep "\[QA\] layout tick:" "$QA_LOG" | grep -oE "content=[0-9.]+" | cut -d= -f2 | sort -n | awk 'NR==1{min=$1} {max=$1} END{if (NR>0) printf "%.1f", max-min; else print "none"}')
-case "$HEIGHT_SPREAD" in
-  none) fail "no layout ticks captured" ;;
-  *) python3 -c "exit(0 if float('$HEIGHT_SPREAD') <= 4.0 else 1)" \
-       && pass "layout stable (content height spread ${HEIGHT_SPREAD}pt <= 4pt)" \
-       || fail "layout jumping (content height spread ${HEIGHT_SPREAD}pt)" ;;
-esac
+# layout stability: count large content-height CHANGES between consecutive
+# visible ticks — a legitimate transition (expand, island onset) is exactly
+# one; oscillation (section jumping) is many.
+LAYOUT_CHANGES=$(grep "\[QA\] layout tick:" "$QA_LOG" | grep -oE "content=[0-9.]+" | cut -d= -f2 | awk 'NR>1 { d = $1 - prev; if (d < 0) d = -d; if (d > 2) n++ } { prev = $1 } END { print n+0 }')
+python3 -c "exit(0 if $LAYOUT_CHANGES <= 1 else 1)" 2>/dev/null \
+  && pass "layout stable ($LAYOUT_CHANGES large height changes, oscillation would be many)" \
+  || fail "layout oscillating ($LAYOUT_CHANGES large height changes)"
+# expand must render fully in one pass: the panel height right after the
+# expand equals the height 1.2s later (two-phase expand shows up as two
+# distinct panel heights)
+if [ "$(grep -c "\[QA\] expand: immediate" "$QA_LOG")" -ge 1 ]; then
+  EXP_HEIGHTS=$(grep "\[QA\] expand:" "$QA_LOG" | grep -v "before" | grep -oE "panel=[0-9.]+" | cut -d= -f2 | sort -u | wc -l | tr -d ' ')
+  [ "$EXP_HEIGHTS" = "1" ] \
+    && pass "expand renders in one pass (panel height unchanged across +1.2s)" \
+    || fail "two-phase expand: panel heights $(grep "\[QA\] expand:" "$QA_LOG" | grep -v "before" | grep -oE "panel=[0-9.]+" | tr '\n' ' ')"
+else
+  fail "no expand probe captured"
+fi
 # open latency budget: show() synchronous cost must stay under 100ms
 OPEN_TOTAL=$(grep "\[UnifiedPerf\] show latency" "$QA_LOG" | tail -1 | grep -oE "total=[0-9.]+" | cut -d= -f2)
 if [ -z "$OPEN_TOTAL" ]; then

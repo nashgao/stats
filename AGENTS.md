@@ -115,3 +115,4 @@ from agent code — the hardened smoke test is expected to fail with the
 | `STATS_QA_PANEL_TOGGLE=1` | drive the status-item toggle path open→closed→open and log the state transitions (`[QA] panel toggle:`) |
 | `STATS_QA_DISMISS=1` | synthesize click events inside/outside the icon frame to exercise the outside-click dismissal guards (`[QA] dismiss:`) |
 | `STATS_QA_LAYOUT=1` | log panel content/island height once per second (`[QA] layout tick:`) for the layout-stability smoke assertion |
+| `STATS_QA_EXPAND=1` | expand the Sensors section at +8s and sample panel heights across +1.2s (`[QA] expand:`) — two-phase expand detector |
