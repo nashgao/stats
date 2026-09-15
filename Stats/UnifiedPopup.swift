@@ -61,6 +61,8 @@ final class UnifiedPopupController {
     /// The panel-toggle probe runs once per launch even though every
     /// show() re-arms the knob block.
     private static var qaToggleArmed = false
+    /// Same for the synthetic dismiss-guard exercise.
+    private static var qaDismissArmed = false
     
     /// Poll for the spin-up read-back after the RPM target; logs once —
     /// "(meets target)" when the speed reaches max(baseline, target/2),
@@ -149,12 +151,49 @@ final class UnifiedPopupController {
         if let local { self.outsideClickMonitors.append(local) }
     }
     
+    /// Timestamp (seconds since system startup, NSEvent's clock) of the
+    /// click that opened the panel. The dismissal monitors ignore any
+    /// event at or before this plus an epsilon: AppKit re-dispatches
+    /// synthesized copies of the opening status-item click while the
+    /// status-bar tracking resolves, and those phantoms must not close
+    /// the panel they just opened.
+    private var panelOpenTimestamp: TimeInterval = 0
+    private let panelOpenGuardEpsilon: TimeInterval = 0.05
+    
+    private func stampPanelOpenTimestamp() {
+        if let timestamp = NSApp.currentEvent?.timestamp {
+            self.panelOpenTimestamp = timestamp
+        }
+    }
+    
+    private func eventScreenLocation(_ event: NSEvent) -> NSPoint {
+        if let window = event.window {
+            return window.convertToScreen(NSRect(origin: event.locationInWindow, size: .zero)).origin
+        }
+        return NSEvent.mouseLocation
+    }
+    
+    private func isInStatusItemButton(_ point: NSPoint) -> Bool {
+        guard let frame = self.statusItem?.button?.window?.frame else { return false }
+        return frame.contains(point)
+    }
+    
     private func dismissForOutsideClick(event: NSEvent?) {
         guard self.isEffectivelyVisible else { return }
         if let event {
+            // Clicks inside the panel never dismiss.
             if event.window === self.panel { return }
-            if event.window === self.statusItem?.button?.window { return }
+            // The status-item button lives in the StatusBarServer process,
+            // so phantom re-dispatches of the opening click pass window
+            // identity checks; screen location is the reliable guard.
+            if self.isInStatusItemButton(self.eventScreenLocation(event)) { return }
+            // Synthesized events belonging to the opening click itself.
+            if event.timestamp <= self.panelOpenTimestamp + self.panelOpenGuardEpsilon { return }
+        } else {
+            // global monitor: no event object, use the live mouse location
+            if self.isInStatusItemButton(NSEvent.mouseLocation) { return }
         }
+        NSLog("[UnifiedPanelTrace] outside-click dismissal firing")
         self.hide()
     }
     
@@ -278,6 +317,7 @@ final class UnifiedPopupController {
     
     @objc private func togglePanel() {
         NSLog("[UnifiedPanelTrace] togglePanel event=%d", NSApp.currentEvent?.type.rawValue ?? -1)
+        self.stampPanelOpenTimestamp()
         if NSApp.currentEvent?.type == .rightMouseDown {
             self.showStatusMenu()
             return
@@ -286,6 +326,7 @@ final class UnifiedPopupController {
     }
     
     private func toggleFromItem() {
+        self.stampPanelOpenTimestamp()
         let visible = self.isEffectivelyVisible
         NSLog("[UnifiedPanelTrace] toggleFromItem effectiveVisible=%d", visible ? 1 : 0)
         if visible {
@@ -514,6 +555,45 @@ final class UnifiedPopupController {
                         guard let self else { return }
                         NSLog("[QA] panel toggle: stays effective=%d visible=%d", self.isEffectivelyVisible ? 1 : 0, self.panel.isVisible ? 1 : 0)
                     }
+                }
+            }
+        }
+        if ProcessInfo.processInfo.environment["STATS_QA_DISMISS"] == "1" && !Self.qaDismissArmed {
+            Self.qaDismissArmed = true
+            // Synthetic-event exercise of the outside-click dismissal
+            // guards. Events are built in the status-item button window's
+            // coordinate space (window identity is NOT consulted for the
+            // button — only screen location is), so the inside event must
+            // be ignored by the location guard and the outside event must
+            // dismiss.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 14) { [weak self] in
+                guard let self, let buttonWindow = self.statusItem?.button?.window else { return }
+                let frame = buttonWindow.frame
+                let future = ProcessInfo.processInfo.systemUptime + 1
+                let makeEvent = { (screenPoint: NSPoint) -> NSEvent? in
+                    NSEvent.mouseEvent(
+                        with: .leftMouseDown,
+                        location: buttonWindow.convertPoint(fromScreen: screenPoint),
+                        modifierFlags: [],
+                        timestamp: future,
+                        windowNumber: buttonWindow.windowNumber,
+                        context: nil,
+                        eventNumber: 0,
+                        clickCount: 1,
+                        pressure: 1
+                    )
+                }
+                if let inside = makeEvent(NSPoint(x: frame.midX, y: frame.midY)) {
+                    self.dismissForOutsideClick(event: inside)
+                    NSLog("[QA] dismiss: inside-button event -> visible=%d (expect 1)", self.panel.isVisible ? 1 : 0)
+                }
+                // re-open in case the inside guard regressed and hid it
+                if !self.panel.isVisible {
+                    self.show(origin: buttonWindow.frame.origin, center: buttonWindow.frame.width / 2)
+                }
+                if let outside = makeEvent(NSPoint(x: frame.maxX + 400, y: frame.midY)) {
+                    self.dismissForOutsideClick(event: outside)
+                    NSLog("[QA] dismiss: outside event -> visible=%d (expect 0)", self.panel.isVisible ? 1 : 0)
                 }
             }
         }

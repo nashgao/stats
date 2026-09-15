@@ -47,6 +47,7 @@ STATS_POPUP_CAPTURE_PATH="$CAPTURE" \
 STATS_QA_FAN_CYCLE=1 \
 STATS_QA_ALERT=1 \
 STATS_QA_PANEL_TOGGLE=1 \
+STATS_QA_DISMISS=1 \
 ./Stats >"$QA_LOG" 2>&1 &
 QA_PID=$!
 
@@ -82,6 +83,8 @@ grep -q "\[QA\] panel toggle: settled effective=1 visible=1" "$QA_LOG" && pass "
 # (Read-back poll until +17s, auto at +20s.) ---
 sleep 15
 grep -q "\[QA\] fan cycle: read-back speed .* (meets target" "$QA_LOG" && pass "fan speed read-back meets target" || fail "fan read-back below target or missing — the command had no effect"
+grep -q "\[QA\] dismiss: inside-button event -> visible=1" "$QA_LOG" && pass "dismiss guard: icon-area click does not close" || fail "dismiss guard: icon-area click closed the panel"
+grep -q "\[QA\] dismiss: outside event -> visible=0" "$QA_LOG" && pass "dismiss: outside click closes panel" || fail "dismiss: outside click did not close the panel"
 grep -q "\[QA\] fan cycle: automatic" "$QA_LOG" && pass "fan mode command sent (automatic)" || fail "fan automatic command never fired"
 
 # --- 6. stay alive through the whole QA window ---

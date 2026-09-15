@@ -95,6 +95,8 @@ from agent code — the hardened smoke test is expected to fail with the
   lock screen. Use the self-capture harness
   (`STATS_POPUP_CAPTURE=1 STATS_POPUP_CAPTURE_PATH=/tmp/x.png`) which
   renders the panel content off-screen.
+- **NSLog from this app does not surface in `log show` on macOS 27** —
+  capture stdout via direct exec (`./Stats >log 2>&1`) when diagnosing.
 - Sixteen `yes > /dev/null` jobs for ~25s trips the temperature/CPU
   attention states for alert-path testing; kill by exact PIDs.
 
@@ -111,3 +113,4 @@ from agent code — the hardened smoke test is expected to fail with the
 | `STATS_QA_FAN_CYCLE=1` | drive a real fan auto→manual→RPM target→read-back→auto via XPC (smoke test) |
 | `STATS_QA_ALERT=1` | force a synthetic RAM attention edge and log the composed notification (`[QA] alert:`) |
 | `STATS_QA_PANEL_TOGGLE=1` | drive the status-item toggle path open→closed→open and log the state transitions (`[QA] panel toggle:`) |
+| `STATS_QA_DISMISS=1` | synthesize click events inside/outside the icon frame to exercise the outside-click dismissal guards (`[QA] dismiss:`) |
