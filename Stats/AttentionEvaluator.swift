@@ -49,6 +49,13 @@ final class AttentionEvaluator {
     }
     private var _attentions: [Attention] = []
     private var samples: [TelemetryMetric: TelemetrySample] = [:]
+    /// Per-metric hysteresis state: metrics currently IN attention, with
+    /// the attention that put them there. Entering happens at the up
+    /// thresholds (AttentionEvaluator.evaluate); leaving only happens
+    /// below the up threshold minus a deadband, so a value hovering at a
+    /// boundary (TCMb idles 88–94°C across the 93°C line) cannot flap
+    /// the attention set — and the panel layout — every sample.
+    private var levels: [TelemetryMetric: Attention] = [:]
     /// Reader threads post telemetry samples concurrently with the main
     /// thread; all state is serialized here.
     private let queue = DispatchQueue(label: "eu.exelban.Stats.AttentionEvaluator")
@@ -76,7 +83,8 @@ final class AttentionEvaluator {
         guard let sample = notification.object as? TelemetrySample else { return }
         self.queue.async {
             self.samples[sample.metric] = sample
-            let next = self.evaluate()
+            let snapshot = Self.evaluate(self.samples)
+            let next = Self.applyHysteresis(snapshot, samples: self.samples, levels: &self.levels)
             if next != self._attentions {
                 let previous = self._attentions
                 self._attentions = next
@@ -89,9 +97,106 @@ final class AttentionEvaluator {
             }
         }
     }
-    
-    private func evaluate() -> [Attention] {
-        Self.evaluate(self.samples)
+
+    /// The exit threshold for a metric at the given level: BELOW this
+    /// value the level is released (strictly below, mirroring the
+    /// enter-at-or-above up thresholds). Deadband is ~1.5 points
+    /// (fractions for the percent metrics), 2.5°C for temperature —
+    /// wide enough to absorb idle-boundary hovering, narrow enough to
+    /// release promptly on a real recovery.
+    static func exitThreshold(for kind: Attention.Kind, level: Attention.Level) -> Double {
+        switch kind {
+        case .fan:
+            return level == .critical ? 0.935 : 0.785
+        case .temperature:
+            return level == .critical ? 97.5 : 90.5
+        case .memory:
+            return level == .critical ? 0.955 : 0.885
+        case .gpu:
+            return level == .critical ? 0.955 : 0.835
+        case .battery:
+            return 18.5
+        case .cpu:
+            return level == .critical ? 0.965 : 0.885
+        }
+    }
+
+    /// Deadband filter over the per-sample snapshot evaluation.
+    /// Escalation is immediate; de-escalation and clearing require the
+    /// metric's current value to drop strictly below the exit threshold
+    /// for its held level. `levels` is the held state (mutated).
+    static func applyHysteresis(
+        _ snapshot: [Attention],
+        samples: [TelemetryMetric: TelemetrySample],
+        levels: inout [TelemetryMetric: Attention]
+    ) -> [Attention] {
+        var emitted: [Attention] = []
+        var handled: Set<TelemetryMetric> = []
+        for candidate in snapshot {
+            let metric = AttentionAlerter.metric(of: candidate.kind)
+            handled.insert(metric)
+            if let held = levels[metric] {
+                if candidate.level.rawValue > held.level.rawValue {
+                    // escalation: immediate
+                    levels[metric] = candidate
+                    emitted.append(candidate)
+                } else if candidate.level == held.level {
+                    // refresh the label, keep the level
+                    levels[metric] = candidate
+                    emitted.append(candidate)
+                } else {
+                    // de-escalation or clear: only below the exit threshold
+                    let value = Self.hysteresisValue(of: metric, in: samples)
+                    if let value, value < Self.exitThreshold(for: candidate.kind, level: held.level) {
+                        if candidate.level == .attention {
+                            // de-escalate: hold at attention, refresh label
+                            let relaxed = Attention(kind: candidate.kind, module: candidate.module, level: .attention, label: candidate.label)
+                            levels[metric] = relaxed
+                            emitted.append(relaxed)
+                        } else {
+                            levels.removeValue(forKey: metric)
+                        }
+                    } else {
+                        emitted.append(held)
+                    }
+                }
+            } else {
+                levels[metric] = candidate
+                emitted.append(candidate)
+            }
+        }
+        // Metrics held in attention that the snapshot no longer flags:
+        // exit when their live value dropped below the exit threshold;
+        // keep emitting when their reader went silent (missing sample).
+        var toRemove: [TelemetryMetric] = []
+        for (metric, held) in levels where !handled.contains(metric) {
+            guard samples[metric] != nil else {
+                emitted.append(held)
+                continue
+            }
+            if let value = Self.hysteresisValue(of: metric, in: samples),
+               value < Self.exitThreshold(for: held.kind, level: held.level) {
+                toRemove.append(metric)
+            } else {
+                emitted.append(held)
+            }
+        }
+        for metric in toRemove {
+            levels.removeValue(forKey: metric)
+        }
+        return emitted
+    }
+
+    /// The value a metric's exit threshold compares against: battery
+    /// drains compare on watts while discharging and 0 on AC (attention
+    /// must clear when the machine is plugged in, whatever the watts);
+    /// everything else compares on its sample value.
+    private static func hysteresisValue(of metric: TelemetryMetric, in samples: [TelemetryMetric: TelemetrySample]) -> Double? {
+        guard let sample = samples[metric] else { return nil }
+        if metric == .battery {
+            return (sample.secondaryValue ?? 1) == 0 ? abs(sample.power ?? 0) : 0
+        }
+        return sample.value
     }
     
     /// Pure threshold evaluation over the latest sample per metric; kept

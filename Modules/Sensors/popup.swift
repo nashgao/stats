@@ -801,7 +801,11 @@ public class FanView: NSStackView {
         minBtn.layer?.borderColor = NSColor.separatorColor.cgColor
         
         let valueField: NSTextField = TextView()
-        valueField.font = NSFont.systemFont(ofSize: 11, weight: .light)
+        // Fixed width + monospaced digits: live RPM values must not
+        // change the field's size (999→1000 RPM), which resized the
+        // slider row and made the expanded Sensors section jump.
+        valueField.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .light)
+        valueField.widthAnchor.constraint(equalToConstant: 56).isActive = true
         valueField.textColor = .secondaryLabelColor
         valueField.alignment = .center
         valueField.setContentHuggingPriority(.defaultLow, for: .horizontal)

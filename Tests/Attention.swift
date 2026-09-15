@@ -140,3 +140,96 @@ final class AttentionEvaluatorTests: XCTestCase {
         XCTAssertTrue(evaluate([:]).isEmpty)
     }
 }
+
+final class AttentionHysteresisTests: XCTestCase {
+    private func run(_ values: [Double], kind: Attention.Kind = .temperature, metric: TelemetryMetric = .temperature) -> [Attention.Level?] {
+        var levels: [TelemetryMetric: Attention] = [:]
+        return values.map { value in
+            let sample = TelemetrySample(metric: metric, value: value, displayValue: "\(value)", detail: "")
+            let snapshot = AttentionEvaluator.evaluate([metric: sample])
+            let out = AttentionEvaluator.applyHysteresis(snapshot, samples: [metric: sample], levels: &levels)
+            return out.first(where: { AttentionAlerter.metric(of: $0.kind) == metric })?.level
+        }
+    }
+    
+    // MARK: - deadband
+    
+    func testEnterAtThresholdExitBelowDeadband() {
+        let levels = self.run([92.9, 93.0, 92.0, 90.5, 90.4])
+        XCTAssertEqual(levels, [nil, .attention, .attention, .attention, nil])
+    }
+    
+    func testBoundaryHoverDoesNotFlap() {
+        // TCMb-class idle oscillation across the 93°C line: once in,
+        // sub-threshold dips must NOT clear until well below 90.5.
+        let levels = self.run([92.9, 93.0, 92.9, 93.1, 92.8, 93.2, 91.0])
+        XCTAssertEqual(levels, [nil, .attention, .attention, .attention, .attention, .attention, .attention])
+    }
+    
+    func testEscalationIsImmediate() {
+        let levels = self.run([93.0, 100.0])
+        XCTAssertEqual(levels, [.attention, .critical])
+    }
+    
+    func testCriticalDeadbandAndDeescalation() {
+        let levels = self.run([100.0, 99.0, 97.5, 97.4])
+        XCTAssertEqual(levels, [.critical, .critical, .critical, .attention])
+    }
+    
+    func testMemoryFractionDeadband() {
+        let levels = self.run([0.89, 0.90, 0.895, 0.8849], kind: .memory, metric: .memory)
+        XCTAssertEqual(levels, [nil, .attention, .attention, nil])
+    }
+    
+    func testFanDeadband() {
+        let levels = self.run([0.79, 0.80, 0.79, 0.7849], kind: .fan, metric: .fan)
+        XCTAssertEqual(levels, [nil, .attention, .attention, nil])
+    }
+    
+    func testBatteryDeadbandOnWatts() {
+        var levels: [TelemetryMetric: Attention] = [:]
+        func step(power: Double, onBattery: Bool) -> Attention.Level? {
+            let sample = TelemetrySample(
+                metric: .battery, value: 0.5,
+                secondaryValue: onBattery ? 0 : 1,
+                power: power,
+                displayValue: "", detail: ""
+            )
+            let snapshot = AttentionEvaluator.evaluate([.battery: sample])
+            let out = AttentionEvaluator.applyHysteresis(snapshot, samples: [.battery: sample], levels: &levels)
+            return out.first(where: { $0.kind == .battery })?.level
+        }
+        XCTAssertEqual(step(power: -20, onBattery: true), .attention)
+        XCTAssertEqual(step(power: -19, onBattery: true), .attention)
+        XCTAssertEqual(step(power: -18.4, onBattery: true), nil)
+    }
+    
+    func testBatteryClearsOnAC() {
+        var levels: [TelemetryMetric: Attention] = [:]
+        func step(power: Double, onBattery: Bool) -> Attention.Level? {
+            let sample = TelemetrySample(
+                metric: .battery, value: 0.5,
+                secondaryValue: onBattery ? 0 : 1,
+                power: power,
+                displayValue: "", detail: ""
+            )
+            let snapshot = AttentionEvaluator.evaluate([.battery: sample])
+            let out = AttentionEvaluator.applyHysteresis(snapshot, samples: [.battery: sample], levels: &levels)
+            return out.first(where: { $0.kind == .battery })?.level
+        }
+        XCTAssertEqual(step(power: -25, onBattery: true), .attention)
+        // plugging in clears regardless of the AC watts reading
+        XCTAssertEqual(step(power: 60, onBattery: false), nil)
+    }
+    
+    func testSilentReaderKeepsHeldAttention() {
+        var levels: [TelemetryMetric: Attention] = [:]
+        let hot = TelemetrySample(metric: .temperature, value: 94, displayValue: "94", detail: "")
+        let snapshot = AttentionEvaluator.evaluate([.temperature: hot])
+        XCTAssertEqual(AttentionEvaluator.applyHysteresis(snapshot, samples: [.temperature: hot], levels: &levels).count, 1)
+        // reader goes silent: the held attention must persist, not vanish
+        let out = AttentionEvaluator.applyHysteresis([], samples: [:], levels: &levels)
+        XCTAssertEqual(out.count, 1)
+        XCTAssertEqual(out.first?.level, .attention)
+    }
+}

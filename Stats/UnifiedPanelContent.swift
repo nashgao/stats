@@ -944,7 +944,10 @@ final class UnifiedPanelContent: NSView {
     }
     
     private func updateIsland(attentions: [Attention], width: CGFloat) {
-        let key = attentions.map({ $0.label }).joined(separator: "|")
+        // Key on kind/module/level only — never on the label text, which
+        // carries live values ("TCMb 94°C") and would re-arm the island
+        // on every sample while a metric hovers near its threshold.
+        let key = attentions.map({ "\($0.kind.rawValue)-\($0.module)-\($0.level.rawValue)" }).sorted().joined(separator: "|")
         if attentions.isEmpty {
             if !self.lastAttentionKey.isEmpty {
                 // attentions just cleared: brief "back to nominal" note
