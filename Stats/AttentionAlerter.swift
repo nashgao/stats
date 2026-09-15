@@ -118,6 +118,7 @@ final class AttentionNotifier: NSObject {
     
     func post(_ contents: [AlertContent]) {
         guard !contents.isEmpty else { return }
+        NSLog("[Attention] notifier post ts=%.3f count=%d", Date().timeIntervalSince1970, contents.count)
         Self.requestAuthorizationIfNeeded()
         let center = UNUserNotificationCenter.current()
         for content in contents {

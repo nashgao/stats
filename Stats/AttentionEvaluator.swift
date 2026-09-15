@@ -89,8 +89,9 @@ final class AttentionEvaluator {
                 let previous = self._attentions
                 self._attentions = next
                 NSLog(
-                    "[Attention] %@",
-                    next.isEmpty ? "quiet" : next.map({ "\($0.label) [\($0.level == .critical ? "critical" : "attention")]" }).joined(separator: " · ")
+                    "[Attention] %@ (ts=%.3f)",
+                    next.isEmpty ? "quiet" : next.map({ "\($0.label) [\($0.level == .critical ? "critical" : "attention")]" }).joined(separator: " · "),
+                    Date().timeIntervalSince1970
                 )
                 let enabled: Set<TelemetryMetric> = AttentionNotifier.alertsEnabled ? Set([.fan, .temperature, .memory, .gpu, .battery, .cpu]) : []
                 AttentionNotifier.shared.post(AttentionAlerter.notifications(previous: previous, current: next, enabled: enabled))

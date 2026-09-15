@@ -418,6 +418,13 @@ class ApplicationSettings: NSStackView {
     
     @objc private func toggleAttentionAlerts(_ sender: NSButton) {
         Store.shared.set(key: AttentionNotifier.settingKey, value: sender.state == .on)
+        // Turning the setting ON is the user's explicit consent gesture:
+        // warm the authorization now so the first real alert's banner is
+        // not delayed (or dropped) behind an in-flight authorization
+        // request. Turning OFF never prompts.
+        if sender.state == .on {
+            AttentionNotifier.requestAuthorizationIfNeeded()
+        }
     }
     
     // MARK: - fan control setup
