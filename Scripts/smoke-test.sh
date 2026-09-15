@@ -103,13 +103,13 @@ grep -q "\[QA\] dismiss: outside event -> visible=0" "$QA_LOG" && pass "dismiss:
 # one per expand in the EXPAND=All sequence); oscillation (section jumping)
 # produces many more.
 LAYOUT_CHANGES=$(grep "\[QA\] layout tick:" "$QA_LOG" | grep -oE "content=[0-9.]+" | cut -d= -f2 | awk 'NR>1 { d = $1 - prev; if (d < 0) d = -d; if (d > 2) n++ } { prev = $1 } END { print n+0 }')
-python3 -c "exit(0 if $LAYOUT_CHANGES <= 5 else 1)" 2>/dev/null \
-  && pass "layout stable ($LAYOUT_CHANGES height transitions: settle + 4 expands)" \
+python3 -c "exit(0 if $LAYOUT_CHANGES <= 6 else 1)" 2>/dev/null \
+  && pass "layout stable ($LAYOUT_CHANGES height transitions: settle + 5 expands)" \
   || fail "layout oscillating ($LAYOUT_CHANGES large height changes)"
 # every expandable section must render fully in one pass: the panel
 # height right after the expand equals the height 1.2s later
 EXPAND_FAIL=0
-for module in CPU GPU RAM Sensors; do
+for module in CPU GPU RAM Sensors Battery; do
   PAIR=$(grep "\[QA\] expand-seq: $module " "$QA_LOG" | tail -1 | grep -oE "panel [0-9]+->[0-9]+")
   FROM=${PAIR#panel }; FROM=${FROM%%->*}; TO=${PAIR##*->}
   if [ -n "$FROM" ] && [ "$FROM" = "$TO" ]; then

@@ -627,7 +627,7 @@ final class UnifiedPopupController {
             // (+7/+11/+15/+19s), one line per section with the panel
             // height immediately and after 1.2s — a two-phase expand
             // shows up as a height change.
-            let modules: [String] = expandValue == "All" ? ["CPU", "GPU", "RAM", "Sensors"] : [expandValue == "1" ? "Sensors" : expandValue]
+            let modules: [String] = expandValue == "All" ? ["CPU", "GPU", "RAM", "Sensors", "Battery"] : [expandValue == "1" ? "Sensors" : expandValue]
             if modules.count == 1 {
                 let module = modules[0]
                 DispatchQueue.main.asyncAfter(deadline: .now() + 7) { [weak self] in

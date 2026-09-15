@@ -937,6 +937,7 @@ final class UnifiedPanelContent: NSView {
             hero.setExpanded(hero.module == target)
         }
         self.sensorsRow.setExpanded(target == "Sensors")
+        self.batteryRow.setExpanded(target == "Battery")
         self.relayout()
         NSLog("[UnifiedPerf] expand %@ latency=%.1fms content %.0f->%.0f detail=%.0f",
               module, (CFAbsoluteTimeGetCurrent() - t0) * 1000, heightBefore, self.frame.height,
