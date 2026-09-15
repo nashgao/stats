@@ -230,6 +230,22 @@ final class UnifiedPopupController {
         return self.panel.isOnActiveSpace
     }
     
+    /// The unified panel renders a card for every module, so every panel
+    /// module's readers must run even when the user's menu-bar config has
+    /// the module off (otherwise e.g. the RAM card shows no data). Menu
+    /// bar widgets stay suppressed — UnifiedPopupRouting.moduleWidgetsAllowed
+    /// gates them. In-memory only: no Store writes, the user's widget
+    /// configuration is untouched. Call once at launch.
+    func ensurePanelModulesRunning() {
+        modules.forEach { module in
+            guard UnifiedPopupController.moduleOrder.contains(module.config.name),
+                  module.available, !module.enabled else { return }
+            module.enabled = true
+            module.mount()
+            NSLog("[UnifiedPopup] unified mode: running %@ module for panel data (widget stays hidden)", module.config.name)
+        }
+    }
+    
     /// App-level menu bar item. Toggleable via the unified_widget defaults
     /// key (default: on). Coexists with the per-module widgets.
     func setupStatusItem() {

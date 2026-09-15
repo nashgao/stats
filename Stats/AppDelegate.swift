@@ -149,6 +149,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         }
         self.defaultValues()
         self.icon()
+        if UnifiedPopupRouting.isEnabled {
+            UnifiedPopupController.shared.ensurePanelModulesRunning()
+        }
         UnifiedPopupController.shared.setupStatusItem()
         
         NotificationCenter.default.addObserver(self, selector: #selector(listenForAppPause), name: .pause, object: nil)
