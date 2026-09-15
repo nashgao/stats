@@ -49,11 +49,11 @@ step "Quit running Stats (exact PIDs only)"
 # an unexpected death, so a single kill round can never win. Kill every
 # appearance and only proceed once none has existed for ~2s (launchd
 # throttles respawns after a few rapid deaths).
-for pid in $(pgrep -x Stats); do kill "$pid" 2>/dev/null || true; done
+for pid in $(pgrep -x Stats || true); do kill "$pid" 2>/dev/null || true; done
 sleep 2
 QUIET=0
 for i in $(seq 1 12); do
-  PIDS=$(pgrep -x Stats)
+  PIDS=$(pgrep -x Stats || true)
   if [ -n "$PIDS" ]; then
     QUIET=0
     for pid in $PIDS; do kill -9 "$pid" 2>/dev/null || true; done
@@ -63,7 +63,7 @@ for i in $(seq 1 12); do
   fi
   sleep 1
 done
-REMAINING=$(pgrep -x Stats | wc -l | tr -d ' ')
+REMAINING=$({ pgrep -x Stats || true; } | wc -l | tr -d ' ')
 [ "$REMAINING" = "0" ] || { echo "FAIL: $REMAINING Stats processes still running: $(pgrep -x Stats | tr '\n' ' ')"; exit 1; }
 
 step "Install to $APP"
@@ -87,7 +87,7 @@ echo "$SPOTLIGHT" | grep -q "^/Applications/Stats.app$" || { echo "FAIL: Spotlig
 step "Relaunch"
 open -n "$APP"
 sleep 8
-PIDS=$(pgrep -x Stats)
+PIDS=$(pgrep -x Stats || true)
 COUNT=$(echo "$PIDS" | sed '/^$/d' | wc -l | tr -d ' ')
 [ "$COUNT" = "1" ] || { echo "FAIL: expected 1 running Stats, got: $PIDS"; exit 1; }
 echo "single instance: $PIDS"
