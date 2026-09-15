@@ -584,6 +584,13 @@ final class UnifiedPopupController {
             // dismiss.
             DispatchQueue.main.asyncAfter(deadline: .now() + 14) { [weak self] in
                 guard let self, let buttonWindow = self.statusItem?.button?.window else { return }
+                // Guarantee a visible panel first (a real click during the
+                // run may have dismissed it), then exercise both guards
+                // synchronously in the same runloop turn so no external
+                // event can interleave.
+                if !self.isEffectivelyVisible {
+                    self.show(origin: buttonWindow.frame.origin, center: buttonWindow.frame.width / 2)
+                }
                 let frame = buttonWindow.frame
                 let future = ProcessInfo.processInfo.systemUptime + 1
                 let makeEvent = { (screenPoint: NSPoint) -> NSEvent? in
@@ -602,10 +609,6 @@ final class UnifiedPopupController {
                 if let inside = makeEvent(NSPoint(x: frame.midX, y: frame.midY)) {
                     self.dismissForOutsideClick(event: inside)
                     NSLog("[QA] dismiss: inside-button event -> visible=%d (expect 1)", self.panel.isVisible ? 1 : 0)
-                }
-                // re-open in case the inside guard regressed and hid it
-                if !self.panel.isVisible {
-                    self.show(origin: buttonWindow.frame.origin, center: buttonWindow.frame.width / 2)
                 }
                 if let outside = makeEvent(NSPoint(x: frame.maxX + 400, y: frame.midY)) {
                     self.dismissForOutsideClick(event: outside)
