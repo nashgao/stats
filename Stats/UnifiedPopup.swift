@@ -588,6 +588,11 @@ final class UnifiedPopupController {
             // instead of looking like a click that "does nothing".
             DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in
                 guard let self else { return }
+                // a real click may have dismissed the panel — restore a
+                // known-visible state before probing
+                if !self.isEffectivelyVisible, let button = self.statusItem?.button?.window {
+                    self.show(origin: button.frame.origin, center: button.frame.width / 2)
+                }
                 NSLog("[QA] panel toggle: open effective=%d visible=%d", self.isEffectivelyVisible ? 1 : 0, self.panel.isVisible ? 1 : 0)
                 self.toggleFromItem()
                 NSLog("[QA] panel toggle: closed effective=%d visible=%d", self.isEffectivelyVisible ? 1 : 0, self.panel.isVisible ? 1 : 0)
@@ -680,6 +685,12 @@ final class UnifiedPopupController {
             for step in 0..<12 {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 6.5 + Double(step) * 0.25) { [weak self] in
                     guard let self else { return }
+                    // a real click may have hidden the panel after the
+                    // crossing — re-show so the island state renders
+                    if step == 0, !self.isEffectivelyVisible,
+                       let button = self.statusItem?.button?.window {
+                        self.show(origin: button.frame.origin, center: button.frame.width / 2)
+                    }
                     NSLog("[QA] island: sample visible=%d frame=%@",
                           self.panel.islandIsHidden ? 0 : 1,
                           NSStringFromRect(self.panel.islandFrame))
@@ -694,7 +705,7 @@ final class UnifiedPopupController {
             // (+7/+11/+15/+19s), one line per section with the panel
             // height immediately and after 1.2s — a two-phase expand
             // shows up as a height change.
-            let modules: [String] = expandValue == "All" ? ["CPU", "GPU", "RAM", "Sensors", "Battery"] : [expandValue == "1" ? "Sensors" : expandValue]
+            let modules: [String] = expandValue == "All" ? ["CPU", "GPU", "RAM", "Sensors", "Battery", "Disk", "Network", "Thermal"] : [expandValue == "1" ? "Sensors" : expandValue]
             if modules.count == 1 {
                 let module = modules[0]
                 DispatchQueue.main.asyncAfter(deadline: .now() + 7) { [weak self] in
