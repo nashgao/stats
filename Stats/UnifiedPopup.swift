@@ -750,8 +750,12 @@ final class UnifiedPopupController {
                         let startHeight = self.panel.frame.height
                         DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
                             guard let self else { return }
-                            NSLog("[QA] expand-seq: %@ latency=%.1fms panel %.0f->%.0f",
-                                  module, expandMs, startHeight, self.panel.frame.height)
+                            // state=0 marks a sample taken after external
+                            // interference (a live user click) — the smoke
+                            // uses the last state=1 pair per module.
+                            NSLog("[QA] expand-seq: %@ latency=%.1fms panel %.0f->%.0f state=%d",
+                                  module, expandMs, startHeight, self.panel.frame.height,
+                                  self.panel.expandedSectionForQA == module ? 1 : 0)
                         }
                     }
                 }

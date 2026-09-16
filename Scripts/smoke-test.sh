@@ -137,7 +137,8 @@ fi
 wait_for_log "\[QA\] expand-seq: collapse Sensors " 55 || true
 ISLAND_APPEARANCES=$(grep -c "island=1 " "$QA_LOG")
 for module in CPU GPU RAM Sensors Battery Disk Network Thermal; do
-  PAIR=$(grep "\[QA\] expand-seq: $module " "$QA_LOG" | tail -1 | grep -oE "panel [0-9]+->[0-9]+")
+  # last state=1 pair (samples after a live click are marked state=0)
+  PAIR=$(grep "\[QA\] expand-seq: $module " "$QA_LOG" | grep "state=1" | tail -1 | grep -oE "panel [0-9]+->[0-9]+")
   FROM=${PAIR#panel }; FROM=${FROM%%->*}; TO=${PAIR##*->}
   if [ -n "$FROM" ] && [ "$FROM" = "$TO" ]; then
     pass "expand $module renders in one pass (panel ${FROM})"
