@@ -190,7 +190,8 @@ private final class UnifiedSparklineView: NSView {
         didSet { self.needsDisplay = true }
     }
     private var values: [Double] = []
-    private let capacity = 30
+    /// One minute of history at the readers' 1 Hz cadence.
+    private let capacity = 60
     
     override var isOpaque: Bool { false }
     
