@@ -64,4 +64,16 @@ final class PanelInfoTests: XCTestCase {
         // toNearestOrEven rounding, matching the reader's health basis
         XCTAssertEqual(UnifiedInfoFormatters.batteryPercent(999, of: 1000), 100)
     }
+    
+    // MARK: - compact network rate
+    
+    func testCompactRate() {
+        XCTAssertEqual(UnifiedInfoFormatters.compactRate(0), "0K")
+        XCTAssertEqual(UnifiedInfoFormatters.compactRate(400), "0.4K")
+        XCTAssertEqual(UnifiedInfoFormatters.compactRate(9_500), "9.5K")
+        XCTAssertEqual(UnifiedInfoFormatters.compactRate(18_000_000), "18M")
+        XCTAssertEqual(UnifiedInfoFormatters.compactRate(5_500_000), "5.5M")
+        XCTAssertEqual(UnifiedInfoFormatters.compactRate(2_500_000_000), "2.5G")
+        XCTAssertEqual(UnifiedInfoFormatters.compactRate(18_000_000_000), "18G")
+    }
 }

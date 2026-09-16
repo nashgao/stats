@@ -143,6 +143,27 @@ enum UnifiedInfoFormatters {
         return Int((Double(100 * part) / Double(design)).rounded(.toNearestOrEven))
     }
     
+    /// Compact rate for the collapsed Network row: per-magnitude suffix
+    /// ("18M", "5M", "0.4K") — the ↓/↑ arrows already imply per-second.
+    /// Scaled like the Disk value (one decimal below 10, integer above).
+    static func compactRate(_ bytesPerSecond: Int64) -> String {
+        func format(_ value: Double) -> String {
+            if value > 0 && value < 10 {
+                return String(format: "%.1f", value)
+            }
+            return String(format: "%.0f", value)
+        }
+        let value = Double(bytesPerSecond)
+        switch value {
+        case ..<1_000_000:
+            return "\(format(value / 1_000))K"
+        case ..<1_000_000_000:
+            return "\(format(value / 1_000_000))M"
+        default:
+            return "\(format(value / 1_000_000_000))G"
+        }
+    }
+    
     /// Grammar-row status level (0/1/2) for a thermal state. Display
     /// tint only — thermal pressure is deliberately NOT wired into the
     /// attention evaluator.
@@ -1455,8 +1476,8 @@ final class UnifiedPanelContent: NSView {
             }
             self.diskDetail.setLiveRows(min(2 + volumes.count, 5))
         case let net as Network_Usage:
-            let down = Units(bytes: net.bandwidth.download).getReadableSpeed(omitUnits: true)
-            let up = Units(bytes: net.bandwidth.upload).getReadableSpeed(omitUnits: true)
+            let down = UnifiedInfoFormatters.compactRate(net.bandwidth.download)
+            let up = UnifiedInfoFormatters.compactRate(net.bandwidth.upload)
             self.netRow.valueField.stringValue = "\(down)↓ \(up)↑"
             self.netRow.spark.add(Double(net.bandwidth.download + net.bandwidth.upload) / 1024)
             self.netDownField?.stringValue = Units(bytes: net.bandwidth.download).getReadableSpeed()
