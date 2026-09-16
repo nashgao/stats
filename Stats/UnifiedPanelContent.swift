@@ -64,6 +64,9 @@ enum UnifiedPerf {
 enum UnifiedMotion {
     static let enabled: Bool = {
         let env = ProcessInfo.processInfo.environment
+        // QA escape hatch: force animations ON during a QA run so the
+        // motion path itself can be probed (island-expand phase).
+        if env["STATS_QA_MOTION"] == "1" { return true }
         if env["STATS_POPUP_CAPTURE"] == "1" { return false }
         if env["STATS_POPUP_PERF"] == "1" { return false }
         if env["STATS_POPUP_DEBUG_PAINT"] == "1" { return false }
@@ -406,9 +409,26 @@ private final class UnifiedHeroCard: UnifiedCardView {
         self.chevron.target = self
         self.chevron.action = #selector(self.toggle)
         self.addSubview(self.chevron)
+        // The whole header band toggles the hero — not just the chevron
+        // (same convention as the grammar rows). Clicks on the chevron
+        // itself and on the pill row are excluded.
+        let tap = NSClickGestureRecognizer(target: self, action: #selector(self.headerTapped(_:)))
+        self.addGestureRecognizer(tap)
         self.addSubview(self.pillRow)
         self.addSubview(self.expandContainer)
         self.expandContainer.isHidden = true
+    }
+    
+    /// QA hook: drives the same toggle path as a header tap.
+    func simulateHeaderTap() {
+        self.onToggle?()
+    }
+    
+    @objc private func headerTapped(_ recognizer: NSClickGestureRecognizer) {
+        let point = recognizer.location(in: self)
+        guard point.y <= 40 else { return }
+        guard !self.chevron.frame.contains(point) else { return }
+        self.onToggle?()
     }
     
     /// Big tabular number; the unit is demoted to 14pt secondary, per the mock.
@@ -1164,6 +1184,9 @@ final class UnifiedPanelContent: NSView {
     func simulateHeaderTap(_ module: String) {
         for row in [self.sensorsRow, self.batteryRow, self.diskRow, self.netRow, self.thermalRow] where row.module == module {
             row.simulateHeaderTap()
+        }
+        for hero in [self.cpuHero, self.gpuHero, self.ramHero] where hero.module == module {
+            hero.simulateHeaderTap()
         }
     }
     
