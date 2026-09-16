@@ -1512,17 +1512,22 @@ final class UnifiedPanelContent: NSView {
         value.identifier = NSUserInterfaceItemIdentifier("battery.detail")
         self.batteryDetailContainer.addSubview(name)
         self.batteryDetailContainer.addSubview(value)
+        self.batteryDetailRows.append((name: name, value: value))
         return value
     }
-    
+
+    /// Explicit (label, value) pairs — never derive pairing from subview
+    /// enumeration order; that z-order dependence shifted every value one
+    /// row up (Cycles empty, health showing the cycle count, …).
+    private var batteryDetailRows: [(name: NSTextField, value: NSTextField)] = []
+
     private func layoutBatteryDetail() {
         let width = max(self.batteryRow.expandContainer.bounds.width, 100)
         var y: CGFloat = 0
-        for view in self.batteryDetailContainer.subviews where view.identifier?.rawValue == "battery.detail" {
-            guard let field = view as? NSTextField else { continue }
-            let isValue = field.alignment == .right
-            field.frame = NSRect(x: isValue ? width - 100 : 0, y: y + 1, width: isValue ? 100 : 220, height: 14)
-            if !isValue { y += 18 }
+        for row in self.batteryDetailRows {
+            row.name.frame = NSRect(x: 0, y: y + 1, width: 180, height: 14)
+            row.value.frame = NSRect(x: width - 160, y: y + 1, width: 160, height: 14)
+            y += 18
         }
         self.batteryDetailContainer.frame = NSRect(x: 0, y: 0, width: width, height: max(ceil(y), 30))
         self.batteryRow.detailHeight = max(ceil(y), 30)
