@@ -1061,7 +1061,10 @@ final class UnifiedPanelContent: NSView {
     
     func layoutIsland(width: CGFloat) {
         let margin = UnifiedTokens.contentMargin
-        self.island.frame = NSRect(x: margin, y: 0, width: width - margin * 2, height: 46)
+        // Fixed top-anchored band (see the invariant in the panel's
+        // layoutChrome): the island's own frame is constant — 8pt below
+        // the panel top — and never derives from the content height.
+        self.island.frame = NSRect(x: margin, y: 8, width: width - margin * 2, height: 46)
         self.islandGlyph.frame = NSRect(x: 12, y: 14, width: 16, height: 16)
         self.islandTitle.frame = NSRect(x: 34, y: 8, width: self.island.frame.width - 150, height: 15)
         self.islandSubtitle.frame = NSRect(x: 34, y: 25, width: self.island.frame.width - 150, height: 14)
@@ -1192,6 +1195,10 @@ final class UnifiedPanelContent: NSView {
     
     /// QA accessor: whether any section is expanded (collapse assertion).
     var expandedSectionForQA: String? { self.expandedSection }
+    /// QA accessors for the per-frame screen-space motion invariant.
+    var headerForQA: NSView { self.brandLabel }
+    var cpuHeroForQA: NSView { self.cpuHero }
+    var netRowForQA: NSView { self.netRow }
     
     /// Scroll offset so the named module's section sits near the top.
     func sectionOffset(for module: String) -> CGFloat? {

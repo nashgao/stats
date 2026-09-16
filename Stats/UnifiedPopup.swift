@@ -701,10 +701,12 @@ final class UnifiedPopupController {
                 }
             }
             // Motion probe (STATS_QA_MOTION=1): with animations forced ON,
-            // expand a hero while the island is visible and sample the
-            // island's pin every 50ms through the spring. The island must
-            // stay glued to the final top band from the first sample —
-            // the pin reads the target height, never the animating frame.
+            // expand a MIDDLE section (Disk — heroes above, rows below)
+            // while the island is visible, and sample SCREEN-SPACE rects
+            // at animation start, mid-frames, and end. Invariant: the
+            // island and the brand header keep IDENTICAL screen
+            // coordinates at every frame; only content at/below the
+            // expansion point translates (the Network row moves down).
             if ProcessInfo.processInfo.environment["STATS_QA_MOTION"] == "1" {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 8.4) { [weak self] in
                     guard let self else { return }
@@ -712,12 +714,16 @@ final class UnifiedPopupController {
                         NSLog("[QA] island-expand: skipped (island hidden)")
                         return
                     }
-                    self.panel.expandSection("CPU")
-                    for step in 0..<14 {
-                        DispatchQueue.main.asyncAfter(deadline: .now() + Double(step) * 0.05) { [weak self] in
+                    self.panel.expandSection("Disk")
+                    for step in [0.0, 0.07, 0.14, 0.21, 0.28, 0.4] {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + step) { [weak self] in
                             guard let self else { return }
-                            NSLog("[QA] island-expand: y=%.0f panel=%.0f",
-                                  self.panel.islandFrame.origin.y, self.panel.frame.height)
+                            NSLog("[QA] island-expand: island=%@ header=%@ cpu=%@ net=%@ win=%@",
+                                  NSStringFromRect(self.panel.islandScreenRect),
+                                  NSStringFromRect(self.panel.headerScreenRect),
+                                  NSStringFromRect(self.panel.cpuHeroScreenRect),
+                                  NSStringFromRect(self.panel.netRowScreenRect),
+                                  NSStringFromRect(self.panel.frame))
                         }
                     }
                 }
@@ -850,6 +856,7 @@ final class UnifiedPopupController {
         }
         self.panel.makeKeyAndOrderFront(nil)
         self.panelPresented = true
+        self.panel.setAnchorTop(self.panel.frame.maxY)
         self.panel.playEntrance()
         let contentMs = (tPresent - t0) * 1000
         let presentMs = (CFAbsoluteTimeGetCurrent() - tPresent) * 1000
@@ -885,7 +892,15 @@ final class UnifiedPopupController {
 
 /// Standard system popover material with the mock's 16pt radius and
 /// 1pt panel border (white 14% dark / black 7% light).
+///
+/// Top-origin coordinates for its chrome (island, scroll container,
+/// footer): the panel is anchored at the menu bar and grows DOWNWARD,
+/// so the band above the scroll content is expressed from the top and
+/// the island's frame is constant (see the invariant in
+/// UnifiedPopupPanel.layoutChrome).
 private final class UnifiedPanelMaterialView: NSVisualEffectView {
+    override var isFlipped: Bool { true }
+    
     override func updateLayer() {
         super.updateLayer() // NSVisualEffectView draws the material here
         self.effectiveAppearance.performAsCurrentDrawingAppearance {
@@ -1029,16 +1044,21 @@ private final class UnifiedPopupPanel: NSPanel, NSWindowDelegate {
         self.effectView.autoresizingMask = [.width, .height]
         
         self.effectView.addSubview(self.content.islandView)
+        // Fixed top-anchored band: the island's frame is constant and
+        // NEVER derives from the content height (see the invariant in
+        // layoutChrome). 8pt top padding, flush with the scroll content.
+        self.content.islandView.autoresizingMask = []
+        self.content.islandView.frame = NSRect(x: 12, y: 8, width: contentRect.width - 24, height: 46)
         
         self.scrollContainer.wantsLayer = true
         self.scrollContainer.layer?.masksToBounds = true
-        self.scrollContainer.frame = NSRect(x: 0, y: 28, width: contentRect.width, height: contentRect.height - 28)
-        self.scrollContainer.autoresizingMask = [.width, .height]
+        self.scrollContainer.frame = NSRect(x: 0, y: 0, width: contentRect.width, height: max(contentRect.height - 28, 60))
+        self.scrollContainer.autoresizingMask = []
         self.scrollContainer.host(self.content)
         self.effectView.addSubview(self.scrollContainer)
         
         self.footerBar.frame = NSRect(x: 0, y: 0, width: contentRect.width, height: 28)
-        self.footerBar.autoresizingMask = [.width, .maxYMargin]
+        self.footerBar.autoresizingMask = [.width]
         
         let separator = NSView(frame: NSRect(x: 12, y: 27, width: contentRect.width - 24, height: 1))
         separator.autoresizingMask = [.width]
@@ -1126,20 +1146,21 @@ private final class UnifiedPopupPanel: NSPanel, NSWindowDelegate {
             self.layoutChrome()
             return
         }
-        if UnifiedMotion.enabled {
-            // AppKit-style spring (~280ms, slight overshoot) around the
-            // window frame only — content is static during the
-            // interpolation; the island/container stay pinned to the
-            // final geometry throughout.
-            let top = self.frame.maxY
-            var finalFrame = self.frame
-            finalFrame.size = needed
-            finalFrame.origin.y = top - needed.height
-            NSAnimationContext.runAnimationGroup({ context in
-                context.duration = 0.28
-                context.timingFunction = CAMediaTimingFunction(controlPoints: 0.3, 1.25, 0.4, 1)
-                self.animator().setFrame(finalFrame, display: true)
-            })
+        if UnifiedMotion.enabled, self.anchorTopY != nil {
+            // The spring drives the WINDOW FRAME ONLY, self-timed, with
+            // every frame anchored to anchorTopY (the menu-bar anchor).
+            // AppKit's own frame animation does not keep the visual top
+            // fixed mid-flight on this window class, which broke the
+            // panel invariant (content above the expansion point must
+            // keep identical screen coordinates at every frame).
+            self.frameAnimationFrom = current.height
+            self.frameAnimationTo = needed.height
+            self.frameAnimationStart = Date()
+            if self.frameAnimator == nil {
+                self.frameAnimator = Timer.scheduledTimer(withTimeInterval: 1.0 / 90, repeats: true) { [weak self] _ in
+                    self?.stepFrameAnimation()
+                }
+            }
             self.layoutChrome()
             return
         }
@@ -1147,7 +1168,7 @@ private final class UnifiedPopupPanel: NSPanel, NSWindowDelegate {
             UnifiedPerf.frameSet("syncResize")
             NSLog("[UnifiedPerf] syncResize %.1f -> %.1f", current.height, needed.height)
         }
-        let top = self.frame.maxY
+        let top = self.anchorTopY ?? self.frame.maxY
         self.setContentSize(needed)
         var frame = self.frame
         frame.origin.y = top - frame.height
@@ -1157,6 +1178,42 @@ private final class UnifiedPopupPanel: NSPanel, NSWindowDelegate {
         // one visible frame (the "appears in the wrong spot, then jumps"
         // defect).
         self.layoutChrome()
+    }
+    
+    /// Self-driven window-frame spring: each tick re-frames the window
+    /// anchored to the menu-bar top, so the visual top NEVER moves while
+    /// the bottom eases out with a slight overshoot.
+    private var frameAnimator: Timer?
+    private var frameAnimationStart: Date?
+    private var frameAnimationFrom: CGFloat = 0
+    private var frameAnimationTo: CGFloat = 0
+    
+    private func stepFrameAnimation() {
+        guard let start = self.frameAnimationStart else { return }
+        let progress = min(Date().timeIntervalSince(start) / 0.28, 1)
+        let eased = Self.easeOutBack(progress)
+        let height = self.frameAnimationFrom + (self.frameAnimationTo - self.frameAnimationFrom) * eased
+        let top = self.anchorTopY ?? self.frame.maxY
+        var frame = self.frame
+        frame.origin.y = top - height
+        frame.size.height = height
+        self.setFrame(frame, display: true)
+        if progress >= 1 {
+            self.frameAnimator?.invalidate()
+            self.frameAnimator = nil
+            var finalFrame = self.frame
+            finalFrame.origin.y = top - self.frameAnimationTo
+            finalFrame.size.height = self.frameAnimationTo
+            self.setFrame(finalFrame, display: true)
+        }
+    }
+    
+    /// Ease-out-back (~280ms, slight overshoot) — the AppKit spring feel.
+    private static func easeOutBack(_ x: Double) -> Double {
+        let c1 = 1.25
+        let c3 = c1 + 1
+        let t = x - 1
+        return 1 + c3 * t * t * t + c1 * t * t
     }
     
     /// Entrance: contentView layer transform scale 0.92→1.0 (anchored at
@@ -1232,33 +1289,67 @@ private final class UnifiedPopupPanel: NSPanel, NSWindowDelegate {
         self.scrollContainer.layoutContent()
     }
     
-    /// Target content height for chrome pinning. syncSize/show set this
-    /// BEFORE the frame reaches it, so layoutChrome pins the island and
-    /// sizes the scroll container against the FINAL geometry — with the
-    /// expand spring running, the contentView frame interpolates and
-    /// reading it mid-animation made the island drift off the visual top
-    /// and jump back later.
+    /// The panel's anchor top (screen maxY), captured at show(). The
+    /// window grows DOWNWARD from the menu bar, so every resize —
+    /// immediate or animated — must be anchored to THIS value, not to
+    /// self.frame.maxY (the model frame can differ from the on-screen
+    /// presentation mid-animation, which moved the visual top).
+    private var anchorTopY: CGFloat? = nil
+    func setAnchorTop(_ value: CGFloat) { self.anchorTopY = value }
+    
+    /// Target content height for the scroll container/footer geometry.
+    /// syncSize/show set this BEFORE the frame reaches it, so chrome
+    /// settles at final geometry in the same pass while the spring
+    /// animates the window frame (the island and header are constant
+    /// frames and never derive from this — see layoutChrome).
     private var pendingContentHeight: CGFloat? = nil
     
-    /// Pin the island and size the scroll container against the CURRENT
-    /// window height. Must run AFTER any window resize: pinning against a
-    /// stale height places the island wrong for one visible frame and the
-    /// correction reads as a jump.
+    /// Panel geometry invariant: the window is anchored at the menu bar
+    /// and grows DOWNWARD (syncSize preserves maxY in both the immediate
+    /// and the spring paths). Therefore at EVERY frame of any resize —
+    /// including the expand spring — the elements above the expanding
+    /// section (island, brand header, all content before the expansion
+    /// point) keep IDENTICAL screen coordinates; only content at or
+    /// below the expansion point translates. Consequences:
+    ///  - the island lives in a FIXED top-anchored band (constant frame
+    ///    set at construction, never recomputed here);
+    ///  - the scroll container's TOP edge is constant (modulo the
+    ///    island-presence boolean) — only its HEIGHT follows content;
+    ///  - the footer is bottom-anchored (moves with the bottom edge).
+    /// `height` is the TARGET content height (pendingContentHeight) so
+    /// the scroll/footer settle at final geometry in the same pass.
+    /// Nothing in this function positions the island or the header.
     func layoutChrome() {
         let island = self.content.islandSpace
         self.content.layoutIsland(width: Self.panelWidth)
         let height = self.pendingContentHeight ?? self.contentView?.frame.height ?? 0
-        self.content.islandView.frame.origin.y = height - island
-        let containerFrame = NSRect(x: 0, y: 28, width: Self.panelWidth, height: max(height - 28 - island, 60))
+        let topInset: CGFloat = island > 0 ? 54 : 0
+        let containerFrame = NSRect(x: 0, y: topInset, width: Self.panelWidth, height: max(height - topInset - 28, 60))
         if self.scrollContainer.frame != containerFrame {
             UnifiedPerf.frameSet("container")
             self.scrollContainer.frame = containerFrame
+        }
+        let footerFrame = NSRect(x: 0, y: height - 28, width: Self.panelWidth, height: 28)
+        if self.footerBar.frame != footerFrame {
+            self.footerBar.frame = footerFrame
         }
     }
     
     /// QA accessors for the island phase probe.
     var islandFrame: CGRect { self.content.islandView.frame }
     var islandIsHidden: Bool { self.content.islandView.isHidden }
+    /// Per-frame screen-space rects for the motion invariant: the island
+    /// and the brand header must keep IDENTICAL screen coordinates at
+    /// every frame of an animated resize; content at/below the expanding
+    /// section translates. (convert(_:to: nil) yields WINDOW coords on
+    /// this OS version — convertToScreen gives true screen rects.)
+    private func screenRect(of view: NSView) -> CGRect {
+        self.convertToScreen(view.convert(view.bounds, to: nil))
+    }
+    var islandScreenRect: CGRect { self.screenRect(of: self.content.islandView) }
+    var headerScreenRect: CGRect { self.screenRect(of: self.content.headerForQA) }
+    var cpuHeroScreenRect: CGRect { self.screenRect(of: self.content.cpuHeroForQA) }
+    var netRowScreenRect: CGRect { self.screenRect(of: self.content.netRowForQA) }
     /// show() sizes the window itself — record its target so chrome
     /// pinning never reads a stale or animating frame.
     func setPendingContentHeight(_ value: CGFloat) { self.pendingContentHeight = value }

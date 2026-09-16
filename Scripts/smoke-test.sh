@@ -260,19 +260,37 @@ else
   fail "panel did not open"
 fi
 wait_for_log "\[QA\] island-expand: " 22 || true
-ISLAND_EXPAND=$(grep "\[QA\] island-expand: y=" "$QA_LOG" | python3 -c '
+ISLAND_EXPAND=$(grep "\[QA\] island-expand: island=" "$QA_LOG" | python3 -c '
 import sys, re
-ys = [float(m.group(1)) for line in sys.stdin for m in [re.search(r"y=([\d.]+)", line)] if m]
-if len(ys) < 3:
-    print("insufficient")
-elif max(ys) - min(ys) > 2:
-    print("drift %.1f" % (max(ys) - min(ys)))
+
+def rects(field, lines):
+    out = []
+    for line in lines:
+        m = re.search(field + r"=\{\{([\d.-]+), ([\d.-]+)\}, \{([\d.-]+), ([\d.-]+)\}\}", line)
+        if m:
+            out.append(tuple(float(v) for v in m.groups()))
+    return out
+
+lines = sys.stdin.readlines()
+islands = rects("island", lines)
+headers = rects("header", lines)
+wins = rects("win", lines)
+if len(islands) < 5:
+    print("insufficient %d" % len(islands))
 else:
-    print("glued@%d" % ys[-1])
+    def spread(rs):
+        return max(max(r[i] for r in rs) - min(r[i] for r in rs) for i in range(4))
+    di, dh, dw = spread(islands), spread(headers), spread(wins)
+    # invariant: island + header screen-constant; the window itself
+    # genuinely resized during the samples (the spring ran)
+    if di <= 1 and dh <= 1 and dw >= 40:
+        print("invariant ok (island d%.1f header d%.1f window d%.1f)" % (di, dh, dw))
+    else:
+        print("violation island %.1f header %.1f window %.1f" % (di, dh, dw))
 ')
 case "$ISLAND_EXPAND" in
-  glued@*) pass "island glued to the top band through the expand spring (y${ISLAND_EXPAND#glued@})" ;;
-  *) fail "island pin defect during spring: $ISLAND_EXPAND" ;;
+  "invariant ok"*) pass "screen-space invariant holds through the spring ($ISLAND_EXPAND)" ;;
+  *) fail "screen-space invariant violated: $ISLAND_EXPAND" ;;
 esac
 quit_phase "phase 6 (motion)"
 
