@@ -461,6 +461,7 @@ final class UnifiedPopupController {
         NSLog("[UnifiedPanelTrace] hide() visible=%d", self.panel.isVisible ? 1 : 0)
         guard self.panel.isVisible else { return }
         self.panelPresented = false
+        self.panel.resetSensorsDetail()
         self.panel.orderOut(nil)
     }
     
@@ -710,6 +711,18 @@ final class UnifiedPopupController {
                 let module = modules[0]
                 DispatchQueue.main.asyncAfter(deadline: .now() + 7) { [weak self] in
                     guard let self else { return }
+                    if module == "SensorsAll" {
+                        // QA capture value: Option B with the disclosure open.
+                        // The capture happens synchronously in the same
+                        // runloop turn — no event (or live user click) can
+                        // change the state between expanding and snapshot.
+                        self.panel.expandSection("Sensors")
+                        self.panel.openAllSensorsForQA()
+                        self.panel.writeSelfCapture()
+                        NSLog("[QA] expand: show-all captured")
+                    } else {
+                        self.panel.expandSection(module)
+                    }
                     NSLog("[QA] expand: before content=%.0f panel=%.0f", self.panel.contentHeight, self.panel.frame.height)
                     self.panel.expandSection(module)
                     NSLog("[QA] expand: immediate content=%.0f panel=%.0f", self.panel.contentHeight, self.panel.frame.height)
@@ -1122,6 +1135,10 @@ private final class UnifiedPopupPanel: NSPanel, NSWindowDelegate {
     /// QA hook: drive a section header tap (same path as the gesture).
     func simulateHeaderTap(_ module: String) { self.content.simulateHeaderTap(module) }
     var expandedSectionForQA: String? { self.content.expandedSectionForQA }
+    /// "Show all" state lives only while the panel is open.
+    func resetSensorsDetail() { self.content.resetSensorsDetail() }
+    /// QA hook: capture the Show-all-opened state.
+    func openAllSensorsForQA() { self.content.openAllTempsForQA() }
     
     func expandSection(_ module: String) {
         self.content.expandSection(module)

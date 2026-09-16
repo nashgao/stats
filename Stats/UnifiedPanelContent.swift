@@ -975,6 +975,11 @@ final class UnifiedPanelContent: NSView {
         self.sensorsRow.expandContainer.addSubview(self.sensorsFansContainer)
         self.sensorsRow.detailHeight = 150
         self.sensorsRow.layoutRow()
+        self.showAllButton.isBordered = false
+        self.showAllButton.contentTintColor = .secondaryLabelColor
+        self.showAllButton.target = self
+        self.showAllButton.action = #selector(self.toggleShowAll)
+        self.sensorsFansContainer.addSubview(self.showAllButton)
         
         // Battery health detail: cycles / nominal health / full-charge
         // capability / condition, in the same label-left, value-right
@@ -1524,6 +1529,19 @@ final class UnifiedPanelContent: NSView {
     
     private var fanKeys: [String] = []
     private var fanHeights: [CGFloat] = []
+    /// Option B temperature detail: current visible member keys (hot
+    /// first), the latest sample per key, and the live row views. Rows
+    /// update values in place; the view order only changes when the
+    /// membership actually changes (with a deadband, so a single-sample
+    /// swap at the boundary doesn't reshuffle the list).
+    private var tempKeys: [String] = []
+    private var latestTemps: [String: Sensor_p] = [:]
+    private var tempRows: [(key: String, name: NSTextField, value: NSTextField)] = []
+    /// "Show all" disclosure state — lives only while the panel is open.
+    private var showAllTemps = false
+    private var totalTempCount = 0
+    private let tempDeadband: Double = 0.5
+    private let showAllButton = NSButton()
     
     // MARK: - battery health detail
     
@@ -1626,23 +1644,100 @@ final class UnifiedPanelContent: NSView {
                 fanView.update(fans[index])
             }
         }
-        // Temperature rows: rebuilt each sample so values and ordering
-        // (they sort by value) stay live under load.
-        for view in self.sensorsFansContainer.subviews where view.identifier?.rawValue == "temp" {
-            view.removeFromSuperview()
-        }
+        // Temperature rows (Option B): hot-first, top 5 by default, "Show
+        // all (N)" reveals the rest. Membership changes require the
+        // newcomer to beat the held 5th value by a deadband; values
+        // otherwise update in place — no per-tick reshuffle.
         let temps = sensors.sensors
             .filter({ $0.type == .temperature && $0.popupState && $0.value.isFinite })
             .sorted(by: { $0.value > $1.value })
-            .prefix(3)
-        for temp in temps {
-            let label = unifiedLabel(temp.name, font: .systemFont(ofSize: 11, weight: .regular), color: .secondaryLabelColor)
-            let value = unifiedLabel(temp.formattedValue, font: .monospacedDigitSystemFont(ofSize: 11, weight: .semibold), color: .labelColor, alignment: .right)
-            label.identifier = NSUserInterfaceItemIdentifier("temp")
-            value.identifier = NSUserInterfaceItemIdentifier("temp")
-            self.sensorsFansContainer.addSubview(label)
-            self.sensorsFansContainer.addSubview(value)
+        self.totalTempCount = temps.count
+        for temp in temps { self.latestTemps[temp.key] = temp }
+        
+        let visibleCount = self.showAllTemps ? temps.count : min(5, temps.count)
+        var desired = Array(temps.prefix(visibleCount).map({ $0.key }))
+        if !self.showAllTemps, desired != self.tempKeys, !self.tempKeys.isEmpty {
+            let threshold = self.latestTemps[self.tempKeys[min(4, self.tempKeys.count - 1)]]?.value ?? -.infinity
+            let newcomers = desired.filter { !self.tempKeys.contains($0) }
+            let accepted = newcomers.allSatisfy { key in
+                (self.latestTemps[key]?.value ?? -.infinity) > threshold + self.tempDeadband
+            }
+            if !accepted {
+                desired = self.tempKeys
+            }
         }
+        if desired != self.tempKeys {
+            self.rebuildTempRows(desired)
+        }
+        for row in self.tempRows {
+            guard let sensor = self.latestTemps[row.key] else { continue }
+            if row.value.stringValue != sensor.formattedValue {
+                row.value.stringValue = sensor.formattedValue
+            }
+        }
+        self.updateShowAllRow()
+        // keep the disclosure row on top of the z-order across fan rebuilds
+        self.sensorsFansContainer.addSubview(self.showAllButton)
+        self.layoutFanContainer()
+        self.onLayoutChange?()
+    }
+    
+    private func rebuildTempRows(_ keys: [String]) {
+        for row in self.tempRows {
+            row.name.removeFromSuperview()
+            row.value.removeFromSuperview()
+        }
+        self.tempRows = keys.map { key in
+            let name = unifiedLabel(self.latestTemps[key]?.name ?? key, font: .systemFont(ofSize: 11, weight: .regular), color: .secondaryLabelColor)
+            let value = unifiedLabel(self.latestTemps[key]?.formattedValue ?? "–", font: .monospacedDigitSystemFont(ofSize: 11, weight: .semibold), color: .labelColor, alignment: .right)
+            name.identifier = NSUserInterfaceItemIdentifier("temp")
+            value.identifier = NSUserInterfaceItemIdentifier("temp")
+            self.sensorsFansContainer.addSubview(name)
+            self.sensorsFansContainer.addSubview(value)
+            return (key, name, value)
+        }
+        self.tempKeys = keys
+    }
+    
+    private func updateShowAllRow() {
+        let extra = max(self.totalTempCount - 5, 0)
+        self.showAllButton.isHidden = extra == 0
+        let title = self.showAllTemps ? localizedString("Show less") : "\(localizedString("Show all")) (\(self.totalTempCount))"
+        self.showAllButton.attributedTitle = NSAttributedString(string: title, attributes: [
+            .font: NSFont.systemFont(ofSize: 11, weight: .medium),
+            .foregroundColor: NSColor.secondaryLabelColor
+        ])
+    }
+    
+    @objc private func toggleShowAll() {
+        self.showAllTemps.toggle()
+        let temps = self.latestTemps.values.sorted(by: { $0.value > $1.value })
+        let visibleCount = self.showAllTemps ? temps.count : min(5, temps.count)
+        self.rebuildTempRows(Array(temps.prefix(visibleCount).map({ $0.key })))
+        self.updateShowAllRow()
+        self.layoutFanContainer()
+        self.onLayoutChange?()
+    }
+    
+    /// "Show all" state lives only while the panel is open (Option B);
+    /// the controller resets it on every close. QA hook for captures.
+    func resetSensorsDetail() {
+        guard self.showAllTemps else { return }
+        self.showAllTemps = false
+        let temps = self.latestTemps.values.sorted(by: { $0.value > $1.value })
+        self.rebuildTempRows(Array(temps.prefix(min(5, temps.count)).map({ $0.key })))
+        self.updateShowAllRow()
+        self.layoutFanContainer()
+        self.onLayoutChange?()
+    }
+    
+    /// QA hook: capture the Show-all-opened state.
+    func openAllTempsForQA() {
+        guard !self.showAllTemps else { return }
+        self.showAllTemps = true
+        let temps = self.latestTemps.values.sorted(by: { $0.value > $1.value })
+        self.rebuildTempRows(temps.map({ $0.key }))
+        self.updateShowAllRow()
         self.layoutFanContainer()
         self.onLayoutChange?()
     }
@@ -1657,12 +1752,14 @@ final class UnifiedPanelContent: NSView {
             y += height + 6
             index += 1
         }
-        for view in self.sensorsFansContainer.subviews where view.identifier?.rawValue == "temp" {
-            if view is NSTextField, let field = view as? NSTextField {
-                let isValue = field.alignment == .right
-                field.frame = NSRect(x: isValue ? width - 100 : 0, y: y + 1, width: isValue ? 100 : 220, height: 14)
-                if !isValue { y += 18 }
-            }
+        for row in self.tempRows {
+            row.name.frame = NSRect(x: 0, y: y + 1, width: 220, height: 14)
+            row.value.frame = NSRect(x: width - 100, y: y + 1, width: 100, height: 14)
+            y += 18
+        }
+        if !self.showAllButton.isHidden {
+            self.showAllButton.frame = NSRect(x: 0, y: y + 3, width: width, height: 16)
+            y += 24
         }
         let height = max(ceil(y), 30)
         self.sensorsFansContainer.frame = NSRect(x: 0, y: 0, width: width, height: height)
