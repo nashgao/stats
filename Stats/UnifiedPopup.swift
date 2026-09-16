@@ -513,6 +513,7 @@ final class UnifiedPopupController {
         frame.origin.y = y - (frame.height - height)
         self.panel.setFrameOrigin(frame.origin)
         self.panel.setContentSize(NSSize(width: width, height: height))
+        self.panel.setPendingContentHeight(height)
         self.panel.refreshContent()
         if let expand = ProcessInfo.processInfo.environment["STATS_POPUP_EXPAND"] {
             self.panel.expandSection(expand)
@@ -699,6 +700,28 @@ final class UnifiedPopupController {
                           NSStringFromRect(self.panel.islandFrame))
                 }
             }
+            // Motion probe (STATS_QA_MOTION=1): with animations forced ON,
+            // expand a hero while the island is visible and sample the
+            // island's pin every 50ms through the spring. The island must
+            // stay glued to the final top band from the first sample —
+            // the pin reads the target height, never the animating frame.
+            if ProcessInfo.processInfo.environment["STATS_QA_MOTION"] == "1" {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 8.4) { [weak self] in
+                    guard let self else { return }
+                    if self.panel.islandIsHidden {
+                        NSLog("[QA] island-expand: skipped (island hidden)")
+                        return
+                    }
+                    self.panel.expandSection("CPU")
+                    for step in 0..<14 {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + Double(step) * 0.05) { [weak self] in
+                            guard let self else { return }
+                            NSLog("[QA] island-expand: y=%.0f panel=%.0f",
+                                  self.panel.islandFrame.origin.y, self.panel.frame.height)
+                        }
+                    }
+                }
+            }
         }
         if let expandValue = ProcessInfo.processInfo.environment["STATS_QA_EXPAND"], expandValue != "0", !Self.qaExpandArmed {
             Self.qaExpandArmed = true
@@ -783,6 +806,26 @@ final class UnifiedPopupController {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
                         guard let self else { return }
                         NSLog("[QA] expand-seq: collapse Sensors latency=%.1fms panel %.0f->%.0f stayed=%d",
+                              collapseMs, before, self.panel.frame.height,
+                              self.panel.expandedSectionForQA == nil ? 1 : 0)
+                    }
+                }
+                // Hero collapse round trip: the heroes share the same
+                // toggle state — a header tap on an expanded hero must
+                // collapse it symmetrically.
+                DispatchQueue.main.asyncAfter(deadline: .now() + collapseAt + 4) { [weak self] in
+                    guard let self else { return }
+                    if !self.isEffectivelyVisible, let button = self.statusItem?.button?.window {
+                        self.show(origin: button.frame.origin, center: button.frame.width / 2)
+                    }
+                    self.panel.expandSection("CPU")
+                    let t = CFAbsoluteTimeGetCurrent()
+                    let before = self.panel.frame.height
+                    self.panel.simulateHeaderTap("CPU")
+                    let collapseMs = (CFAbsoluteTimeGetCurrent() - t) * 1000
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
+                        guard let self else { return }
+                        NSLog("[QA] expand-seq: collapse CPU latency=%.1fms panel %.0f->%.0f stayed=%d",
                               collapseMs, before, self.panel.frame.height,
                               self.panel.expandedSectionForQA == nil ? 1 : 0)
                     }
@@ -1078,6 +1121,7 @@ private final class UnifiedPopupPanel: NSPanel, NSWindowDelegate {
         let needed = self.requiredContentSize
         let current = self.contentView?.frame.size ?? .zero
         let heightDelta = abs(needed.height - current.height)
+        self.pendingContentHeight = needed.height
         guard needed.width != current.width || heightDelta >= 1.5 else {
             self.layoutChrome()
             return
@@ -1188,6 +1232,14 @@ private final class UnifiedPopupPanel: NSPanel, NSWindowDelegate {
         self.scrollContainer.layoutContent()
     }
     
+    /// Target content height for chrome pinning. syncSize/show set this
+    /// BEFORE the frame reaches it, so layoutChrome pins the island and
+    /// sizes the scroll container against the FINAL geometry — with the
+    /// expand spring running, the contentView frame interpolates and
+    /// reading it mid-animation made the island drift off the visual top
+    /// and jump back later.
+    private var pendingContentHeight: CGFloat? = nil
+    
     /// Pin the island and size the scroll container against the CURRENT
     /// window height. Must run AFTER any window resize: pinning against a
     /// stale height places the island wrong for one visible frame and the
@@ -1195,7 +1247,7 @@ private final class UnifiedPopupPanel: NSPanel, NSWindowDelegate {
     func layoutChrome() {
         let island = self.content.islandSpace
         self.content.layoutIsland(width: Self.panelWidth)
-        let height = self.contentView?.frame.height ?? 0
+        let height = self.pendingContentHeight ?? self.contentView?.frame.height ?? 0
         self.content.islandView.frame.origin.y = height - island
         let containerFrame = NSRect(x: 0, y: 28, width: Self.panelWidth, height: max(height - 28 - island, 60))
         if self.scrollContainer.frame != containerFrame {
@@ -1207,6 +1259,9 @@ private final class UnifiedPopupPanel: NSPanel, NSWindowDelegate {
     /// QA accessors for the island phase probe.
     var islandFrame: CGRect { self.content.islandView.frame }
     var islandIsHidden: Bool { self.content.islandView.isHidden }
+    /// show() sizes the window itself — record its target so chrome
+    /// pinning never reads a stale or animating frame.
+    func setPendingContentHeight(_ value: CGFloat) { self.pendingContentHeight = value }
     /// QA hook: drive a section header tap (same path as the gesture).
     func simulateHeaderTap(_ module: String) { self.content.simulateHeaderTap(module) }
     var expandedSectionForQA: String? { self.content.expandedSectionForQA }

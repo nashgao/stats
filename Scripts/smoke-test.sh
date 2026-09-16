@@ -134,7 +134,7 @@ if launch_phase STATS_QA_EXPAND=All; then
 else
   fail "panel did not open"
 fi
-wait_for_log "\[QA\] expand-seq: collapse Sensors " 55 || true
+wait_for_log "\[QA\] expand-seq: collapse CPU " 60 || true
 ISLAND_APPEARANCES=$(grep -c "island=1 " "$QA_LOG")
 for module in CPU GPU RAM Sensors Battery Disk Network Thermal; do
   # last state=1 pair (samples after a live click are marked state=0)
@@ -159,6 +159,17 @@ if [ -n "$CFROM" ] && python3 -c "exit(0 if $CTO < $CFROM else 1)" 2>/dev/null &
   pass "collapse Sensors one-pass and stays collapsed under fan sticky ($CFROM->$CTO)"
 else
   fail "collapse Sensors failed under fan sticky ($COLLAPSE)"
+fi
+# hero collapse round trip: a header tap on an expanded hero must
+# collapse it symmetrically (same shared toggle state as the rows)
+HCOLLAPSE=$(grep "\[QA\] expand-seq: collapse CPU " "$QA_LOG" | tail -1)
+HPAIR=$(echo "$HCOLLAPSE" | grep -oE "panel [0-9]+->[0-9]+")
+HFROM=${HPAIR#panel }; HFROM=${HFROM%%->*}; HTO=${HPAIR##*->}
+HSTAYED=$(echo "$HCOLLAPSE" | grep -oE "stayed=[01]" | cut -d= -f2)
+if [ -n "$HFROM" ] && python3 -c "exit(0 if $HTO < $HFROM else 1)" 2>/dev/null && [ "$HSTAYED" = "1" ]; then
+  pass "collapse CPU hero one-pass and stays collapsed ($HFROM->$HTO)"
+else
+  fail "collapse CPU hero failed ($HCOLLAPSE)"
 fi
 quit_phase "phase 2 (expand)"
 
@@ -236,6 +247,34 @@ case "$ISLAND_RESULT" in
   *) fail "island placement defect: $ISLAND_RESULT" ;;
 esac
 quit_phase "phase 5 (island)"
+
+# --- phase 6: island pin through the expand spring (motion forced on) ---
+# STATS_QA_MOTION overrides the QA animation gate: the spring runs, and
+# the island must stay glued to the final top band for the entire
+# interpolation — the pin reads the target height, not the animating
+# frame.
+echo "-- phase 6: motion island pin --"
+if launch_phase STATS_QA_ISLAND=1 STATS_QA_MOTION=1; then
+  pass "panel opened"
+else
+  fail "panel did not open"
+fi
+wait_for_log "\[QA\] island-expand: " 22 || true
+ISLAND_EXPAND=$(grep "\[QA\] island-expand: y=" "$QA_LOG" | python3 -c '
+import sys, re
+ys = [float(m.group(1)) for line in sys.stdin for m in [re.search(r"y=([\d.]+)", line)] if m]
+if len(ys) < 3:
+    print("insufficient")
+elif max(ys) - min(ys) > 2:
+    print("drift %.1f" % (max(ys) - min(ys)))
+else:
+    print("glued@%d" % ys[-1])
+')
+case "$ISLAND_EXPAND" in
+  glued@*) pass "island glued to the top band through the expand spring (y${ISLAND_EXPAND#glued@})" ;;
+  *) fail "island pin defect during spring: $ISLAND_EXPAND" ;;
+esac
+quit_phase "phase 6 (motion)"
 
 # --- helper contract ---
 "$SCRIPT_DIR/check-helper-contract.sh" "$APP" && pass "helper contract" || fail "helper contract"
