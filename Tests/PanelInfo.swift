@@ -76,4 +76,29 @@ final class PanelInfoTests: XCTestCase {
         XCTAssertEqual(UnifiedInfoFormatters.compactRate(2_500_000_000), "2.5G")
         XCTAssertEqual(UnifiedInfoFormatters.compactRate(18_000_000_000), "18G")
     }
+    
+    // MARK: - battery power and time
+    
+    func testBatteryPowerText() {
+        XCTAssertEqual(UnifiedInfoFormatters.batteryPowerText(power: 36.74, onBattery: false, isCharging: true), "36.7 W (charging)")
+        XCTAssertEqual(UnifiedInfoFormatters.batteryPowerText(power: -12.4, onBattery: true, isCharging: false), "-12.4 W (battery)")
+        XCTAssertEqual(UnifiedInfoFormatters.batteryPowerText(power: 0.04, onBattery: false, isCharging: false), "0.0 W (adapter)")
+        // unsigned reader values get their sign from the mode
+        XCTAssertEqual(UnifiedInfoFormatters.batteryPowerText(power: 12.4, onBattery: true, isCharging: false), "-12.4 W (battery)")
+    }
+    
+    func testBatteryTimeText() {
+        XCTAssertEqual(UnifiedInfoFormatters.batteryTimeText(onBattery: true, isCharging: false, minutesToEmpty: 135, minutesToFull: 0, optimizedCharging: false), "2:15")
+        XCTAssertEqual(UnifiedInfoFormatters.batteryTimeText(onBattery: true, isCharging: false, minutesToEmpty: 0, minutesToFull: 0, optimizedCharging: false), "–")
+        XCTAssertEqual(UnifiedInfoFormatters.batteryTimeText(onBattery: false, isCharging: true, minutesToEmpty: 0, minutesToFull: 48, optimizedCharging: false), "Time to full — 0:48")
+        XCTAssertEqual(UnifiedInfoFormatters.batteryTimeText(onBattery: false, isCharging: true, minutesToEmpty: 0, minutesToFull: 48, optimizedCharging: true), "Charging (limit 80%)")
+        XCTAssertEqual(UnifiedInfoFormatters.batteryTimeText(onBattery: false, isCharging: false, minutesToEmpty: 0, minutesToFull: 0, optimizedCharging: false), "–")
+    }
+    
+    func testClock() {
+        XCTAssertEqual(UnifiedInfoFormatters.clock(0), "0:00")
+        XCTAssertEqual(UnifiedInfoFormatters.clock(9), "0:09")
+        XCTAssertEqual(UnifiedInfoFormatters.clock(135), "2:15")
+        XCTAssertEqual(UnifiedInfoFormatters.clock(1440), "24:00")
+    }
 }

@@ -25,7 +25,7 @@ public struct Network_interface: Codable {
     var status: Bool = false
     public var displayName: String = ""
     public var BSDName: String = ""
-    var address: String = ""
+    public var address: String = ""
     var transmitRate: Double = 0
 }
 

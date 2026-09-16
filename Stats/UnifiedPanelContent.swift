@@ -120,82 +120,6 @@ enum UnifiedTokens {
     static var cardShadowAlpha: CGFloat { isDark ? 0.25 : 0.06 }
 }
 
-// MARK: - info formatters (pure; unit-tested in Tests/PanelInfo.swift)
-
-enum UnifiedInfoFormatters {
-    /// Battery condition wording from the reader's health percentage
-    /// (health = maxCapacity / designedCapacity * 100).
-    static func batteryCondition(_ health: Int) -> String {
-        switch health {
-        case 90...100: return "Normal"
-        case 80..<90: return "Good"
-        case 60..<80: return "Fair"
-        default: return "Poor"
-        }
-    }
-    
-    /// ProcessInfo.ThermalState display names.
-    static func thermalStateName(_ state: ProcessInfo.ThermalState) -> String {
-        switch state {
-        case .nominal: return "Nominal"
-        case .fair: return "Fair"
-        case .serious: return "Serious"
-        case .critical: return "Critical"
-        @unknown default: return "Unknown"
-        }
-    }
-    
-    /// One-line plain-language impact per thermal state (detail row);
-    /// kept short enough for the detail value column.
-    static func thermalStateDescription(_ state: ProcessInfo.ThermalState) -> String {
-        switch state {
-        case .nominal: return "Thermals normal"
-        case .fair: return "Slightly reduced"
-        case .serious: return "Performance reduced"
-        case .critical: return "Reduce load now"
-        @unknown default: return "Thermal state unknown"
-        }
-    }
-    
-    /// part ÷ design as a whole percentage — the battery health bases
-    /// (nominal health and full-charge capability).
-    static func batteryPercent(_ part: Int, of design: Int) -> Int {
-        guard design > 0 else { return 0 }
-        return Int((Double(100 * part) / Double(design)).rounded(.toNearestOrEven))
-    }
-    
-    /// Compact rate for the collapsed Network row: per-magnitude suffix
-    /// ("18M", "5M", "0.4K") — the ↓/↑ arrows already imply per-second.
-    /// Scaled like the Disk value (one decimal below 10, integer above).
-    static func compactRate(_ bytesPerSecond: Int64) -> String {
-        func format(_ value: Double) -> String {
-            if value > 0 && value < 10 {
-                return String(format: "%.1f", value)
-            }
-            return String(format: "%.0f", value)
-        }
-        let value = Double(bytesPerSecond)
-        switch value {
-        case ..<1_000_000:
-            return "\(format(value / 1_000))K"
-        case ..<1_000_000_000:
-            return "\(format(value / 1_000_000))M"
-        default:
-            return "\(format(value / 1_000_000_000))G"
-        }
-    }
-    
-    /// Grammar-row status level (0/1/2) for a thermal state. Display
-    /// tint only — thermal pressure is deliberately NOT wired into the
-    /// attention evaluator.
-    static func thermalStatusLevel(_ state: ProcessInfo.ThermalState) -> Int {
-        switch state {
-        case .fair: return 1
-        case .serious, .critical: return 2
-        default: return 0
-        }
-    }
-}
 
 // MARK: - sparkline
 
@@ -732,9 +656,9 @@ final class UnifiedPanelContent: NSView {
     private let brandLabel = unifiedLabel("Stats", font: .systemFont(ofSize: 13, weight: .semibold), color: .labelColor)
     private let verdictChip = UnifiedChipView()
     
-    private let cpuHero = UnifiedHeroCard(module: "CPU", icon: "cpu", detailHeight: 142)
+    private let cpuHero = UnifiedHeroCard(module: "CPU", icon: "cpu", detailHeight: 178)
     private let gpuHero = UnifiedHeroCard(module: "GPU", icon: "display", detailHeight: 36)
-    private let ramHero = UnifiedHeroCard(module: "RAM", icon: "memorychip", detailHeight: 106)
+    private let ramHero = UnifiedHeroCard(module: "RAM", icon: "memorychip", detailHeight: 160)
     private let diskRow = UnifiedGrammarRow(module: "Disk", label: localizedString("Disk"), icon: "internaldrive", expandable: true)
     private let netRow = UnifiedGrammarRow(module: "Network", label: localizedString("Network"), icon: "arrow.up.arrow.down", expandable: true)
     private let sensorsRow = UnifiedGrammarRow(module: "Sensors", label: localizedString("Sensors"), icon: "thermometer.medium", expandable: true)
@@ -774,20 +698,34 @@ final class UnifiedPanelContent: NSView {
     private var batteryHealthField: NSTextField?
     private var batteryFullChargeField: NSTextField?
     private var batteryConditionField: NSTextField?
+    private var batteryPowerField: NSTextField?
+    private var batteryTimeField: NSTextField?
     // expandable grammar-row details (Disk / Network / Thermal)
     private var diskDetail: UnifiedDetailRows!
     private var diskReadField: NSTextField?
     private var diskWriteField: NSTextField?
     private var diskVolumeFields: [NSTextField] = []
+    private var diskReadTotalField: NSTextField?
+    private var diskWrittenTotalField: NSTextField?
     private var netDetail: UnifiedDetailRows!
     private var netDownField: NSTextField?
     private var netUpField: NSTextField?
     private var netTotalInField: NSTextField?
     private var netTotalOutField: NSTextField?
     private var netInterfaceField: NSTextField?
+    private var netAddressField: NSTextField?
     private var thermalDetail: UnifiedDetailRows!
     private var thermalStateField: NSTextField?
     private var thermalImpactField: NSTextField?
+    // CPU/RAM hero detail extras
+    private var ramDetailRows: UnifiedDetailRows!
+    private var ramWiredField: NSTextField?
+    private var ramAppField: NSTextField?
+    private var ramCompressedField: NSTextField?
+    private var cpuCoresRowE: UnifiedCoreClusterRowView?
+    private var cpuCoresRowP: UnifiedCoreClusterRowView?
+    private var cpuCoresRows: UnifiedDetailRows?
+    private var corePartition: (efficiency: [Int], performance: [Int])?
     
     override var isFlipped: Bool { true }
     
@@ -827,6 +765,26 @@ final class UnifiedPanelContent: NSView {
         self.cpuDetail = self.buildCPUDetail()
         self.gpuDetail = self.buildGPUDetail()
         self.ramDetail = self.buildRAMDetail()
+        
+        // CPU per-core clusters (Efficiency / Performance rows): one 3pt
+        // tick per core, bottom-anchored fill; fixed 18pt slots.
+        self.cpuCoresRowE = UnifiedCoreClusterRowView(frame: .zero)
+        self.cpuCoresRowP = UnifiedCoreClusterRowView(frame: .zero)
+        let cpuRows = UnifiedDetailRows()
+        cpuRows.addCustomRow(localizedString("Efficiency"), custom: self.cpuCoresRowE!)
+        cpuRows.addCustomRow(localizedString("Performance"), custom: self.cpuCoresRowP!)
+        self.cpuDetail.addSubview(cpuRows)
+        self.cpuCoresRows = cpuRows
+        
+        // RAM breakdown rows (Wired / App / Compressed in GB).
+        self.ramDetailRows = UnifiedDetailRows()
+        self.ramWiredField = self.ramDetailRows.addRow(localizedString("Wired"))
+        self.ramAppField = self.ramDetailRows.addRow(localizedString("App"))
+        self.ramCompressedField = self.ramDetailRows.addRow(localizedString("Compressed"))
+        for field in [self.ramWiredField, self.ramAppField, self.ramCompressedField] {
+            field?.stringValue = "–"
+        }
+        self.ramDetail.addSubview(self.ramDetailRows)
         self.cpuHero.expandContainer.addSubview(self.cpuDetail)
         self.gpuHero.expandContainer.addSubview(self.gpuDetail)
         self.ramHero.expandContainer.addSubview(self.ramDetail)
@@ -846,17 +804,22 @@ final class UnifiedPanelContent: NSView {
         self.sensorsFansContainer.addSubview(self.showAllButton)
         
         // Battery health detail: cycles / nominal health / full-charge
-        // capability / condition, in the same label-left, value-right
-        // grammar as the fan temperature rows. Both health bases are
-        // shown (stabilized nominal and momentary full-charge) so neither
-        // number looks wrong against external tools.
+        // capability / condition, plus live power and time estimates,
+        // in the same label-left, value-right grammar as the fan rows.
+        // Both health bases are shown (stabilized nominal and momentary
+        // full-charge) so neither number looks wrong against external
+        // tools.
         self.batteryDetailContainer = UnifiedFlippedView()
         self.batteryRow.expandContainer.addSubview(self.batteryDetailContainer)
-        self.batteryRow.detailHeight = 80
+        self.batteryRow.detailHeight = 108
         self.batteryCyclesField = self.batteryDetailRow(localizedString("Cycles"))
         self.batteryHealthField = self.batteryDetailRow(localizedString("Health (nominal)"))
         self.batteryFullChargeField = self.batteryDetailRow(localizedString("Full charge"))
         self.batteryConditionField = self.batteryDetailRow(localizedString("Condition"))
+        self.batteryPowerField = self.batteryDetailRow(localizedString("Power"))
+        self.batteryTimeField = self.batteryDetailRow(localizedString("Time remaining"))
+        self.batteryPowerField?.stringValue = "–"
+        self.batteryTimeField?.stringValue = "–"
         self.layoutBatteryDetail()
         
         // Disk / Network / Thermal details: fixed-height grammar blocks
@@ -865,7 +828,7 @@ final class UnifiedPanelContent: NSView {
         // single layout pass.
         self.diskDetail = UnifiedDetailRows()
         self.diskRow.expandContainer.addSubview(self.diskDetail)
-        self.diskRow.detailHeight = 90
+        self.diskRow.detailHeight = 126
         self.diskReadField = self.diskDetail.addRow(localizedString("Read"))
         self.diskWriteField = self.diskDetail.addRow(localizedString("Write"))
         self.diskReadField?.stringValue = "–"
@@ -875,17 +838,22 @@ final class UnifiedPanelContent: NSView {
             field.stringValue = "–"
             self.diskVolumeFields.append(field)
         }
-        self.diskDetail.setLiveRows(2)
+        self.diskReadTotalField = self.diskDetail.addRow(localizedString("Read total (since boot)"))
+        self.diskWrittenTotalField = self.diskDetail.addRow(localizedString("Written total (since boot)"))
+        self.diskReadTotalField?.stringValue = "–"
+        self.diskWrittenTotalField?.stringValue = "–"
+        self.diskDetail.setLiveRows(4)
         
         self.netDetail = UnifiedDetailRows()
         self.netRow.expandContainer.addSubview(self.netDetail)
-        self.netRow.detailHeight = 90
+        self.netRow.detailHeight = 108
         self.netDownField = self.netDetail.addRow(localizedString("Download"))
         self.netUpField = self.netDetail.addRow(localizedString("Upload"))
         self.netTotalInField = self.netDetail.addRow(localizedString("Total in (since open)"))
         self.netTotalOutField = self.netDetail.addRow(localizedString("Total out (since open)"))
         self.netInterfaceField = self.netDetail.addRow(localizedString("Interface"))
-        for field in [self.netDownField, self.netUpField, self.netTotalInField, self.netTotalOutField, self.netInterfaceField] {
+        self.netAddressField = self.netDetail.addRow(localizedString("Address"))
+        for field in [self.netDownField, self.netUpField, self.netTotalInField, self.netTotalOutField, self.netInterfaceField, self.netAddressField] {
             field?.stringValue = "–"
         }
         
@@ -1000,6 +968,10 @@ final class UnifiedPanelContent: NSView {
         self.diskDetail.layoutRows(width: max(self.diskRow.expandContainer.bounds.width, 100))
         self.netDetail.layoutRows(width: max(self.netRow.expandContainer.bounds.width, 100))
         self.thermalDetail.layoutRows(width: max(self.thermalRow.expandContainer.bounds.width, 100))
+        self.cpuCoresRows?.layoutRows(width: max(self.cpuHero.expandContainer.bounds.width, 100))
+        self.cpuCoresRows?.frame.origin = NSPoint(x: 0, y: 136)
+        self.ramDetailRows.layoutRows(width: max(self.ramHero.expandContainer.bounds.width, 100))
+        self.ramDetailRows.frame.origin = NSPoint(x: 0, y: 98)
         y += margin
         let newFrame = NSRect(x: 0, y: 0, width: w, height: max(y, 1))
         if newFrame != self.frame {
@@ -1345,6 +1317,10 @@ final class UnifiedPanelContent: NSView {
             self.cpuLoad = load
             self.cpuHero.setValue(Int((load.totalUsage * 100).rounded()))
             self.cpuHero.spark.add(load.totalUsage * 100)
+            let partition = self.coreIndices()
+            let perCore = load.usagePerCore
+            self.cpuCoresRowE?.update(partition.efficiency.map({ $0 < perCore.count ? perCore[$0] : 0 }), avg: load.usageECores)
+            self.cpuCoresRowP?.update(partition.performance.map({ $0 < perCore.count ? perCore[$0] : 0 }), avg: load.usagePCores)
             let loadStr = self.cpuAvg.map { "\($0.load1.rounded(toPlaces: 1)) / \($0.load5.rounded(toPlaces: 1)) / \($0.load15.rounded(toPlaces: 1))" } ?? "–"
             let freqStr = self.cpuFreqValue.map { "\(($0/1000).rounded(toPlaces: 2)) GHz" } ?? "–"
             let tempStr = self.cpuTempValue.map { "\(Int($0))°C" } ?? "–"
@@ -1391,6 +1367,9 @@ final class UnifiedPanelContent: NSView {
             self.ramUsage = ram
             self.ramHero.setValue(Int((ram.usage * 100).rounded()))
             self.ramHero.spark.add(ram.usage * 100)
+            self.ramWiredField?.stringValue = Units(bytes: Int64(ram.wired)).getReadableMemory(style: .memory)
+            self.ramAppField?.stringValue = Units(bytes: Int64(ram.app)).getReadableMemory(style: .memory)
+            self.ramCompressedField?.stringValue = Units(bytes: Int64(ram.compressed)).getReadableMemory(style: .memory)
             let used = Units(bytes: Int64(ram.used)).getReadableMemory(style: .memory)
             let total = Units(bytes: Int64(ram.total)).getReadableMemory(style: .memory)
             let swap = Units(bytes: Int64(ram.swap.used)).getReadableMemory(style: .memory)
@@ -1418,7 +1397,14 @@ final class UnifiedPanelContent: NSView {
                 field.stringValue = "\(Units(bytes: used).getReadableMemory(style: .memory)) of \(Units(bytes: volume.size).getReadableMemory(style: .memory))"
                 field.toolTip = title
             }
-            self.diskDetail.setLiveRows(min(2 + volumes.count, 5))
+            self.diskDetail.setLiveRows(min(4 + volumes.count, 7))
+            if let smart = drive.smart {
+                self.diskReadTotalField?.stringValue = Units(bytes: smart.totalRead).getReadableMemory(style: .memory)
+                self.diskWrittenTotalField?.stringValue = Units(bytes: smart.totalWritten).getReadableMemory(style: .memory)
+            } else {
+                self.diskReadTotalField?.stringValue = "–"
+                self.diskWrittenTotalField?.stringValue = "–"
+            }
         case let net as Network_Usage:
             let down = UnifiedInfoFormatters.compactRate(net.bandwidth.download)
             let up = UnifiedInfoFormatters.compactRate(net.bandwidth.upload)
@@ -1429,6 +1415,11 @@ final class UnifiedPanelContent: NSView {
             self.netTotalInField?.stringValue = Units(bytes: net.total.download).getReadableMemory(style: .memory)
             self.netTotalOutField?.stringValue = Units(bytes: net.total.upload).getReadableMemory(style: .memory)
             self.netInterfaceField?.stringValue = net.interface?.displayName ?? "–"
+            if let address = net.interface?.address, !address.isEmpty {
+                self.netAddressField?.stringValue = address
+            } else {
+                self.netAddressField?.stringValue = "–"
+            }
         case let sensors as Sensors_List:
             self.sensorsList = sensors
             let temps = sensors.sensors.filter({ $0.type == .temperature && $0.popupState && $0.value.isFinite })
@@ -1444,6 +1435,18 @@ final class UnifiedPanelContent: NSView {
             self.batteryHealthField?.stringValue = "\(UnifiedInfoFormatters.batteryPercent(battery.maxCapacity, of: battery.designedCapacity))% of design"
             self.batteryFullChargeField?.stringValue = "\(battery.fullChargeCapacity.formatted(.number.grouping(.automatic))) mAh · \(UnifiedInfoFormatters.batteryPercent(battery.fullChargeCapacity, of: battery.designedCapacity))% of design"
             self.batteryConditionField?.stringValue = localizedString(UnifiedInfoFormatters.batteryCondition(battery.health))
+            self.batteryPowerField?.stringValue = UnifiedInfoFormatters.batteryPowerText(
+                power: battery.batteryPower,
+                onBattery: battery.isBatteryPowered,
+                isCharging: battery.isCharging
+            )
+            self.batteryTimeField?.stringValue = UnifiedInfoFormatters.batteryTimeText(
+                onBattery: battery.isBatteryPowered,
+                isCharging: battery.isCharging,
+                minutesToEmpty: battery.timeToEmpty,
+                minutesToFull: battery.timeToCharge,
+                optimizedCharging: battery.optimizedChargingEngaged
+            )
         default:
             break
         }
@@ -1515,6 +1518,27 @@ final class UnifiedPanelContent: NSView {
     
     @objc private func thermalStateChanged(_ notification: Notification) {
         self.updateThermalRow()
+    }
+    
+    /// Static E/P core-id partition (usagePerCore is indexed by core id),
+    /// cached once per process. Super cores ride in the performance
+    /// cluster, matching the classic popup's grouping.
+    private func coreIndices() -> (efficiency: [Int], performance: [Int]) {
+        if let partition = self.corePartition {
+            return partition
+        }
+        var efficiency: [Int] = []
+        var performance: [Int] = []
+        for core in SystemKit.shared.device.info.cpu?.cores ?? [] {
+            if core.type == .efficiency {
+                efficiency.append(Int(core.id))
+            } else {
+                performance.append(Int(core.id))
+            }
+        }
+        let partition = (efficiency, performance)
+        self.corePartition = partition
+        return partition
     }
     
     private func updateThermalRow() {
