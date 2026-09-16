@@ -462,7 +462,9 @@ final class UnifiedPopupController {
         guard self.panel.isVisible else { return }
         self.panelPresented = false
         self.panel.resetSensorsDetail()
-        self.panel.orderOut(nil)
+        self.panel.animateExit { [weak self] in
+            self?.panel.orderOut(nil)
+        }
     }
     
     func show(origin: NSPoint, center: CGFloat = 0, scrollTo: String? = nil) {
@@ -801,6 +803,7 @@ final class UnifiedPopupController {
         }
         self.panel.makeKeyAndOrderFront(nil)
         self.panelPresented = true
+        self.panel.playEntrance()
         let contentMs = (tPresent - t0) * 1000
         let presentMs = (CFAbsoluteTimeGetCurrent() - tPresent) * 1000
         let totalMs = (CFAbsoluteTimeGetCurrent() - showStart) * 1000
@@ -1075,6 +1078,23 @@ private final class UnifiedPopupPanel: NSPanel, NSWindowDelegate {
             self.layoutChrome()
             return
         }
+        if UnifiedMotion.enabled {
+            // AppKit-style spring (~280ms, slight overshoot) around the
+            // window frame only — content is static during the
+            // interpolation; the island/container stay pinned to the
+            // final geometry throughout.
+            let top = self.frame.maxY
+            var finalFrame = self.frame
+            finalFrame.size = needed
+            finalFrame.origin.y = top - needed.height
+            NSAnimationContext.runAnimationGroup({ context in
+                context.duration = 0.28
+                context.timingFunction = CAMediaTimingFunction(controlPoints: 0.3, 1.25, 0.4, 1)
+                self.animator().setFrame(finalFrame, display: true)
+            })
+            self.layoutChrome()
+            return
+        }
         if UnifiedPerf.enabled {
             UnifiedPerf.frameSet("syncResize")
             NSLog("[UnifiedPerf] syncResize %.1f -> %.1f", current.height, needed.height)
@@ -1089,6 +1109,57 @@ private final class UnifiedPopupPanel: NSPanel, NSWindowDelegate {
         // one visible frame (the "appears in the wrong spot, then jumps"
         // defect).
         self.layoutChrome()
+    }
+    
+    /// Entrance: contentView layer transform scale 0.92→1.0 (anchored at
+    /// the top-center, i.e. the menu bar icon) + alpha 0→1, ~200ms
+    /// ease-out. Applied AFTER makeKeyAndOrderFront; skipped entirely
+    /// when any QA/capture knob is active.
+    func playEntrance() {
+        guard UnifiedMotion.enabled, let view = self.contentView, let layer = view.layer else { return }
+        view.wantsLayer = true
+        var frame = layer.frame
+        layer.anchorPoint = CGPoint(x: 0.5, y: 1)
+        layer.position = CGPoint(x: frame.midX, y: frame.maxY)
+        layer.transform = CATransform3DMakeScale(0.92, 0.92, 1)
+        view.alphaValue = 0
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = 0.2
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            view.animator().alphaValue = 1
+        })
+        let animation = CABasicAnimation(keyPath: "transform")
+        animation.fromValue = CATransform3DMakeScale(0.92, 0.92, 1)
+        animation.toValue = CATransform3DIdentity
+        animation.duration = 0.2
+        animation.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        layer.add(animation, forKey: "entrance")
+        layer.transform = CATransform3DIdentity
+    }
+    
+    /// Exit: reverse of the entrance, snappier (~140ms); orderOut runs in
+    /// the completion. Skipped when motion is gated (instant orderOut).
+    func animateExit(completion: @escaping () -> Void) {
+        guard UnifiedMotion.enabled, let view = self.contentView, let layer = view.layer else {
+            completion()
+            return
+        }
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = 0.14
+            context.timingFunction = CAMediaTimingFunction(name: .easeIn)
+            view.animator().alphaValue = 0
+        }, completionHandler: {
+            view.alphaValue = 1
+            layer.transform = CATransform3DIdentity
+            completion()
+        })
+        let animation = CABasicAnimation(keyPath: "transform")
+        animation.fromValue = CATransform3DIdentity
+        animation.toValue = CATransform3DMakeScale(0.94, 0.94, 1)
+        animation.duration = 0.14
+        animation.timingFunction = CAMediaTimingFunction(name: .easeIn)
+        layer.add(animation, forKey: "exit")
+        layer.transform = CATransform3DMakeScale(0.94, 0.94, 1)
     }
     
     func debugFrames() {

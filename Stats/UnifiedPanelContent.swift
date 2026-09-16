@@ -55,6 +55,24 @@ enum UnifiedPerf {
     }
 }
 
+// MARK: - motion (env-gated)
+//
+// The motion set (panel entrance/exit, expand spring, island fade-slide,
+// chevron rotation) is disabled whenever ANY QA or capture knob is
+// active — captures and probes must see final state, never a
+// mid-animation frame.
+enum UnifiedMotion {
+    static let enabled: Bool = {
+        let env = ProcessInfo.processInfo.environment
+        if env["STATS_POPUP_CAPTURE"] == "1" { return false }
+        if env["STATS_POPUP_PERF"] == "1" { return false }
+        if env["STATS_POPUP_DEBUG_PAINT"] == "1" { return false }
+        return !env.contains { key, value in
+            key.hasPrefix("STATS_QA_") && !value.isEmpty && value != "0"
+        }
+    }()
+}
+
 // MARK: - design tokens
 //
 // Extracted from stats-unified-redesign.html (column E). Light and dark
@@ -246,7 +264,7 @@ private final class UnifiedFlippedView: NSView {
     override var isFlipped: Bool { true }
 }
 
-private func unifiedLabel(_ string: String = "", font: NSFont, color: NSColor, alignment: NSTextAlignment = .left) -> NSTextField {
+func unifiedLabel(_ string: String = "", font: NSFont, color: NSColor, alignment: NSTextAlignment = .left) -> NSTextField {
     let field = NSTextField(labelWithString: string)
     field.font = font
     field.textColor = color
@@ -336,210 +354,6 @@ private final class UnifiedChipView: NSView {
         let size = self.textField.frame.size
         self.frame = NSRect(x: self.frame.origin.x, y: self.frame.origin.y, width: size.width + 16, height: 20)
         self.textField.frame = NSRect(x: 8, y: 4, width: size.width, height: 13)
-    }
-}
-
-/// Mini metric column: label, 4pt track + fill, value.
-private final class UnifiedMiniMetric: NSView {
-    private let track = NSView()
-    private let fill = NSView()
-    private let valueField = unifiedLabel(font: .monospacedDigitSystemFont(ofSize: 10, weight: .semibold), color: .secondaryLabelColor)
-    
-    override var isFlipped: Bool { true }
-    
-    init(label: String, value: String, fraction: Double, color: NSColor? = nil) {
-        super.init(frame: .zero)
-        let labelField = unifiedLabel(label, font: .systemFont(ofSize: 10, weight: .regular), color: .tertiaryLabelColor)
-        self.addSubview(labelField)
-        self.addSubview(self.valueField)
-        self.track.wantsLayer = true
-        self.track.layer?.cornerRadius = 2
-        self.fill.wantsLayer = true
-        self.fill.layer?.cornerRadius = 2
-        self.track.layer?.backgroundColor = NSColor.separatorColor.withAlphaComponent(0.15).cgColor
-        self.fill.layer?.backgroundColor = (color ?? .controlAccentColor).cgColor
-        self.addSubview(self.track)
-        self.addSubview(self.fill)
-        labelField.frame = NSRect(x: 0, y: 0, width: 96, height: 12)
-        self.valueField.frame = NSRect(x: 0, y: 14, width: 96, height: 12)
-        self.valueField.stringValue = value
-        self.track.frame = NSRect(x: 0, y: 28, width: 96, height: 4)
-        self.fill.frame = NSRect(x: 0, y: 28, width: 96 * CGFloat(min(max(fraction, 0), 1)), height: 4)
-    }
-    
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-}
-
-/// Hero sub-metrics rendered as soft pills (well background, pill radius).
-private final class UnifiedPillRow: NSView {
-    private var pills: [(view: NSView, label: NSTextField)] = []
-    
-    override var isFlipped: Bool { true }
-    
-    func setPills(_ texts: [String]) {
-        while self.pills.count > texts.count {
-            self.pills.removeLast().view.removeFromSuperview()
-        }
-        while self.pills.count < texts.count {
-            let view = NSView()
-            view.wantsLayer = true
-            view.layer?.cornerRadius = 6
-            // monospaced digits: live values must not reflow the pills
-            let label = unifiedLabel(font: .monospacedDigitSystemFont(ofSize: 10, weight: .medium), color: .secondaryLabelColor)
-            view.addSubview(label)
-            self.addSubview(view)
-            self.pills.append((view, label))
-        }
-        var changed = false
-        for (index, text) in texts.enumerated() {
-            let pill = self.pills[index]
-            guard pill.label.stringValue != text else { continue }
-            changed = true
-            pill.label.stringValue = text
-            pill.label.sizeToFit()
-            pill.view.frame = NSRect(x: 0, y: 0, width: ceil(pill.label.frame.width) + 16, height: 18)
-            pill.label.frame = NSRect(x: 8, y: 4, width: pill.label.frame.width, height: 11)
-        }
-        guard changed else { return }
-        var x: CGFloat = 0
-        for pill in self.pills {
-            pill.view.frame.origin.x = x
-            x += pill.view.frame.width + 6
-        }
-        self.frame = NSRect(x: self.frame.origin.x, y: self.frame.origin.y, width: max(x - 6, 0), height: 18)
-    }
-}
-
-/// Design-E grammar detail block: name/value row pairs with fixed
-/// frames, shared by the expandable grammar rows (Disk, Network,
-/// Thermal, Battery). Rows beyond the live data set are hidden, never
-/// removed — the expanded height stays constant (one-pass expand).
-private final class UnifiedDetailRows: NSView {
-    private var names: [NSTextField] = []
-    private(set) var values: [NSTextField] = []
-    
-    override var isFlipped: Bool { true }
-    
-    /// Adds a row; returns the value field for per-tick updates.
-    @discardableResult
-    func addRow(_ label: String) -> NSTextField {
-        let name = unifiedLabel(label, font: .systemFont(ofSize: 11, weight: .regular), color: .secondaryLabelColor)
-        let value = unifiedLabel(font: .monospacedDigitSystemFont(ofSize: 11, weight: .semibold), color: .labelColor, alignment: .right)
-        self.addSubview(name)
-        self.addSubview(value)
-        self.names.append(name)
-        self.values.append(value)
-        return value
-    }
-    
-    /// Fixed layout; returns the content height for detailHeight sizing.
-    @discardableResult
-    func layoutRows(width: CGFloat) -> CGFloat {
-        var y: CGFloat = 0
-        for index in 0..<self.names.count {
-            self.names[index].frame = NSRect(x: 0, y: y + 1, width: 180, height: 14)
-            self.values[index].frame = NSRect(x: width - 150, y: y + 1, width: 150, height: 14)
-            y += 18
-        }
-        self.frame = NSRect(x: 0, y: 0, width: width, height: max(ceil(y), 30))
-        return max(ceil(y), 30)
-    }
-    
-    /// Shows the first `count` rows, hides the rest (reserved height is
-    /// kept so the card does not change size).
-    func setLiveRows(_ count: Int) {
-        for index in 0..<self.names.count {
-            self.names[index].isHidden = index >= count
-            self.values[index].isHidden = index >= count
-        }
-    }
-    
-    /// Updates a row's label (volume names arrive with the sample).
-    func setName(_ index: Int, _ value: String) {
-        guard index < self.names.count else { return }
-        self.names[index].stringValue = value
-    }
-}
-
-/// "Top processes" block: title + name/share-bar/value rows.
-private final class UnifiedTopProcesses: NSView {
-    private struct Row {
-        let name: NSTextField
-        let value: NSTextField
-        let track: NSView
-        let fill: NSView
-    }
-    private var rows: [Row] = []
-    
-    override var isFlipped: Bool { true }
-    
-    init(title: String, rows: [(name: String, share: Double, value: String)]) {
-        super.init(frame: .zero)
-        let titleField = unifiedLabel(title.uppercased(), font: .systemFont(ofSize: 10, weight: .semibold), color: .tertiaryLabelColor)
-        self.addSubview(titleField)
-        titleField.frame = NSRect(x: 0, y: 0, width: 240, height: 12)
-        var y: CGFloat = 16
-        for _ in rows {
-            let name = unifiedLabel(font: .systemFont(ofSize: 11, weight: .regular), color: .secondaryLabelColor)
-            let value = unifiedLabel(font: .monospacedDigitSystemFont(ofSize: 11, weight: .semibold), color: .labelColor, alignment: .right)
-            let track = NSView()
-            let fill = NSView()
-            track.wantsLayer = true
-            track.layer?.cornerRadius = 2
-            track.layer?.backgroundColor = NSColor.separatorColor.withAlphaComponent(0.15).cgColor
-            fill.wantsLayer = true
-            fill.layer?.cornerRadius = 2
-            fill.layer?.backgroundColor = NSColor.controlAccentColor.cgColor
-            self.addSubview(name)
-            self.addSubview(track)
-            self.addSubview(fill)
-            self.addSubview(value)
-            name.frame = NSRect(x: 0, y: y + 1, width: 110, height: 14)
-            track.frame = NSRect(x: 114, y: y + 6, width: 130, height: 4)
-            fill.frame = NSRect(x: 114, y: y + 6, width: 0, height: 4)
-            value.frame = NSRect(x: 248, y: y + 1, width: 76, height: 14)
-            self.rows.append(Row(name: name, value: value, track: track, fill: fill))
-            y += 19
-        }
-        self.frame = NSRect(x: 0, y: 0, width: 324, height: y)
-        self.update(rows: rows)
-    }
-    
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-    
-    /// In-place per-tick refresh: no view churn when the process set is
-    /// stable. Rows without data are hidden — empty skeleton rows must
-    /// never be visible.
-    func update(rows: [(name: String, share: Double, value: String)]) {
-        for index in 0..<self.rows.count {
-            let view = self.rows[index]
-            guard index < rows.count else {
-                view.name.isHidden = true
-                view.value.isHidden = true
-                view.track.isHidden = true
-                view.fill.isHidden = true
-                continue
-            }
-            let row = rows[index]
-            view.name.isHidden = false
-            view.value.isHidden = false
-            view.track.isHidden = false
-            view.fill.isHidden = false
-            if view.name.stringValue != row.name {
-                view.name.stringValue = row.name
-            }
-            if view.value.stringValue != row.value {
-                view.value.stringValue = row.value
-            }
-            let width = 130 * CGFloat(min(max(row.share, 0), 1))
-            if abs(view.fill.frame.width - width) > 0.5 {
-                view.fill.frame = NSRect(x: 114, y: view.fill.frame.origin.y, width: width, height: 4)
-            }
-        }
     }
 }
 
@@ -666,6 +480,16 @@ private final class UnifiedHeroCard: UnifiedCardView {
         self.expandContainer.isHidden = !state
         self.chevron.image = unifiedSymbol(state ? "chevron.down" : "chevron.right", scale: .small)
         self.chevron.contentTintColor = .secondaryLabelColor
+        let rotation: CGFloat = state ? .pi / 2 : 0
+        self.chevron.wantsLayer = true
+        if UnifiedMotion.enabled {
+            let animation = CABasicAnimation(keyPath: "transform.rotation.z")
+            animation.toValue = rotation
+            animation.duration = 0.09
+            animation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            self.chevron.layer?.add(animation, forKey: "rotate")
+        }
+        self.chevron.layer?.transform = CATransform3DMakeRotation(rotation, 0, 0, 1)
         self.layoutCard()
     }
     
@@ -779,7 +603,23 @@ private final class UnifiedGrammarRow: NSView {
         self.expandContainer.isHidden = !state
         self.chevron.image = unifiedSymbol(state ? "chevron.down" : "chevron.right", scale: .small)
         self.chevron.contentTintColor = .secondaryLabelColor
+        self.applyChevronRotation(state)
         self.layoutRow()
+    }
+    
+    /// 0°→90° on expand (and back), 90ms layer transform — the native
+    /// disclosure convention. Instant when motion is gated.
+    private func applyChevronRotation(_ expanded: Bool) {
+        let rotation: CGFloat = expanded ? .pi / 2 : 0
+        self.chevron.wantsLayer = true
+        if UnifiedMotion.enabled {
+            let animation = CABasicAnimation(keyPath: "transform.rotation.z")
+            animation.toValue = rotation
+            animation.duration = 0.09
+            animation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            self.chevron.layer?.add(animation, forKey: "rotate")
+        }
+        self.chevron.layer?.transform = CATransform3DMakeRotation(rotation, 0, 0, 1)
     }
     
     override func updateLayer() {
@@ -885,6 +725,9 @@ final class UnifiedPanelContent: NSView {
     private var lastVerdictKey: String = ""
     private var lastContentFrame: NSRect = .zero
     private var lastFanAttention: Date? = nil
+    /// Tracks the island's applied visibility so in/out only animates on
+    /// real transitions (not per-tick relayouts).
+    private var islandShown = false
     /// Set when the user explicitly collapses the Sensors section; the
     /// fan-attention sticky must not fight an explicit collapse for the
     /// rest of the sticky window.
@@ -1212,6 +1055,7 @@ final class UnifiedPanelContent: NSView {
         // carries live values ("TCMb 94°C") and would re-arm the island
         // on every sample while a metric hovers near its threshold.
         let key = attentions.map({ "\($0.kind.rawValue)-\($0.module)-\($0.level.rawValue)" }).sorted().joined(separator: "|")
+        let targetVisible: Bool
         if attentions.isEmpty {
             if !self.lastAttentionKey.isEmpty {
                 // attentions just cleared: brief "back to nominal" note
@@ -1219,7 +1063,6 @@ final class UnifiedPanelContent: NSView {
             }
             self.lastAttentionKey = ""
             if let until = self.islandResolvedUntil, until > Date() {
-                self.island.isHidden = false
                 self.island.statusLevel = 0
                 self.islandGlyph.stringValue = "✓"
                 self.islandGlyph.textColor = UnifiedTokens.ok
@@ -1228,34 +1071,77 @@ final class UnifiedPanelContent: NSView {
                 self.islandSubtitle.stringValue = ""
                 self.islandNote.stringValue = ""
                 self.islandDismiss.isHidden = true
+                targetVisible = true
             } else {
-                self.island.isHidden = true
                 self.islandResolvedUntil = nil
+                targetVisible = false
             }
-            return
+        } else {
+            self.islandResolvedUntil = nil
+            if key != self.lastAttentionKey {
+                // a new attention set re-arms a previously dismissed island
+                self.islandDismissed = false
+                self.lastAttentionKey = key
+            }
+            let level = attentions.map({ $0.level.rawValue }).max() ?? 1
+            if self.island.statusLevel != level {
+                self.island.statusLevel = level
+                self.island.layer?.borderColor = UnifiedTokens.amberBorder.cgColor
+            }
+            self.islandGlyph.stringValue = "▲"
+            self.islandGlyph.textColor = level == 2 ? UnifiedTokens.redInk : UnifiedTokens.amberInk
+            self.islandTitle.stringValue = attentions.first?.label ?? ""
+            self.islandTitle.textColor = level == 2 ? UnifiedTokens.redInk : UnifiedTokens.amberInk
+            self.islandSubtitle.stringValue = Array(attentions.dropFirst()).map({ $0.label }).joined(separator: " · ")
+            self.islandNote.stringValue = localizedString("auto-resolves")
+            self.islandNote.textColor = UnifiedTokens.amberInk
+            self.islandDismiss.isHidden = false
+            self.islandDismiss.contentTintColor = .secondaryLabelColor
+            targetVisible = !self.islandDismissed
         }
-        
-        self.islandResolvedUntil = nil
-        if key != self.lastAttentionKey {
-            // a new attention set re-arms a previously dismissed island
-            self.islandDismissed = false
-            self.lastAttentionKey = key
+        if targetVisible != self.islandShown {
+            self.islandShown = targetVisible
+            self.applyIslandVisibility(targetVisible)
         }
-        self.island.isHidden = self.islandDismissed
-        let level = attentions.map({ $0.level.rawValue }).max() ?? 1
-        if self.island.statusLevel != level {
-            self.island.statusLevel = level
-            self.island.layer?.borderColor = UnifiedTokens.amberBorder.cgColor
+    }
+    
+    /// Island in/out: fade 0→1 + slide 8px down, ~160ms, view-level
+    /// alpha+transform only. Instant when motion is gated.
+    private func applyIslandVisibility(_ show: Bool) {
+        let island = self.island
+        island.wantsLayer = true
+        if UnifiedMotion.enabled {
+            if show {
+                island.layer?.transform = CATransform3DMakeTranslation(0, -8, 0)
+                island.alphaValue = 0
+                island.isHidden = false
+                NSAnimationContext.runAnimationGroup({ context in
+                    context.duration = 0.16
+                    context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                    island.animator().alphaValue = 1
+                })
+                let animation = CABasicAnimation(keyPath: "transform")
+                animation.fromValue = CATransform3DMakeTranslation(0, -8, 0)
+                animation.toValue = CATransform3DIdentity
+                animation.duration = 0.16
+                animation.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                island.layer?.add(animation, forKey: "islandIn")
+                island.layer?.transform = CATransform3DIdentity
+            } else {
+                NSAnimationContext.runAnimationGroup({ context in
+                    context.duration = 0.16
+                    context.timingFunction = CAMediaTimingFunction(name: .easeIn)
+                    island.animator().alphaValue = 0
+                }, completionHandler: {
+                    island.isHidden = true
+                    island.alphaValue = 1
+                })
+            }
+        } else {
+            island.isHidden = !show
+            island.alphaValue = 1
+            island.layer?.transform = CATransform3DIdentity
         }
-        self.islandGlyph.stringValue = "▲"
-        self.islandGlyph.textColor = level == 2 ? UnifiedTokens.redInk : UnifiedTokens.amberInk
-        self.islandTitle.stringValue = attentions.first?.label ?? ""
-        self.islandTitle.textColor = level == 2 ? UnifiedTokens.redInk : UnifiedTokens.amberInk
-        self.islandSubtitle.stringValue = Array(attentions.dropFirst()).map({ $0.label }).joined(separator: " · ")
-        self.islandNote.stringValue = localizedString("auto-resolves")
-        self.islandNote.textColor = UnifiedTokens.amberInk
-        self.islandDismiss.isHidden = false
-        self.islandDismiss.contentTintColor = .secondaryLabelColor
     }
     
     @objc private func dismissIsland() {
@@ -1768,12 +1654,6 @@ final class UnifiedPanelContent: NSView {
     }
 }
 
-private extension UnifiedMiniMetric {
-    func set(value: String, fraction: Double) {
-        self.valueField.stringValue = value
-        self.fill.frame = NSRect(x: 0, y: 28, width: 96 * CGFloat(min(max(fraction, 0), 1)), height: 4)
-    }
-}
 
 private extension NSView {
     func findView(withIdentifier identifier: String) -> NSView? {
