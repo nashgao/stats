@@ -171,6 +171,16 @@ if [ -n "$HFROM" ] && python3 -c "exit(0 if $HTO < $HFROM else 1)" 2>/dev/null &
 else
   fail "collapse CPU hero failed ($HCOLLAPSE)"
 fi
+# A -> B -> collapse-B: collapsing the active section must leave NONE
+# expanded; the fan sticky must not auto-restore the previously open one
+RESTORE=$(grep "\[QA\] expand-seq: restore-probe " "$QA_LOG" | tail -1)
+RS=$(echo "$RESTORE" | grep -oE "Sensors=[01]" | cut -d= -f2)
+RC=$(echo "$RESTORE" | grep -oE "CPU=[01]" | cut -d= -f2)
+if [ "$RS" = "1" ] && [ "$RC" = "1" ]; then
+  pass "A→B→collapse-B leaves both collapsed (sticky did not restore A)"
+else
+  fail "sticky restored a section (probe: $RESTORE)"
+fi
 quit_phase "phase 2 (expand)"
 
 # --- phase 3: real helper replies + attention alerts ---

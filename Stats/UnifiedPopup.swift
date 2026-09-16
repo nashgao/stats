@@ -816,6 +816,20 @@ final class UnifiedPopupController {
                               self.panel.expandedSectionForQA == nil ? 1 : 0)
                     }
                 }
+                // A→B→collapse-B restore probe: with the fan sticky active,
+                // expand A (Sensors), switch to B (CPU), collapse B — the
+                // bug re-opened A because the sticky saw "nothing expanded"
+                // and the suppression flag was never set by the switch.
+                DispatchQueue.main.asyncAfter(deadline: .now() + collapseAt + 1.0) { [weak self] in
+                    guard let self else { return }
+                    self.panel.expandSection("Sensors")
+                    self.panel.expandSection("CPU")
+                    self.panel.simulateHeaderTap("CPU")
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
+                        guard let self else { return }
+                        NSLog("[QA] expand-seq: restore-probe %@", self.panel.collapsedStatesForQA)
+                    }
+                }
                 // Hero collapse round trip: the heroes share the same
                 // toggle state — a header tap on an expanded hero must
                 // collapse it symmetrically.
@@ -1360,6 +1374,8 @@ private final class UnifiedPopupPanel: NSPanel, NSWindowDelegate {
     func resetSensorsDetail() { self.content.resetSensorsDetail() }
     /// QA hook: capture the Show-all-opened state.
     func openAllSensorsForQA() { self.content.openAllTempsForQA() }
+    /// QA hook: collapsed states "name=1" pairs for the restore probe.
+    var collapsedStatesForQA: String { self.content.collapsedStatesForQA }
     
     func expandSection(_ module: String) {
         self.content.expandSection(module)

@@ -748,10 +748,11 @@ final class UnifiedPanelContent: NSView {
     /// Tracks the island's applied visibility so in/out only animates on
     /// real transitions (not per-tick relayouts).
     private var islandShown = false
-    /// Set when the user explicitly collapses the Sensors section; the
-    /// fan-attention sticky must not fight an explicit collapse for the
-    /// rest of the sticky window.
-    private var sensorsUserCollapsed = false
+    /// Set by ANY explicit section toggle (the user is driving); the
+    /// fan-attention sticky must not auto-open Sensors for the rest of
+    /// the sticky window. Resets when the window expires, so the next
+    /// attention episode can surface the controls again.
+    private var sensorsStickySuppressed = false
     
     // latest samples
     private var cpuLoad: CPU_Load?
@@ -978,9 +979,10 @@ final class UnifiedPanelContent: NSView {
         }
         let fanSticky = self.lastFanAttention.map { Date().timeIntervalSince($0) < 6 } ?? false
         if !fanSticky {
-            self.sensorsUserCollapsed = false
+            self.sensorsStickySuppressed = false
         }
-        if fanSticky && !self.sensorsUserCollapsed && self.expandedSection == nil {
+        if fanSticky && !self.sensorsStickySuppressed && self.expandedSection == nil {
+            NSLog("[UnifiedPanelTrace] sticky auto-expanding Sensors (attention episode, nothing expanded)")
             self.expandedSection = "Sensors"
         }
         self.sensorsRow.setExpanded(self.expandedSection == "Sensors")
@@ -1028,14 +1030,20 @@ final class UnifiedPanelContent: NSView {
         }
     }
     
-    private func toggleSection(_ module: String) {
+    private func toggleSection(_ module: String, source: String = "user") {
         let t0 = CFAbsoluteTimeGetCurrent()
         let heightBefore = self.frame.height
         let target = self.expandedSection == module ? nil : module
         self.expandedSection = target
-        if module == "Sensors" {
-            self.sensorsUserCollapsed = target == nil
-        }
+        NSLog("[UnifiedPanelTrace] toggleSection %@ source=%@ target=%@ fanSticky=%d suppressed=%d",
+              module, source, target ?? "none",
+              self.lastFanAttention.map({ Date().timeIntervalSince($0) < 6 }) ?? false ? 1 : 0,
+              self.sensorsStickySuppressed ? 1 : 0)
+        // Any explicit toggle stands the sticky down for the episode: the
+        // user is driving. In particular, collapsing the active section
+        // must leave NONE expanded — never auto-reopen a section the user
+        // switched away from (A → B → collapse-B must not restore A).
+        self.sensorsStickySuppressed = true
         for hero in [self.cpuHero, self.gpuHero, self.ramHero] {
             hero.setExpanded(hero.module == target)
         }
@@ -1179,7 +1187,7 @@ final class UnifiedPanelContent: NSView {
     /// Harness QA (STATS_POPUP_EXPAND=<module>): expand a section at open.
     func expandSection(_ module: String) {
         if self.expandedSection != module {
-            self.toggleSection(module)
+            self.toggleSection(module, source: "route")
         }
     }
     
@@ -1199,6 +1207,20 @@ final class UnifiedPanelContent: NSView {
     var headerForQA: NSView { self.brandLabel }
     var cpuHeroForQA: NSView { self.cpuHero }
     var netRowForQA: NSView { self.netRow }
+    /// QA hook: "name=1" pairs, 1 = collapsed (restore probe).
+    var collapsedStatesForQA: String {
+        let rows: [(String, Bool)] = [
+            ("Sensors", !self.sensorsRow.expanded),
+            ("CPU", !self.cpuHero.expanded),
+            ("GPU", !self.gpuHero.expanded),
+            ("RAM", !self.ramHero.expanded),
+            ("Battery", !self.batteryRow.expanded),
+            ("Disk", !self.diskRow.expanded),
+            ("Network", !self.netRow.expanded),
+            ("Thermal", !self.thermalRow.expanded)
+        ]
+        return rows.map({ "\($0.0)=\($0.1 ? 1 : 0)" }).joined(separator: " ")
+    }
     
     /// Scroll offset so the named module's section sits near the top.
     func sectionOffset(for module: String) -> CGFloat? {
