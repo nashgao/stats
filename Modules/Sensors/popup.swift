@@ -626,7 +626,7 @@ public class FanView: NSStackView {
             
             self.setSpeed(value: Int(self.speed), then: { [weak self] in
                 DispatchQueue.main.async { [weak self] in
-                    self?.sliderValueField?.textColor = .systemBlue
+                    self?.sliderValueField?.textColor = .controlAccentColor
                 }
             })
         }
@@ -948,7 +948,7 @@ public class FanView: NSStackView {
                     if !mode.isAutomatic {
                         self.setSpeed(value: speed, then: { [weak self] in
                             DispatchQueue.main.async { [weak self] in
-                                self?.sliderValueField?.textColor = .systemBlue
+                                self?.sliderValueField?.textColor = .controlAccentColor
                             }
                         })
                     }
@@ -961,7 +961,7 @@ public class FanView: NSStackView {
         if let value = self.fan.customSpeed, !self.fan.mode.isAutomatic {
             self.setSpeed(value: value, then: { [weak self] in
                 DispatchQueue.main.async { [weak self] in
-                    self?.sliderValueField?.textColor = .systemBlue
+                    self?.sliderValueField?.textColor = .controlAccentColor
                 }
             })
         }
