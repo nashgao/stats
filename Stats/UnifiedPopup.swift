@@ -1496,7 +1496,11 @@ private final class UnifiedPopupPanel: NSPanel, NSWindowDelegate {
               let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(size.width * 2), pixelsHigh: Int(size.height * 2), bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0) else { return }
         rep.size = size
         self.effectiveAppearance.performAsCurrentDrawingAppearance {
-            content.setNeedsDisplayRecursively()
+            // A plain setNeedsDisplay + cacheDisplay composites from layer
+            // caches: views that never had a display pass (freshly built
+            // rows, NSScrollView document content) come out blank. A
+            // synchronous display() pass first makes captures faithful.
+            content.display()
             content.cacheDisplay(in: content.bounds, to: rep)
         }
         guard let png = rep.representation(using: NSBitmapImageRep.FileType.png, properties: [:]) else { return }
