@@ -359,14 +359,16 @@ final class UnifiedPopupController {
         button.contentTintColor = nil
     }
     
-    /// Live power readout next to the unified glyph ("128W" / "-57W"),
+    /// Live power readout next to the unified glyph ("128W" / "29W"),
     /// evaluated on the same ~1s cadence as updateGlyph. Off by default
     /// (unified_widget_power); STATS_QA_MENU_WATTS=1 forces it on and
     /// logs the composed title every tick for the smoke test. Values are
     /// read straight from the SMC each tick — the battery reader only
     /// broadcasts on IOPS changes, which is not a realtime cadence — and
     /// the AC/battery choice matches the unified panel's Battery row:
-    /// adapter draw (PDTR) on AC, negative battery flow (PPBR) draining.
+    /// adapter draw (PDTR) on AC, battery flow (PPBR) draining. The menu
+    /// bar shows the magnitude only: the sign was cryptic without the
+    /// panel's (battery) label, and the direction is obvious anyway.
     private func updateMenuPower() {
         guard let item = self.statusItem, let button = item.button else { return }
         let forced = ProcessInfo.processInfo.environment["STATS_QA_MENU_WATTS"] == "1"
@@ -396,14 +398,14 @@ final class UnifiedPopupController {
         }
     }
     
-    /// Current system draw in watts: adapter draw when on AC, negative
-    /// battery flow when draining; nil only when no SMC power keys
-    /// respond.
+    /// Current system draw in watts, as a magnitude (the menu bar shows
+    /// no sign): adapter draw when on AC, battery flow when draining;
+    /// nil only when no SMC power keys respond.
     private func currentPowerDraw() -> Double? {
         let batteryPower = Kit.SMC.shared.getValue("PPBR")
         let adapterPower = Kit.SMC.shared.getValue("PDTR")
         if self.onBatteryPower() {
-            return batteryPower.map { -abs($0) }
+            return batteryPower.map(abs)
         }
         if let adapterPower, adapterPower > 0 {
             return adapterPower
