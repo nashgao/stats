@@ -387,6 +387,15 @@ enum UnifiedInfoFormatters {
         return "\(magnitude) W (adapter)"
     }
     
+    /// "128W" / "9.5W" / "-57W" — compact watts for the unified menu bar
+    /// title: integer at ≥10, one decimal below, sign only while draining
+    /// (negative values arrive signed; AC draw is unsigned).
+    static func menuWatts(_ power: Double) -> String {
+        let value = abs(power)
+        let formatted = value >= 10 ? String(format: "%.0f", value) : String(format: "%.1f", value)
+        return power < 0 ? "-\(formatted)W" : "\(formatted)W"
+    }
+    
     /// "2:15" on battery; "Time to full — 0:48" when charging;
     /// "Charging (limit 80%)" under optimized charging; "–" with no
     /// estimate.

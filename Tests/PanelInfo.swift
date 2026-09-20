@@ -91,6 +91,14 @@ final class PanelInfoTests: XCTestCase {
         XCTAssertEqual(UnifiedInfoFormatters.batteryPowerText(batteryPower: 0.04, adapterPower: 0, onBattery: false, isCharging: false), "0.0 W (adapter)")
     }
     
+    func testMenuWatts() {
+        XCTAssertEqual(UnifiedInfoFormatters.menuWatts(128.46), "128W")
+        XCTAssertEqual(UnifiedInfoFormatters.menuWatts(9.54), "9.5W")
+        XCTAssertEqual(UnifiedInfoFormatters.menuWatts(0.04), "0.0W")
+        XCTAssertEqual(UnifiedInfoFormatters.menuWatts(-57.14), "-57W")
+        XCTAssertEqual(UnifiedInfoFormatters.menuWatts(-9.54), "-9.5W")
+    }
+    
     func testBatteryTimeText() {
         XCTAssertEqual(UnifiedInfoFormatters.batteryTimeText(onBattery: true, isCharging: false, minutesToEmpty: 135, minutesToFull: 0, optimizedCharging: false), "2:15")
         XCTAssertEqual(UnifiedInfoFormatters.batteryTimeText(onBattery: true, isCharging: false, minutesToEmpty: 0, minutesToFull: 0, optimizedCharging: false), "–")

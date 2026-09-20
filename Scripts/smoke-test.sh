@@ -304,6 +304,34 @@ case "$ISLAND_EXPAND" in
 esac
 quit_phase "phase 6 (motion)"
 
+# --- phase 7: menu bar power readout (forced on, 1s cadence) ---
+# STATS_QA_MENU_WATTS=1 overrides the store toggle and logs the composed
+# title every tick; the status item is installed at launch, no panel open
+# needed.
+echo "-- phase 7: menu watts --"
+for pid in $(pgrep -x Stats); do kill "$pid" 2>/dev/null; done
+sleep 1
+rm -f "$QA_LOG" "$CAPTURE"
+cd "$(dirname "$BIN")"
+env STATS_QA_MENU_WATTS=1 ./Stats >"$QA_LOG" 2>&1 &
+QA_PID=$!
+WATTS_SAMPLES=0
+for i in $(seq 1 15); do
+  WATTS_SAMPLES=$(grep -c "\[QA\] menu watts:" "$QA_LOG" 2>/dev/null || true)
+  [ "${WATTS_SAMPLES:-0}" -ge 2 ] && break
+  ps -p "$QA_PID" >/dev/null 2>&1 || break
+  sleep 1
+done
+BAD_SAMPLE=$(grep "\[QA\] menu watts:" "$QA_LOG" | grep -vE "\[QA\] menu watts: (-?[0-9]+(\.[0-9])?W|n/a)$" | head -1)
+if [ -n "$BAD_SAMPLE" ]; then
+  fail "menu watts malformed sample: $BAD_SAMPLE"
+elif [ "${WATTS_SAMPLES:-0}" -ge 2 ]; then
+  pass "menu watts live (${WATTS_SAMPLES} samples at 1s cadence, format ok)"
+else
+  fail "menu watts: only ${WATTS_SAMPLES:-0} samples in 15s"
+fi
+quit_phase "phase 7 (menu watts)"
+
 # --- helper contract ---
 "$SCRIPT_DIR/check-helper-contract.sh" "$APP" && pass "helper contract" || fail "helper contract"
 

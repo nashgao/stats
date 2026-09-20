@@ -132,6 +132,10 @@ class ApplicationSettings: NSStackView {
             PreferencesRow(localizedString("Notify on attention alerts"), component: switchView(
                 action: #selector(self.toggleAttentionAlerts),
                 state: Store.shared.bool(key: AttentionNotifier.settingKey, defaultValue: true)
+            )),
+            PreferencesRow(localizedString("Show power usage in menu bar"), component: switchView(
+                action: #selector(self.toggleMenuPower),
+                state: Store.shared.bool(key: "unified_widget_power", defaultValue: false)
             ))
         ]))
         
@@ -425,6 +429,13 @@ class ApplicationSettings: NSStackView {
         if sender.state == .on {
             AttentionNotifier.requestAuthorizationIfNeeded()
         }
+    }
+    
+    /// Live system draw ("128W" / "-57W") next to the unified menu bar
+    /// item. The unified controller reads the key on its 1s tick, so the
+    /// switch takes effect without a restart or a notification.
+    @objc private func toggleMenuPower(_ sender: NSButton) {
+        Store.shared.set(key: "unified_widget_power", value: sender.state == .on)
     }
     
     // MARK: - fan control setup

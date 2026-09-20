@@ -117,3 +117,4 @@ from agent code — the hardened smoke test is expected to fail with the
 | `STATS_QA_LAYOUT=1` | log panel content/island height once per second (`[QA] layout tick:`) for the layout-stability smoke assertion |
 | `STATS_QA_EXPAND=<module\|All>` | expand a section (or all of CPU/GPU/RAM/Sensors/Battery in sequence) and sample panel heights across +1.2s (`[QA] expand:`/`expand-seq:`) — two-phase expand detector |
 | `STATS_QA_ISLAND=1` | force an island appearance and sample its frame every 0.25s (`[QA] island:`) — island jump detector |
+| `STATS_QA_MENU_WATTS=1` | force the unified menu bar power readout on and log the composed title every tick (`[QA] menu watts:`) — smoke test asserts format + 1s cadence |

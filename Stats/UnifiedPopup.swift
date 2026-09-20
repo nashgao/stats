@@ -18,6 +18,7 @@
 import Cocoa
 import Kit
 import Sensors
+import IOKit.ps
 
 private func withoutImplicitAnimation(_ block: () -> Void) {
     NSAnimationContext.runAnimationGroup { context in
@@ -36,6 +37,10 @@ final class UnifiedPopupController {
     private var statusItem: NSStatusItem? = nil
     private var glyphTimer: Timer?
     private var glyphState: String = ""
+    /// Last formatted value written to the status item title, so the
+    /// 1s tick only rebuilds the attributed string when the number
+    /// actually changed.
+    private var menuPowerState: String = ""
     
     /// QA fan-cycle state (STATS_QA_FAN_CYCLE=1): latest real specs and
     /// speed of fan 0 from the sensors reader, captured off
@@ -268,6 +273,7 @@ final class UnifiedPopupController {
         if self.glyphTimer == nil {
             self.glyphTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
                 self?.updateGlyph()
+                self?.updateMenuPower()
                 if SMCHelper.shared.reachabilityRefreshDue(maxAge: 5) {
                     SMCHelper.shared.refreshReachability()
                 }
@@ -284,6 +290,7 @@ final class UnifiedPopupController {
             }
         }
         self.updateGlyph()
+        self.updateMenuPower()
         // Unified mode hides the module widgets, so nothing else may touch
         // the helper; establish the XPC connection here (idempotent, no-op
         // unless the daemon is registered and loaded).
@@ -332,6 +339,70 @@ final class UnifiedPopupController {
             button.image = image
         }
         button.contentTintColor = nil
+    }
+    
+    /// Live power readout next to the unified glyph ("128W" / "-57W"),
+    /// evaluated on the same ~1s cadence as updateGlyph. Off by default
+    /// (unified_widget_power); STATS_QA_MENU_WATTS=1 forces it on and
+    /// logs the composed title every tick for the smoke test. Values are
+    /// read straight from the SMC each tick — the battery reader only
+    /// broadcasts on IOPS changes, which is not a realtime cadence — and
+    /// the AC/battery choice matches the unified panel's Battery row:
+    /// adapter draw (PDTR) on AC, negative battery flow (PPBR) draining.
+    private func updateMenuPower() {
+        guard let item = self.statusItem, let button = item.button else { return }
+        let forced = ProcessInfo.processInfo.environment["STATS_QA_MENU_WATTS"] == "1"
+        let enabled = forced || Store.shared.bool(key: "unified_widget_power", defaultValue: false)
+        let text = enabled ? self.currentPowerDraw().map({ UnifiedInfoFormatters.menuWatts($0) }) : nil
+        
+        if forced {
+            NSLog("[QA] menu watts: %@", text ?? "n/a")
+        }
+        
+        let next = text ?? ""
+        guard next != self.menuPowerState else { return }
+        self.menuPowerState = next
+        
+        if next.isEmpty {
+            button.attributedTitle = NSAttributedString()
+            if item.length != NSStatusItem.squareLength {
+                item.length = NSStatusItem.squareLength
+            }
+        } else {
+            button.attributedTitle = NSAttributedString(string: next, attributes: [
+                .font: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .regular)
+            ])
+            if item.length != NSStatusItem.variableLength {
+                item.length = NSStatusItem.variableLength
+            }
+        }
+    }
+    
+    /// Current system draw in watts: adapter draw when on AC, negative
+    /// battery flow when draining; nil only when no SMC power keys
+    /// respond.
+    private func currentPowerDraw() -> Double? {
+        let batteryPower = Kit.SMC.shared.getValue("PPBR")
+        let adapterPower = Kit.SMC.shared.getValue("PDTR")
+        if self.onBatteryPower() {
+            return batteryPower.map { -abs($0) }
+        }
+        if let adapterPower, adapterPower > 0 {
+            return adapterPower
+        }
+        return batteryPower.map(abs)
+    }
+    
+    private func onBatteryPower() -> Bool {
+        let snapshot = IOPSCopyPowerSourcesInfo().takeRetainedValue()
+        let list = IOPSCopyPowerSourcesList(snapshot).takeRetainedValue() as [CFTypeRef]
+        var onBattery = false
+        for ps in list {
+            if let desc = IOPSGetPowerSourceDescription(snapshot, ps).takeUnretainedValue() as? [String: Any] {
+                onBattery = (desc[kIOPSPowerSourceStateKey] as? String ?? "AC Power") == "Battery Power"
+            }
+        }
+        return onBattery
     }
     
     /// Primary SFSymbol with a macOS 12-safe fallback for symbols newer
