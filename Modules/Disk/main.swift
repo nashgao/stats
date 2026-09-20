@@ -236,6 +236,10 @@ public class Disk: Module {
     private var activityReader: ActivityReader?
     private var processReader: ProcessReader?
     
+    /// Latest capacity-reader sample; merged into the activity sample
+    /// posted to the unified panel (see activityCallback).
+    private var lastCapacity: Disks? = nil
+    
     private var selectedDisk: String = ""
     
     private var textValue: String {
@@ -302,6 +306,7 @@ public class Disk: Module {
     private func capacityCallback(_ value: Disks) {
         guard self.enabled else { return }
         
+        self.lastCapacity = value
         DispatchQueue.main.async(execute: {
             self.popupView.capacityCallback(value)
             self.previewView.capacityCallback(value)
@@ -388,9 +393,29 @@ public class Disk: Module {
     private func activityCallback(_ value: Disks) {
         guard self.enabled else { return }
         
+        // The unified panel consumes this sample for everything (rates,
+        // volumes, totals), but the activity list only carries rates —
+        // capacity and SMART live on the capacity reader's list. Merge
+        // the two by BSDName so the panel gets one complete picture
+        // (without this, volume sizes fell back to the drive struct's
+        // 1-byte default and read as "1 byte of 1 byte").
+        var report = value
+        if let capacity = self.lastCapacity {
+            report = Disks()
+            report.array = value.array.map { d in
+                var d = d
+                if let c = capacity.first(where: { $0.BSDName == d.BSDName }) {
+                    d.size = c.size
+                    d.free = c.free
+                    d.smart = c.smart
+                }
+                return d
+            }
+        }
+        
         DispatchQueue.main.async(execute: {
             self.popupView.activityCallback(value)
-            NotificationCenter.default.post(name: .unifiedPanelSample, object: value)
+            NotificationCenter.default.post(name: .unifiedPanelSample, object: report)
             self.previewView.activityCallback(value)
         })
         
