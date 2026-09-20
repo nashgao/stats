@@ -877,6 +877,16 @@ final class UnifiedPanelContent: NSView {
         NotificationCenter.default.addObserver(self, selector: #selector(self.thermalStateChanged(_:)), name: ProcessInfo.thermalStateDidChangeNotification, object: nil)
         self.updateThermalRow()
         
+        // The panel mounts after the module readers start, so the battery
+        // reader's initial (and DB-restored) broadcast is posted before
+        // the observer above exists; unlike the timer-driven readers, the
+        // battery reader re-broadcasts only on IOPS changes. Replay the
+        // cached sample so the Battery card populates immediately.
+        if let battery = modules.first(where: { $0 is Battery }) as? Battery,
+           let usage = battery.lastKnownUsage {
+            self.sample(Notification(name: .unifiedPanelSample, object: usage))
+        }
+        
         self.relayout()
     }
     

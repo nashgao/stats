@@ -104,6 +104,16 @@ public class Battery: Module {
         return !sources.isEmpty
     }
     
+    /// Latest sample held by the usage reader (live read or DB-restored
+    /// from the previous run). The unified panel mounts after the readers
+    /// start, so the initial broadcast is posted before its observer
+    /// exists, and the reader only re-broadcasts on IOPS changes — minutes
+    /// away on a stable AC state. New subscribers replay this instead of
+    /// sitting blank.
+    public var lastKnownUsage: Battery_Usage? {
+        self.usageReader?.value
+    }
+    
     private func usageCallback(_ raw: Battery_Usage?) {
         guard let value = raw, self.enabled else { return }
         
