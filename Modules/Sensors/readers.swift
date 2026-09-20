@@ -151,6 +151,9 @@ internal class SensorsReader: Reader<Sensors_List> {
     }
     
     public override func read() {
+        let qaTick = ProcessInfo.processInfo.environment["STATS_QA_SENSOR_TICK"] == "1"
+        let t0 = CFAbsoluteTimeGetCurrent()
+        if qaTick { NSLog("[QA] sensor tick: start") }
         var sensors = self.list.sensors
         
         for i in sensors.indices {
@@ -164,6 +167,7 @@ internal class SensorsReader: Reader<Sensors_List> {
             }
             sensors[i].value = newValue
         }
+        if qaTick { NSLog("[QA] sensor tick: smc done %.2fs", CFAbsoluteTimeGetCurrent() - t0) }
         
         var cpuSensors = sensors.filter({ $0.group == .CPU && $0.type == .temperature && $0.average }).map{ $0.value }
         var gpuSensors = sensors.filter({ $0.group == .GPU && $0.type == .temperature && $0.average }).map{ $0.value }
@@ -288,6 +292,9 @@ internal class SensorsReader: Reader<Sensors_List> {
             return list
         }
         
+        if ProcessInfo.processInfo.environment["STATS_QA_SENSOR_TICK"] == "1" {
+            NSLog("[QA] sensor tick: callback %.2fs", CFAbsoluteTimeGetCurrent() - t0)
+        }
         self.callback(self.list)
     }
     

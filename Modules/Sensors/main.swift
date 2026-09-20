@@ -138,7 +138,13 @@ public class Sensors: Module {
         }
         
         let activeWidgets = self.menuBar.widgets.filter{ $0.isActive }
-        self.sensorsReader?.sleepMode(state: activeWidgets.contains(where: {$0.item is Label}) && activeWidgets.count == 1)
+        // The "label-only" power-saving idles the whole reader, which is
+        // fine in classic mode where the label is the only consumer — but
+        // the unified panel consumes reader data regardless of widget
+        // state, so idling here froze the panel's Sensors card at the
+        // startup sample on every launch.
+        let labelOnly = activeWidgets.contains(where: {$0.item is Label}) && activeWidgets.count == 1
+        self.sensorsReader?.sleepMode(state: labelOnly && !UnifiedPopupRouting.isEnabled)
         
         activeWidgets.forEach { (w: SWidget) in
             switch w.item {

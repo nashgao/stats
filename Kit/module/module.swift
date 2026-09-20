@@ -230,7 +230,9 @@ open class Module {
     // set module state to disabled
     public func disable() {
         guard self.available else { return }
-        
+        if ProcessInfo.processInfo.environment["STATS_QA_SENSOR_TICK"] == "1" {
+            NSLog("[QA] module %@: disable", self.config.name)
+        }
         self.enabled = false
         if !self.pauseState { // omit saving the disable state when toggle by pause, need for resume state restoration
             Store.shared.set(key: "\(self.config.name)_state", value: false)
@@ -267,6 +269,9 @@ open class Module {
     
     // call when popup appear/disappear
     private func popupVisibilityCallback(_ state: Bool) {
+        if ProcessInfo.processInfo.environment["STATS_QA_SENSOR_TICK"] == "1" {
+            NSLog("[QA] module %@: popupVisibility %d", self.config.name, state ? 1 : 0)
+        }
         self.readers.filter{ $0.popup || $0.sleep }.forEach { (reader: Reader_p) in
             if state {
                 reader.unlock()
@@ -285,6 +290,9 @@ open class Module {
             state = false
         }
         
+        if ProcessInfo.processInfo.environment["STATS_QA_SENSOR_TICK"] == "1" {
+            NSLog("[QA] module %@: windowOpen %d", self.config.name, state ? 1 : 0)
+        }
         self.readers.filter{ $0.preview || $0.sleep }.forEach { (reader: Reader_p) in
             if state {
                 reader.unlock()

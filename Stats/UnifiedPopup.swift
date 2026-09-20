@@ -140,6 +140,24 @@ final class UnifiedPopupController {
                 object: nil
             )
         }
+        if ProcessInfo.processInfo.environment["STATS_QA_SENSOR_TICK"] == "1" {
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(self.qaSensorSample(_:)),
+                name: .unifiedPanelSample,
+                object: nil
+            )
+        }
+    }
+    
+    /// QA (STATS_QA_SENSOR_TICK=1): log every Sensors_List sample that
+    /// reaches the panel, with the hottest temperature, so a frozen
+    /// display can be told apart from a frozen reader.
+    @objc private func qaSensorSample(_ notification: Notification) {
+        guard let list = notification.object as? Sensors_List else { return }
+        let temps = list.sensors.filter({ $0.type == .temperature && $0.value.isFinite })
+        guard let hottest = temps.max(by: { $0.value < $1.value }) else { return }
+        NSLog("[QA] sensor sample: hottest=%@ %.1f count=%d", hottest.key, hottest.value, temps.count)
     }
     
     /// Deliberate outside-click dismissal, replacing what

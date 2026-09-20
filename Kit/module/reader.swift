@@ -159,6 +159,9 @@ open class Reader<T: Codable>: NSObject, ReaderInternal_p {
     }
     
     open func pause() {
+        if ProcessInfo.processInfo.environment["STATS_QA_SENSOR_TICK"] == "1" {
+            NSLog("[QA] reader %@: pause", self.name)
+        }
         self.alignQueue.sync {
             self.alignGeneration &+= 1
             self.repeatTask?.pause()
@@ -167,6 +170,9 @@ open class Reader<T: Codable>: NSObject, ReaderInternal_p {
     }
     
     open func stop() {
+        if ProcessInfo.processInfo.environment["STATS_QA_SENSOR_TICK"] == "1" {
+            NSLog("[QA] reader %@: stop", self.name)
+        }
         self.alignQueue.sync {
             self.alignGeneration &+= 1
             self.repeatTask?.pause()
@@ -209,11 +215,14 @@ open class Reader<T: Codable>: NSObject, ReaderInternal_p {
     private func startNormalRepeater() {
         guard let interval = self.interval, self.repeatTask == nil else { return }
         
+        if ProcessInfo.processInfo.environment["STATS_QA_SENSOR_TICK"] == "1" {
+            NSLog("[QA] reader %@: normal repeater %.0fs (initialized=%d)", self.name, interval, self.initlizalized ? 1 : 0)
+        }
         if !self.popup && !self.preview {
             debug("Set up update interval: \(Int(interval)) sec", log: self.log)
         }
         
-        self.repeatTask = Repeater(seconds: Int(interval)) { [weak self] in
+        self.repeatTask = Repeater(seconds: Int(interval), label: self.name) { [weak self] in
             self?.read()
         }
     }
