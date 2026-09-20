@@ -3,12 +3,13 @@
 //  Tests
 //
 //  Pure formatter tests for the panel's info rows: battery condition
-//  wording from the reader health percentage, and thermal pressure
-//  state names + row status levels.
+//  wording from the reader health percentage, thermal pressure
+//  state names + row status levels, and the all-sensors popover filter.
 //
 
 import XCTest
 @testable import Kit
+@testable import Sensors
 @testable import Stats
 
 final class PanelInfoTests: XCTestCase {
@@ -97,6 +98,30 @@ final class PanelInfoTests: XCTestCase {
         XCTAssertEqual(UnifiedInfoFormatters.menuWatts(0.04), "0.0W")
         XCTAssertEqual(UnifiedInfoFormatters.menuWatts(-57.14), "-57W")
         XCTAssertEqual(UnifiedInfoFormatters.menuWatts(-9.54), "-9.5W")
+    }
+    
+    // MARK: - all-sensors popover filter
+    
+    private func sensor(_ key: String, _ name: String, _ value: Double) -> Sensor {
+        var s = Sensor(key: key, name: name, group: .unknown, type: .temperature, platforms: [])
+        s.value = value
+        return s
+    }
+    
+    func testSensorsAllFilter() {
+        let list: [String: Sensor_p] = [
+            "Ta01": self.sensor("Ta01", "Palm rest", 33),
+            "TCMb": self.sensor("TCMb", "Memory bank", 71),
+            "TVD0": self.sensor("TVD0", "GPU die", 69)
+        ]
+        // empty query: everything, hot-first
+        XCTAssertEqual(SensorsAllPopover.filteredKeys(list, query: ""), ["TCMb", "TVD0", "Ta01"])
+        // case-insensitive name match
+        XCTAssertEqual(SensorsAllPopover.filteredKeys(list, query: "palm"), ["Ta01"])
+        // key match
+        XCTAssertEqual(SensorsAllPopover.filteredKeys(list, query: "tvd"), ["TVD0"])
+        // no match
+        XCTAssertEqual(SensorsAllPopover.filteredKeys(list, query: "ssd"), [])
     }
     
     func testBatteryTimeText() {

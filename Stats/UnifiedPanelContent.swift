@@ -800,15 +800,8 @@ final class UnifiedPanelContent: NSView {
         self.showAllButton.isBordered = false
         self.showAllButton.contentTintColor = .secondaryLabelColor
         self.showAllButton.target = self
-        self.showAllButton.action = #selector(self.toggleShowAll)
+        self.showAllButton.action = #selector(self.openAllSensors)
         self.sensorsFansContainer.addSubview(self.showAllButton)
-        self.tempOverflowScroll.hasVerticalScroller = true
-        self.tempOverflowScroll.borderType = .noBorder
-        self.tempOverflowScroll.drawsBackground = false
-        self.tempOverflowScroll.backgroundColor = .clear
-        self.tempOverflowScroll.documentView = self.tempOverflowDocument
-        self.tempOverflowScroll.isHidden = true
-        self.sensorsFansContainer.addSubview(self.tempOverflowScroll)
         
         // Battery health detail: cycles / nominal health / full-charge
         // capability / condition, plus live power and time estimates,
@@ -1496,13 +1489,6 @@ final class UnifiedPanelContent: NSView {
     private var tempKeys: [String] = []
     private var latestTemps: [String: Sensor_p] = [:]
     private var tempRows: [(key: String, name: NSTextField, value: NSTextField)] = []
-    /// Rows beyond the pinned top-5, shown in a bounded scroll area under "Show all".
-    private var overflowRows: [(key: String, name: NSTextField, value: NSTextField)] = []
-    private let tempOverflowScroll = NSScrollView()
-    private let tempOverflowDocument = UnifiedFlippedView()
-    private let tempOverflowHeight: CGFloat = 280
-    /// "Show all" disclosure state — lives only while the panel is open.
-    private var showAllTemps = false
     private var totalTempCount = 0
     private let tempDeadband: Double = 0.5
     private let showAllButton = NSButton()
@@ -1629,19 +1615,18 @@ final class UnifiedPanelContent: NSView {
                 fanView.update(fans[index])
             }
         }
-        // Temperature rows (Option B): hot-first, top 5 by default, "Show
-        // all (N)" reveals the rest in a bounded scroll area below the
-        // pinned five. Membership changes require the newcomer to beat the
-        // held 5th value by a deadband; values update in place.
+        // Temperature rows (Option B): hot-first, top 5 in the panel; the
+        // full list lives in the all-sensors popover ("All sensors (N)").
+        // Membership changes require the newcomer to beat the held 5th
+        // value by a deadband; values update in place.
         let temps = sensors.sensors
             .filter({ $0.type == .temperature && $0.popupState && $0.value.isFinite })
             .sorted(by: { $0.value > $1.value })
         self.totalTempCount = temps.count
         for temp in temps { self.latestTemps[temp.key] = temp }
         
-        let visibleCount = self.showAllTemps ? temps.count : min(5, temps.count)
-        var desired = Array(temps.prefix(visibleCount).map({ $0.key }))
-        if !self.showAllTemps, desired != self.tempKeys, !self.tempKeys.isEmpty {
+        var desired = Array(temps.prefix(min(5, temps.count)).map({ $0.key }))
+        if desired != self.tempKeys, !self.tempKeys.isEmpty {
             let threshold = self.latestTemps[self.tempKeys[min(4, self.tempKeys.count - 1)]]?.value ?? -.infinity
             let newcomers = desired.filter { !self.tempKeys.contains($0) }
             let accepted = newcomers.allSatisfy { key in
@@ -1654,7 +1639,7 @@ final class UnifiedPanelContent: NSView {
         if desired != self.tempKeys {
             self.rebuildTempRows(desired)
         }
-        for row in self.tempRows + self.overflowRows {
+        for row in self.tempRows {
             guard let sensor = self.latestTemps[row.key] else { continue }
             if row.value.stringValue != sensor.formattedValue {
                 row.value.stringValue = sensor.formattedValue
@@ -1668,81 +1653,39 @@ final class UnifiedPanelContent: NSView {
     }
     
     private func rebuildTempRows(_ keys: [String]) {
-        for row in self.tempRows + self.overflowRows {
+        for row in self.tempRows {
             row.name.removeFromSuperview()
             row.value.removeFromSuperview()
         }
-        self.tempRows = []
-        self.overflowRows = []
-        let makeRow = { (key: String) -> (key: String, name: NSTextField, value: NSTextField) in
+        self.tempRows = keys.map { key in
             let name = unifiedLabel(self.latestTemps[key]?.name ?? key, font: .systemFont(ofSize: 11, weight: .regular), color: .secondaryLabelColor)
             let value = unifiedLabel(self.latestTemps[key]?.formattedValue ?? "–", font: .monospacedDigitSystemFont(ofSize: 11, weight: .semibold), color: .labelColor, alignment: .right)
             name.identifier = NSUserInterfaceItemIdentifier("temp")
             value.identifier = NSUserInterfaceItemIdentifier("temp")
+            self.sensorsFansContainer.addSubview(name)
+            self.sensorsFansContainer.addSubview(value)
             return (key, name, value)
         }
-        // Hottest five stay pinned; the rest scroll in the overflow area.
-        let pinned = self.showAllTemps ? min(5, keys.count) : keys.count
-        for key in keys.prefix(pinned) {
-            let row = makeRow(key)
-            self.sensorsFansContainer.addSubview(row.name)
-            self.sensorsFansContainer.addSubview(row.value)
-            self.tempRows.append(row)
-        }
-        for key in keys.dropFirst(pinned) {
-            let row = makeRow(key)
-            self.tempOverflowDocument.addSubview(row.name)
-            self.tempOverflowDocument.addSubview(row.value)
-            self.overflowRows.append(row)
-        }
-        self.tempOverflowScroll.isHidden = self.overflowRows.isEmpty
         self.tempKeys = keys
     }
     
     private func updateShowAllRow() {
         let extra = max(self.totalTempCount - 5, 0)
         self.showAllButton.isHidden = extra == 0
-        let title = self.showAllTemps ? localizedString("Show less") : "\(localizedString("Show all")) (\(self.totalTempCount))"
+        let title = "\(localizedString("All sensors")) (\(self.totalTempCount)) ›"
         self.showAllButton.attributedTitle = NSAttributedString(string: title, attributes: [
             .font: NSFont.systemFont(ofSize: 11, weight: .medium),
             .foregroundColor: NSColor.secondaryLabelColor
         ])
     }
     
-    @objc private func toggleShowAll() {
-        self.showAllTemps.toggle()
-        let temps = self.latestTemps.values.sorted(by: { $0.value > $1.value })
-        let visibleCount = self.showAllTemps ? temps.count : min(5, temps.count)
-        self.rebuildTempRows(Array(temps.prefix(visibleCount).map({ $0.key })))
-        self.updateShowAllRow()
-        self.layoutFanContainer()
-        self.onLayoutChange?()
+    @objc private func openAllSensors() {
+        SensorsAllPopover.shared.show(relativeTo: self.showAllButton.bounds, of: self.showAllButton)
     }
     
-    /// "Show all" state lives only while the panel is open (Option B);
-    /// the controller resets it on every close. QA hook for captures.
-    func resetSensorsDetail() {
-        guard self.showAllTemps else { return }
-        self.showAllTemps = false
-        let temps = self.latestTemps.values.sorted(by: { $0.value > $1.value })
-        self.rebuildTempRows(Array(temps.prefix(min(5, temps.count)).map({ $0.key })))
-        self.updateShowAllRow()
-        self.layoutFanContainer()
-        self.onLayoutChange?()
-    }
-    
-    /// QA hook: capture the Show-all-opened state.
-    func openAllTempsForQA() {
-        guard !self.showAllTemps else { return }
-        self.showAllTemps = true
-        let temps = self.latestTemps.values.sorted(by: { $0.value > $1.value })
-        self.rebuildTempRows(temps.map({ $0.key }))
-        self.updateShowAllRow()
-        self.layoutFanContainer()
-        NSLog("[QA] show-all: temps=%d overflow=%d hidden=%d scroll=%@ doc=%@",
-              temps.count, self.overflowRows.count, self.tempOverflowScroll.isHidden ? 1 : 0,
-              NSStringFromRect(self.tempOverflowScroll.frame), NSStringFromRect(self.tempOverflowDocument.frame))
-        self.onLayoutChange?()
+    /// QA hook: open the all-sensors popover (same path as the row tap).
+    func openAllSensorsForQA() {
+        self.openAllSensors()
     }
     
     private func layoutFanContainer() {
@@ -1759,19 +1702,6 @@ final class UnifiedPanelContent: NSView {
             row.name.frame = NSRect(x: 0, y: y + 1, width: 220, height: 14)
             row.value.frame = NSRect(x: width - 100, y: y + 1, width: 100, height: 14)
             y += 18
-        }
-        if !self.tempOverflowScroll.isHidden {
-            let rowCount = CGFloat(self.overflowRows.count)
-            let overflowHeight = min(rowCount * 18, self.tempOverflowHeight)
-            self.tempOverflowScroll.frame = NSRect(x: 0, y: y, width: width, height: overflowHeight)
-            self.tempOverflowDocument.frame = NSRect(x: 0, y: 0, width: width, height: rowCount * 18)
-            var dy: CGFloat = 0
-            for row in self.overflowRows {
-                row.name.frame = NSRect(x: 0, y: dy + 1, width: 220, height: 14)
-                row.value.frame = NSRect(x: width - 100, y: dy + 1, width: 100, height: 14)
-                dy += 18
-            }
-            y += overflowHeight
         }
         if !self.showAllButton.isHidden {
             self.showAllButton.frame = NSRect(x: 0, y: y + 3, width: width, height: 16)
