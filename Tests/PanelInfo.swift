@@ -80,11 +80,15 @@ final class PanelInfoTests: XCTestCase {
     // MARK: - battery power and time
     
     func testBatteryPowerText() {
-        XCTAssertEqual(UnifiedInfoFormatters.batteryPowerText(power: 36.74, onBattery: false, isCharging: true), "36.7 W (charging)")
-        XCTAssertEqual(UnifiedInfoFormatters.batteryPowerText(power: -12.4, onBattery: true, isCharging: false), "-12.4 W (battery)")
-        XCTAssertEqual(UnifiedInfoFormatters.batteryPowerText(power: 0.04, onBattery: false, isCharging: false), "0.0 W (adapter)")
+        // on battery: battery-side flow, signed by the mode
+        XCTAssertEqual(UnifiedInfoFormatters.batteryPowerText(batteryPower: -12.4, adapterPower: 0, onBattery: true, isCharging: false), "-12.4 W (battery)")
         // unsigned reader values get their sign from the mode
-        XCTAssertEqual(UnifiedInfoFormatters.batteryPowerText(power: 12.4, onBattery: true, isCharging: false), "-12.4 W (battery)")
+        XCTAssertEqual(UnifiedInfoFormatters.batteryPowerText(batteryPower: 12.4, adapterPower: 0, onBattery: true, isCharging: false), "-12.4 W (battery)")
+        // on AC: adapter draw, not the ~0 battery flow
+        XCTAssertEqual(UnifiedInfoFormatters.batteryPowerText(batteryPower: 0.5, adapterPower: 41.2, onBattery: false, isCharging: true), "41.2 W (charging)")
+        XCTAssertEqual(UnifiedInfoFormatters.batteryPowerText(batteryPower: 0.04, adapterPower: 23.0, onBattery: false, isCharging: false), "23.0 W (adapter)")
+        // adapter sensor unavailable: fall back to the battery flow
+        XCTAssertEqual(UnifiedInfoFormatters.batteryPowerText(batteryPower: 0.04, adapterPower: 0, onBattery: false, isCharging: false), "0.0 W (adapter)")
     }
     
     func testBatteryTimeText() {

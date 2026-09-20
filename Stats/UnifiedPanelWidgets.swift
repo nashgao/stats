@@ -370,10 +370,14 @@ enum UnifiedInfoFormatters {
     }
     
     /// "36.7 W (charging)" / "-12.4 W (battery)" / "0.0 W (adapter)" —
-    /// signed magnitude with the power mode; the same reader value the
-    /// attention drain metric uses, so display and alerting agree.
-    static func batteryPowerText(power: Double, onBattery: Bool, isCharging: Bool) -> String {
-        let magnitude = String(format: "%.1f", abs(power))
+    /// the machine's draw with its power mode: battery-side flow when on
+    /// battery (the same value the attention drain metric uses, so display
+    /// and alerting agree), adapter draw (PDTR) when on AC since the
+    /// battery flow alone reads ~0 there. Falls back to the battery flow
+    /// if the adapter sensor is unavailable.
+    static func batteryPowerText(batteryPower: Double, adapterPower: Double, onBattery: Bool, isCharging: Bool) -> String {
+        let draw = onBattery ? abs(batteryPower) : (adapterPower > 0 ? adapterPower : abs(batteryPower))
+        let magnitude = String(format: "%.1f", draw)
         if onBattery {
             return "-\(magnitude) W (battery)"
         }

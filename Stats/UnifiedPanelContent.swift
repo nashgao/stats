@@ -1436,7 +1436,8 @@ final class UnifiedPanelContent: NSView {
             self.batteryFullChargeField?.stringValue = "\(battery.fullChargeCapacity.formatted(.number.grouping(.automatic))) mAh · \(UnifiedInfoFormatters.batteryPercent(battery.fullChargeCapacity, of: battery.designedCapacity))% of design"
             self.batteryConditionField?.stringValue = localizedString(UnifiedInfoFormatters.batteryCondition(battery.health))
             self.batteryPowerField?.stringValue = UnifiedInfoFormatters.batteryPowerText(
-                power: battery.batteryPower,
+                batteryPower: battery.batteryPower,
+                adapterPower: battery.adapterPower,
                 onBattery: battery.isBatteryPowered,
                 isCharging: battery.isCharging
             )
