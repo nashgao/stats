@@ -148,6 +148,15 @@ final class UnifiedDetailRows: NSView {
         }
     }
     
+    /// Hides or shows a single row after the live-prefix pass (e.g. the
+    /// disk volume slots that have no volume to show).
+    func setRowHidden(_ index: Int, hidden: Bool) {
+        guard index < self.names.count else { return }
+        self.names[index].isHidden = hidden
+        self.values[index].isHidden = hidden || self.customs[index] != nil
+        self.customs[index]?.isHidden = hidden
+    }
+    
     /// Updates a row's label (volume names arrive with the sample).
     func setName(_ index: Int, _ value: String) {
         guard index < self.names.count else { return }

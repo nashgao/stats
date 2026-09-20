@@ -823,9 +823,9 @@ final class UnifiedPanelContent: NSView {
         self.layoutBatteryDetail()
         
         // Disk / Network / Thermal details: fixed-height grammar blocks
-        // updated per tick. Row counts are fixed at build (volumes beyond
-        // the live set are hidden, height reserved) so expanding is a
-        // single layout pass.
+        // updated per tick. Row counts are fixed at build (volume slots
+        // without a volume are hidden individually, height reserved) so
+        // expanding is a single layout pass.
         self.diskDetail = UnifiedDetailRows()
         self.diskRow.expandContainer.addSubview(self.diskDetail)
         self.diskRow.detailHeight = 126
@@ -1399,7 +1399,13 @@ final class UnifiedPanelContent: NSView {
             self.diskWriteField?.stringValue = Units(bytes: drive.activity.write).getReadableSpeed()
             let volumes = disks.array.sorted { ($0.root ? 1 : 0) > ($1.root ? 1 : 0) }
             for (index, field) in self.diskVolumeFields.enumerated() {
-                guard index < volumes.count else { continue }
+                guard index < volumes.count else {
+                    // unused fixed slot: hide it rather than render a
+                    // label-less placeholder dash
+                    self.diskDetail.setRowHidden(2 + index, hidden: true)
+                    continue
+                }
+                self.diskDetail.setRowHidden(2 + index, hidden: false)
                 let volume = volumes[index]
                 let used = volume.size - volume.free
                 let title = volume.mediaName.isEmpty ? volume.BSDName : volume.mediaName
@@ -1407,7 +1413,9 @@ final class UnifiedPanelContent: NSView {
                 field.stringValue = "\(Units(bytes: used).getReadableMemory(style: .memory)) of \(Units(bytes: volume.size).getReadableMemory(style: .memory))"
                 field.toolTip = title
             }
-            self.diskDetail.setLiveRows(min(4 + volumes.count, 7))
+            // all seven rows live (Read, Write, 3 volume slots, both
+            // totals); empty slots are hidden individually above
+            self.diskDetail.setLiveRows(7)
             if let smart = drive.smart {
                 self.diskReadTotalField?.stringValue = Units(bytes: smart.totalRead).getReadableMemory(style: .memory)
                 self.diskWrittenTotalField?.stringValue = Units(bytes: smart.totalWritten).getReadableMemory(style: .memory)
