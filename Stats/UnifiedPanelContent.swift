@@ -705,8 +705,6 @@ final class UnifiedPanelContent: NSView {
     private var diskReadField: NSTextField?
     private var diskWriteField: NSTextField?
     private var diskVolumeFields: [NSTextField] = []
-    private var diskReadTotalField: NSTextField?
-    private var diskWrittenTotalField: NSTextField?
     private var netDetail: UnifiedDetailRows!
     private var netDownField: NSTextField?
     private var netUpField: NSTextField?
@@ -828,7 +826,7 @@ final class UnifiedPanelContent: NSView {
         // expanding is a single layout pass.
         self.diskDetail = UnifiedDetailRows()
         self.diskRow.expandContainer.addSubview(self.diskDetail)
-        self.diskRow.detailHeight = 126
+        self.diskRow.detailHeight = 90
         self.diskReadField = self.diskDetail.addRow(localizedString("Read"))
         self.diskWriteField = self.diskDetail.addRow(localizedString("Write"))
         self.diskReadField?.stringValue = "–"
@@ -838,11 +836,7 @@ final class UnifiedPanelContent: NSView {
             field.stringValue = "–"
             self.diskVolumeFields.append(field)
         }
-        self.diskReadTotalField = self.diskDetail.addRow(localizedString("Read total (since boot)"))
-        self.diskWrittenTotalField = self.diskDetail.addRow(localizedString("Written total (since boot)"))
-        self.diskReadTotalField?.stringValue = "–"
-        self.diskWrittenTotalField?.stringValue = "–"
-        self.diskDetail.setLiveRows(4)
+        self.diskDetail.setLiveRows(5)
         
         self.netDetail = UnifiedDetailRows()
         self.netRow.expandContainer.addSubview(self.netDetail)
@@ -1398,10 +1392,11 @@ final class UnifiedPanelContent: NSView {
             self.diskReadField?.stringValue = Units(bytes: drive.activity.read).getReadableSpeed()
             self.diskWriteField?.stringValue = Units(bytes: drive.activity.write).getReadableSpeed()
             let volumes = disks.array.sorted { ($0.root ? 1 : 0) > ($1.root ? 1 : 0) }
+            // live prefix first — it un-hides every row; the per-slot
+            // hiding for empty volume slots runs after, so they stay gone
+            self.diskDetail.setLiveRows(5)
             for (index, field) in self.diskVolumeFields.enumerated() {
                 guard index < volumes.count else {
-                    // unused fixed slot: hide it rather than render a
-                    // label-less placeholder dash
                     self.diskDetail.setRowHidden(2 + index, hidden: true)
                     continue
                 }
@@ -1413,16 +1408,11 @@ final class UnifiedPanelContent: NSView {
                 field.stringValue = "\(Units(bytes: used).getReadableMemory(style: .memory)) of \(Units(bytes: volume.size).getReadableMemory(style: .memory))"
                 field.toolTip = title
             }
-            // all seven rows live (Read, Write, 3 volume slots, both
-            // totals); empty slots are hidden individually above
-            self.diskDetail.setLiveRows(7)
-            if let smart = drive.smart {
-                self.diskReadTotalField?.stringValue = Units(bytes: smart.totalRead).getReadableMemory(style: .memory)
-                self.diskWrittenTotalField?.stringValue = Units(bytes: smart.totalWritten).getReadableMemory(style: .memory)
-            } else {
-                self.diskReadTotalField?.stringValue = "–"
-                self.diskWrittenTotalField?.stringValue = "–"
-            }
+            // Since-boot SMART totals are deliberately not shown here:
+            // the NVMe data-unit counters read ~1000x too high on this
+            // class of controller (hundreds of "TB" per day), and an
+            // unverifiable number is worse than none. The classic popup
+            // still shows them for anyone who wants the raw figures.
         case let net as Network_Usage:
             let down = UnifiedInfoFormatters.compactRate(net.bandwidth.download)
             let up = UnifiedInfoFormatters.compactRate(net.bandwidth.upload)
