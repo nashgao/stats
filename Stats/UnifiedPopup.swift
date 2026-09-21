@@ -359,27 +359,34 @@ final class UnifiedPopupController {
         button.contentTintColor = nil
     }
     
-    /// Live power readout next to the unified glyph ("128W" / "29W"),
-    /// evaluated on the same ~1s cadence as updateGlyph. Off by default
-    /// (unified_widget_power); STATS_QA_MENU_WATTS=1 forces it on and
-    /// logs the composed title every tick for the smoke test. Values are
-    /// read straight from the SMC each tick — the battery reader only
-    /// broadcasts on IOPS changes, which is not a realtime cadence — and
-    /// the AC/battery choice matches the unified panel's Battery row:
-    /// adapter draw (PDTR) on AC, battery flow (PPBR) draining. The menu
-    /// bar shows the magnitude only: the sign was cryptic without the
-    /// panel's (battery) label, and the direction is obvious anyway.
+    /// Live readout next to the unified glyph, evaluated on the same ~1s
+    /// cadence as updateGlyph. Two opt-in segments — watts
+    /// (unified_widget_power) and battery level + time estimate
+    /// (unified_widget_battery) — composed as "29W · 87% · 2:15".
+    /// STATS_QA_MENU_WATTS=1 forces both on and logs each segment every
+    /// tick for the smoke test. Values are read straight from the SMC /
+    /// IOPS each tick — the battery reader only broadcasts on IOPS
+    /// changes, which is not a realtime cadence. The watts AC/battery
+    /// choice matches the unified panel's Battery row (adapter draw PDTR
+    /// on AC, battery flow PPBR draining), shown as a magnitude: the sign
+    /// was cryptic without the panel's (battery) label.
     private func updateMenuPower() {
         guard let item = self.statusItem, let button = item.button else { return }
         let forced = ProcessInfo.processInfo.environment["STATS_QA_MENU_WATTS"] == "1"
-        let enabled = forced || Store.shared.bool(key: "unified_widget_power", defaultValue: false)
-        let text = enabled ? self.currentPowerDraw().map({ UnifiedInfoFormatters.menuWatts($0) }) : nil
+        let wattsEnabled = forced || Store.shared.bool(key: "unified_widget_power", defaultValue: false)
+        let batteryEnabled = forced || Store.shared.bool(key: "unified_widget_battery", defaultValue: false)
+        
+        let watts = wattsEnabled ? self.currentPowerDraw().map({ UnifiedInfoFormatters.menuWatts($0) }) : nil
+        let battery = batteryEnabled ? self.currentBatteryEstimate().map({
+            UnifiedInfoFormatters.menuBattery(level: min(max($0.level, 0), 100), minutes: $0.minutes)
+        }) : nil
         
         if forced {
-            NSLog("[QA] menu watts: %@", text ?? "n/a")
+            NSLog("[QA] menu watts: %@", watts ?? "n/a")
+            NSLog("[QA] menu battery: %@", battery ?? "n/a")
         }
         
-        let next = text ?? ""
+        let next = [watts, battery].compactMap { $0 }.joined(separator: " · ")
         guard next != self.menuPowerState else { return }
         self.menuPowerState = next
         
@@ -423,6 +430,28 @@ final class UnifiedPopupController {
             }
         }
         return onBattery
+    }
+    
+    /// Battery level and remaining-time estimate from IOPS: minutes are
+    /// time-to-empty when draining, time-to-full when charging; 0 when
+    /// the system reports none (e.g. fully charged). Nil overall when no
+    /// internal battery is present.
+    private func currentBatteryEstimate() -> (level: Int, minutes: Int)? {
+        let onBattery = self.onBatteryPower()
+        let snapshot = IOPSCopyPowerSourcesInfo().takeRetainedValue()
+        let list = IOPSCopyPowerSourcesList(snapshot).takeRetainedValue() as [CFTypeRef]
+        for ps in list {
+            guard let desc = IOPSGetPowerSourceDescription(snapshot, ps).takeUnretainedValue() as? [String: Any] else {
+                continue
+            }
+            // kIOPSTypeInternalBattery is a C macro, not visible to Swift —
+            // its value is the literal "InternalBattery".
+            guard desc[kIOPSTypeKey] as? String == "InternalBattery" else { continue }
+            let level = desc[kIOPSCurrentCapacityKey] as? Int ?? 0
+            let key = onBattery ? kIOPSTimeToEmptyKey : kIOPSTimeToFullChargeKey
+            return (level, desc[key] as? Int ?? 0)
+        }
+        return nil
     }
     
     /// Primary SFSymbol with a macOS 12-safe fallback for symbols newer

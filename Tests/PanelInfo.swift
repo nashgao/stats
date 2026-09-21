@@ -100,6 +100,12 @@ final class PanelInfoTests: XCTestCase {
         XCTAssertEqual(UnifiedInfoFormatters.menuWatts(-9.54), "-9.5W")
     }
     
+    func testMenuBattery() {
+        XCTAssertEqual(UnifiedInfoFormatters.menuBattery(level: 87, minutes: 135), "87% 2:15")
+        XCTAssertEqual(UnifiedInfoFormatters.menuBattery(level: 100, minutes: 0), "100%")
+        XCTAssertEqual(UnifiedInfoFormatters.menuBattery(level: 8, minutes: 9), "8% 0:09")
+    }
+    
     // MARK: - all-sensors popover filter
     
     private func sensor(_ key: String, _ name: String, _ value: Double) -> Sensor {

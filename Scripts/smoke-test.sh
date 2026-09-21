@@ -323,12 +323,17 @@ for i in $(seq 1 15); do
   sleep 1
 done
 BAD_SAMPLE=$(grep "\[QA\] menu watts:" "$QA_LOG" | grep -vE "\[QA\] menu watts: (-?[0-9]+(\.[0-9])?W|n/a)$" | head -1)
+BATTERY_VALUES=$(grep "\[QA\] menu battery:" "$QA_LOG" | sed 's/.*\[QA\] menu battery: //')
+BAD_BATTERY=$(echo "$BATTERY_VALUES" | grep -vE "^[0-9]+%( [0-9]+:[0-9]{2})?$|^n/a$" | head -1)
+BATTERY_SAMPLES=$(grep -c "\[QA\] menu battery:" "$QA_LOG" 2>/dev/null || true)
 if [ -n "$BAD_SAMPLE" ]; then
   fail "menu watts malformed sample: $BAD_SAMPLE"
-elif [ "${WATTS_SAMPLES:-0}" -ge 2 ]; then
-  pass "menu watts live (${WATTS_SAMPLES} samples at 1s cadence, format ok)"
+elif [ -n "$BAD_BATTERY" ]; then
+  fail "menu battery malformed sample: $BAD_BATTERY"
+elif [ "${WATTS_SAMPLES:-0}" -ge 2 ] && [ "${BATTERY_SAMPLES:-0}" -ge 2 ]; then
+  pass "menu watts live (${WATTS_SAMPLES} watts + ${BATTERY_SAMPLES} battery samples at 1s cadence, format ok)"
 else
-  fail "menu watts: only ${WATTS_SAMPLES:-0} samples in 15s"
+  fail "menu watts: only ${WATTS_SAMPLES:-0}/${BATTERY_SAMPLES:-0} samples in 15s"
 fi
 quit_phase "phase 7 (menu watts)"
 

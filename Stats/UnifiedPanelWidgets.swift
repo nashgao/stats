@@ -405,6 +405,13 @@ enum UnifiedInfoFormatters {
         return power < 0 ? "-\(formatted)W" : "\(formatted)W"
     }
     
+    /// "87%" / "87% 2:15" — menu bar battery segment: the percentage plus
+    /// the time estimate (minutes as h:mm) when one exists.
+    static func menuBattery(level: Int, minutes: Int) -> String {
+        guard minutes > 0 else { return "\(level)%" }
+        return "\(level)% \(self.clock(minutes))"
+    }
+    
     /// "2:15" on battery; "Time to full — 0:48" when charging;
     /// "Charging (limit 80%)" under optimized charging; "–" with no
     /// estimate.
