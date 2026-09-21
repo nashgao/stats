@@ -18,6 +18,7 @@
 import Cocoa
 import Kit
 import Sensors
+import Battery
 import IOKit.ps
 
 private func withoutImplicitAnimation(_ block: () -> Void) {
@@ -423,18 +424,24 @@ final class UnifiedPopupController {
     private func onBatteryPower() -> Bool {
         let snapshot = IOPSCopyPowerSourcesInfo().takeRetainedValue()
         let list = IOPSCopyPowerSourcesList(snapshot).takeRetainedValue() as [CFTypeRef]
-        var onBattery = false
+        // Any entry on battery wins — the last-entry-wins loop reported
+        // "AC Power" whenever a UPS or second source trailed the list.
         for ps in list {
             if let desc = IOPSGetPowerSourceDescription(snapshot, ps).takeUnretainedValue() as? [String: Any] {
-                onBattery = (desc[kIOPSPowerSourceStateKey] as? String ?? "AC Power") == "Battery Power"
+                if (desc[kIOPSPowerSourceStateKey] as? String ?? "AC Power") == "Battery Power" {
+                    return true
+                }
             }
         }
-        return onBattery
+        return false
     }
     
     /// Battery level and remaining-time estimate from IOPS: minutes are
     /// time-to-empty when draining, time-to-full when charging; 0 when
-    /// the system reports none (e.g. fully charged). Nil overall when no
+    /// the system reports none. Falls back to the battery module's latest
+    /// on-battery sample when the live read transiently loses the
+    /// estimate (the OS drops it for a stretch after power-source
+    /// changes) but the cached level still matches. Nil overall when no
     /// internal battery is present.
     private func currentBatteryEstimate() -> (level: Int, minutes: Int)? {
         let onBattery = self.onBatteryPower()
@@ -449,7 +456,14 @@ final class UnifiedPopupController {
             guard desc[kIOPSTypeKey] as? String == "InternalBattery" else { continue }
             let level = desc[kIOPSCurrentCapacityKey] as? Int ?? 0
             let key = onBattery ? kIOPSTimeToEmptyKey : kIOPSTimeToFullChargeKey
-            return (level, desc[key] as? Int ?? 0)
+            let minutes = desc[key] as? Int ?? 0
+            if minutes == 0, onBattery,
+               let usage = (modules.first(where: { $0 is Battery }) as? Battery)?.lastKnownUsage,
+               usage.isBatteryPowered,
+               abs(usage.level * 100 - Double(level)) <= 2 {
+                return (level, usage.timeToEmpty)
+            }
+            return (level, minutes)
         }
         return nil
     }
