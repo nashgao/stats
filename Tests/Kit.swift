@@ -341,4 +341,18 @@ class KitTests: XCTestCase {
         XCTAssertEqual(Units(bytes: 500_000).getReadableSpeed(base: .byte, unit: "MB"), "0.5 MB/s")
         XCTAssertEqual(Units(bytes: 500_000).getReadableSpeed(base: .bit, unit: "MB"), "4 Mb/s")
     }
+
+    func testUnitsGetReadableMemory() throws {
+        XCTAssertEqual(Units(bytes: 0).getReadableMemory(), "0 KB")
+        XCTAssertEqual(Units(bytes: 500).getReadableMemory(), "500 bytes")
+        XCTAssertEqual(Units(bytes: 1_000).getReadableMemory(), "1 KB")
+        XCTAssertEqual(Units(bytes: 1_500_000).getReadableMemory(), "1.5 MB")
+        XCTAssertEqual(Units(bytes: 2_000_000_000_000).getReadableMemory(), "2 TB")
+        // locale-grouping regression: values past 1000 of a unit used to
+        // render like "1.022,09 GB" and the comma fixup then mangled them
+        // into "1.022.09 GB"
+        XCTAssertEqual(Units(bytes: 1_500_000_000).getReadableMemory(style: .memory), "1.4 GB")
+        XCTAssertEqual(Units(bytes: 2_000_000_000_000).getReadableMemory(style: .memory), "1.82 TB")
+        XCTAssertEqual(Units(bytes: 1_097_693_208_576).getReadableMemory(style: .memory), "1022.31 GB")
+    }
 }

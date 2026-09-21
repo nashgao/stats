@@ -179,17 +179,27 @@ public struct Units {
     }
     
     public func getReadableMemory(style: ByteCountFormatter.CountStyle = .file) -> String {
-        let formatter: ByteCountFormatter = ByteCountFormatter()
-        formatter.countStyle = style
-        formatter.includesUnit = true
-        formatter.isAdaptive = true
-        
-        var value = formatter.string(fromByteCount: Int64(self.bytes))
-        if let idx = value.lastIndex(of: ",") {
-            value.replaceSubrange(idx...idx, with: ".")
+        // ByteCountFormatter groups thousands per the user locale
+        // ("1.022,09 GB"), and the old decimal-comma normalization then
+        // mangled grouped values into "1.022.09 GB". Format manually
+        // instead: locale-independent, dot decimal, no grouping.
+        let useBinary = (style == .memory || style == .binary)
+        let divisor = useBinary ? 1024.0 : 1000.0
+        let units = ["KB", "MB", "GB", "TB", "PB"]
+        var value = Double(self.bytes)
+        guard value > 0 else { return "0 KB" }
+        if value < divisor {
+            return "\(self.bytes) bytes"
         }
-        
-        return value
+        var index = -1
+        repeat {
+            value /= divisor
+            index += 1
+        } while value >= divisor && index < units.count - 1
+        let trimmed = String(format: "%.2f", value)
+            .replacingOccurrences(of: "\\.0+$", with: "", options: .regularExpression)
+            .replacingOccurrences(of: "(\\.[0-9]*?)0+$", with: "$1", options: .regularExpression)
+        return "\(trimmed) \(units[index])"
     }
     
     public func toUnit(_ unit: SizeUnit) -> Double {
