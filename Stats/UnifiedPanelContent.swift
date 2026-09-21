@@ -137,37 +137,96 @@ private final class UnifiedSparklineView: NSView {
     private var values: [Double] = []
     /// One minute of history at the readers' 1 Hz cadence.
     private let capacity = 60
+    /// Smooth-scroll state: when a point arrives, the new layout slides
+    /// in from the right over one second instead of jumping a full cell
+    /// at 1 Hz (motion-gated so QA captures stay deterministic).
+    private var scrollStart: Date?
+    private var scrollTimer: Timer?
+    /// Value span before the latest point, for blending the auto scale.
+    private var previousSpan: (lo: Double, hi: Double)?
     
     override var isOpaque: Bool { false }
     
     func add(_ value: Double) {
+        if self.scale == .auto, self.values.count > 1 {
+            self.previousSpan = self.currentSpan()
+        }
         self.values.append(value)
         if self.values.count > self.capacity {
             self.values.removeFirst(self.values.count - self.capacity)
         }
+        if UnifiedMotion.enabled {
+            self.scrollStart = Date()
+            if self.scrollTimer == nil {
+                let timer = Timer(timeInterval: 1.0 / 30, repeats: true) { [weak self] _ in
+                    guard let self, let start = self.scrollStart else { return }
+                    if Date().timeIntervalSince(start) >= 1.0 {
+                        self.scrollTimer?.invalidate()
+                        self.scrollTimer = nil
+                    }
+                    self.needsDisplay = true
+                }
+                RunLoop.main.add(timer, forMode: .common)
+                self.scrollTimer = timer
+            }
+        }
         self.needsDisplay = true
     }
     
-    override func draw(_ rect: NSRect) {
-        guard self.values.count > 1 else { return }
-        let lo: Double
-        let hi: Double
+    deinit {
+        self.scrollTimer?.invalidate()
+    }
+    
+    private func currentSpan() -> (lo: Double, hi: Double) {
         switch self.scale {
         case .fixed:
-            lo = 0
-            hi = 100
+            return (0, 100)
         case .auto:
             let min = self.values.min() ?? 0
             let max = self.values.max() ?? 1
             let span = Swift.max(max - min, 1)
-            lo = min - span * 0.25
-            hi = max + span * 0.25
+            return (min - span * 0.25, max + span * 0.25)
+        }
+    }
+    
+    override func draw(_ rect: NSRect) {
+        guard self.values.count > 1 else { return }
+        let (loNow, hiNow) = self.currentSpan()
+        // Blend factor for the scroll animation: 0 = the layout before
+        // the latest point, 1 = the settled layout with it.
+        var u: CGFloat = 1
+        if let start = self.scrollStart {
+            let t = CGFloat(Date().timeIntervalSince(start))
+            if t >= 1 {
+                self.scrollStart = nil
+                self.previousSpan = nil
+                u = 1
+            } else {
+                u = t
+            }
+        }
+        let (lo, hi): (Double, Double)
+        if let previous = self.previousSpan, u < 1 {
+            lo = previous.lo + (loNow - previous.lo) * Double(u)
+            hi = previous.hi + (hiNow - previous.hi) * Double(u)
+        } else {
+            lo = loNow
+            hi = hiNow
         }
         let path = NSBezierPath()
         let w = self.bounds.width
         let h = self.bounds.height
+        let segments = self.values.count - 1
+        // Old layout: the window without the newest point spread over
+        // the full width; new layout: the full window. Interpolating the
+        // x positions slides the history left as the fresh point enters
+        // from the right edge.
+        let oldDen = CGFloat(max(segments - 1, 1))
+        let newDen = CGFloat(max(segments, 1))
         for (i, value) in self.values.enumerated() {
-            let x = CGFloat(i) / CGFloat(self.values.count - 1) * w
+            let oldX = CGFloat(i) / oldDen * w
+            let newX = CGFloat(i) / newDen * w
+            let x = oldX + (newX - oldX) * u
             // Non-flipped view inside a flipped row: higher values draw
             // toward the TOP of the band (100% up, nominal thermal low).
             let y = 2 + CGFloat((value - lo) / (hi - lo)) * (h - 5)
@@ -604,12 +663,11 @@ private final class UnifiedGrammarRow: NSView {
         self.iconView.frame = NSRect(x: 4, y: 15, width: 16, height: 16)
         self.nameLabel.frame = NSRect(x: 26, y: 15, width: 70, height: 16)
         self.chevron.frame = NSRect(x: w - 4 - 14, y: 16, width: 14, height: 14)
-        // Value field sized to its actual text: the sparkline must end
-        // before the TEXT (right-aligned), not before an arbitrary fixed
-        // field width — at larger text sizes a fixed 88pt frame left the
-        // sparkline running under the value and the chevron.
-        let textWidth = (self.valueField.stringValue as NSString).size(withAttributes: [.font: self.valueField.font ?? NSFont.systemFont(ofSize: 12)]).width
-        let valueWidth = max(ceil(textWidth) + 4, 44)
+        // Fixed-width value slot: the text is right-aligned inside it, so
+        // changing values ("6.1K↓ 17K↑" ↔ "2.0K↓ 1.0K↑") resize nothing —
+        // with a text-sized frame every tick moved the field and the
+        // sparkline with it, which read as constant flicker.
+        let valueWidth: CGFloat = 84
         self.valueField.frame = NSRect(x: w - 4 - 14 - 8 - valueWidth, y: 15, width: valueWidth, height: 16)
         // Status glyph placement: the chevron owns the trailing slot on
         // expandable rows, so the glyph (✓/▲) sits just LEFT of the value
