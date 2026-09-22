@@ -362,20 +362,27 @@ final class UnifiedPopupController {
     
     /// Live readout next to the unified glyph, evaluated on the same ~1s
     /// cadence as updateGlyph. Two opt-in segments — watts
-    /// (unified_widget_power) and battery level + time estimate
-    /// (unified_widget_battery) — composed as "29W · 87% · 2:15".
-    /// STATS_QA_MENU_WATTS=1 forces both on and logs each segment every
-    /// tick for the smoke test. Values are read straight from the SMC /
-    /// IOPS each tick — the battery reader only broadcasts on IOPS
-    /// changes, which is not a realtime cadence. The watts AC/battery
-    /// choice matches the unified panel's Battery row (adapter draw PDTR
-    /// on AC, battery flow PPBR draining), shown as a magnitude: the sign
-    /// was cryptic without the panel's (battery) label.
+    /// (unified_widget_power) and battery level + time estimate — composed
+    /// as "29W · 87% · 2:15". The battery segment has a third enablement
+    /// path: the Battery module's own widget configuration (see
+    /// menuBatterySegmentEnabled), so the Battery settings page keeps
+    /// working in unified mode where the module's menu-bar widgets are
+    /// suppressed. STATS_QA_MENU_WATTS=1 forces both on and logs each
+    /// segment every tick for the smoke test. Values are read straight
+    /// from the SMC / IOPS each tick — the battery reader only broadcasts
+    /// on IOPS changes, which is not a realtime cadence. The watts
+    /// AC/battery choice matches the unified panel's Battery row (adapter
+    /// draw PDTR on AC, battery flow PPBR draining), shown as a magnitude:
+    /// the sign was cryptic without the panel's (battery) label.
     private func updateMenuPower() {
         guard let item = self.statusItem, let button = item.button else { return }
         let forced = ProcessInfo.processInfo.environment["STATS_QA_MENU_WATTS"] == "1"
         let wattsEnabled = forced || Store.shared.bool(key: "unified_widget_power", defaultValue: false)
-        let batteryEnabled = forced || Store.shared.bool(key: "unified_widget_battery", defaultValue: false)
+        let batteryEnabled = Self.menuBatterySegmentEnabled(
+            unifiedSetting: Store.shared.bool(key: "unified_widget_battery", defaultValue: false),
+            forced: forced,
+            batteryWidgetConfig: Store.shared.string(key: "Battery_widget", defaultValue: widget_t.battery.rawValue)
+        )
         
         let watts = wattsEnabled ? self.currentPowerDraw().map({ UnifiedInfoFormatters.menuWatts($0) }) : nil
         let battery = batteryEnabled ? self.currentBatteryEstimate().map({
@@ -404,6 +411,25 @@ final class UnifiedPopupController {
                 item.length = NSStatusItem.variableLength
             }
         }
+    }
+    
+    /// Whether the unified menu-bar battery segment (level + time
+    /// estimate) shows. Three ways on: the QA knob, the explicit
+    /// app-level toggle (unified_widget_battery), or the Battery module's
+    /// own battery/battery-details widget being active. The widget path
+    /// keeps the Battery settings page functional in unified mode, where
+    /// the module's menu-bar widgets are suppressed and the widget config
+    /// would otherwise control nothing. `batteryWidgetConfig` is the raw
+    /// "Battery_widget" store value: comma-separated widget_t raw values,
+    /// defaulting to the module's default widget ("battery") — so the
+    /// segment follows the classic Stats default of a battery readout in
+    /// the menu bar.
+    static func menuBatterySegmentEnabled(unifiedSetting: Bool, forced: Bool, batteryWidgetConfig: String) -> Bool {
+        if forced || unifiedSetting { return true }
+        let widgets = batteryWidgetConfig
+            .split(separator: ",")
+            .compactMap { widget_t(rawValue: String($0).trimmingCharacters(in: .whitespaces)) }
+        return widgets.contains(.battery) || widgets.contains(.batteryDetails)
     }
     
     /// Current system draw in watts, as a magnitude (the menu bar shows
