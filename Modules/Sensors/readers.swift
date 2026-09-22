@@ -31,8 +31,6 @@ internal class SensorsReader: Reader<Sensors_List> {
     private var HIDState: Bool {
         Store.shared.bool(key: "Sensors_hid", defaultValue: false)
     }
-    private var unknownSensorsState: Bool
-    
     private var channels: CFMutableDictionary? = nil
     private var subscription: IOReportSubscriptionRef? = nil
     private var powers: (CPU: Double, GPU: Double, ANE: Double, RAM: Double, PCI: Double) = (0.0, 0.0, 0.0, 0.0, 0.0)
@@ -41,7 +39,6 @@ internal class SensorsReader: Reader<Sensors_List> {
     }
     
     init(callback: @escaping (T?) -> Void = {_ in }) {
-        self.unknownSensorsState = Store.shared.bool(key: "Sensors_unknown", defaultValue: false)
         super.init(.sensors, callback: callback)
         
         self.channels = self.getChannels()
@@ -158,11 +155,14 @@ internal class SensorsReader: Reader<Sensors_List> {
         
         for i in sensors.indices {
             guard sensors[i].group != .hid && !sensors[i].isComputed else { continue }
-            if !self.unknownSensorsState && sensors[i].group == .unknown { continue }
-            
+            // Unknown-group sensors are refreshed too: the unified panel's
+            // hottest-temp row, the temperature attention alert, and the
+            // all-sensors popover all consume them, and a value frozen at
+            // the discovery-time read made the row stick at the launch
+            // sample (a 101 °C boot-churn spike that never came down).
             var newValue = SMC.shared.getValue(sensors[i].key) ?? 0
-            if sensors[i].type == .temperature && sensors[i].group == .CPU &&
-                (newValue < 10 || newValue > 120) { // fix for m2 broken sensors
+            if sensors[i].type == .temperature && (sensors[i].group == .CPU || sensors[i].group == .unknown) &&
+                (newValue < 10 || newValue > 120) { // fix for m2 broken sensors, extended to unknown keys
                 newValue = sensors[i].value
             }
             sensors[i].value = newValue
@@ -350,10 +350,6 @@ internal class SensorsReader: Reader<Sensors_List> {
             default: return true
             }
         }).sorted { $0.key.lowercased() < $1.key.lowercased() }
-    }
-    
-    public func unknownCallback() {
-        self.unknownSensorsState = Store.shared.bool(key: "Sensors_unknown", defaultValue: false)
     }
 }
 

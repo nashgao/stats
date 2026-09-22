@@ -69,7 +69,6 @@ public class Sensors: Module {
         }
         self.settingsView.unknownCallback = { [weak self] in
             DispatchQueue.global(qos: .background).async {
-                self?.sensorsReader?.unknownCallback()
                 DispatchQueue.main.async {
                     self?.popupView.setup(self?.sensorsReader?.list.sensors)
                     self?.portalView.setup(self?.sensorsReader?.list.sensors)

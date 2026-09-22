@@ -500,6 +500,15 @@ internal let SensorsList: [Sensor] = [
     Sensor(key: "Tg1c", name: "GPU 7", group: .GPU, type: .temperature, platforms: Platform.m5Gen, average: true),
     Sensor(key: "Tg1g", name: "GPU 8", group: .GPU, type: .temperature, platforms: Platform.m5Gen, average: true),
     
+    // M5 package-level die sensor: verified 2026-09 by load correlation —
+    // tracks CPU package temperature ~1:1 (16×yes: +13.6 °C vs TCMb's
+    // +13.7 °C), reads ~1 °C below TCMb, and is register-aliased with
+    // TVDP/TVDc (identical values every sample). TVDG by contrast tracks
+    // the GPU cores, TVDi reads 0 — left as unknown. Hottest sensor on
+    // this machine at idle, so it drives the panel row and the 93/100 °C
+    // attention thresholds; named here so alerts read "SoC package".
+    Sensor(key: "TVD0", name: "SoC package", group: .sensor, type: .temperature, platforms: Platform.m5Gen),
+    
     // Apple Silicon
     Sensor(key: "TaLP", name: "Airflow left", group: .sensor, type: .temperature, platforms: Platform.apple),
     Sensor(key: "TaRF", name: "Airflow right", group: .sensor, type: .temperature, platforms: Platform.apple),
