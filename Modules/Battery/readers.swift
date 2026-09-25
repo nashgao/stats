@@ -114,7 +114,8 @@ internal class UsageReader: Reader<Battery_Usage> {
                 }
                 self.usage.health = Int((Double(100 * self.usage.maxCapacity) / Double(self.usage.designedCapacity)).rounded(.toNearestOrEven))
                 
-                self.usage.current = self.getIntValue("Amperage" as CFString) ?? 0
+                let amperage = self.getIntValue("Amperage" as CFString) ?? 0
+                self.usage.current = amperage
                 self.usage.voltage = self.getVoltage() ?? 0
                 self.usage.temperature = self.getTemperature() ?? 0
                 
@@ -127,7 +128,22 @@ internal class UsageReader: Reader<Battery_Usage> {
                 }
                 self.usage.ACwatts = ACwatts
                 
-                self.usage.batteryPower = SMC.shared.getValue("PPBR") ?? (self.usage.voltage * (Double(self.usage.current) / 1000))
+                // Battery power by power state. PPBR is live on battery but
+                // reads ~0.6-4 (garbage) on AC. The Amperage/Voltage
+                // registry snapshot publishes every 25-60s here: adequate
+                // for charge power on AC (the charge algorithm moves on a
+                // minute timescale), but far too stale for the
+                // load-swinging drain current on battery — derive current
+                // from the live PPBR there instead.
+                let smcBatteryPower = SMC.shared.getValue("PPBR")
+                if self.usage.isBatteryPowered {
+                    self.usage.batteryPower = smcBatteryPower ?? (self.usage.voltage * (Double(amperage) / 1000))
+                    if let p = smcBatteryPower, self.usage.voltage > 0 {
+                        self.usage.current = Int((p / self.usage.voltage) * 1000)
+                    }
+                } else {
+                    self.usage.batteryPower = self.usage.voltage * (Double(amperage) / 1000)
+                }
                 self.usage.adapterPower = SMC.shared.getValue("PDTR") ?? 0
                 self.usage.adapterVoltage = 0
                 if !self.usage.isBatteryPowered, let adapterDetails = self.getAdapterDetails() {
