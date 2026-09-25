@@ -99,29 +99,11 @@ final class PanelInfoTests: XCTestCase {
         XCTAssertEqual(UnifiedInfoFormatters.menuWatts(-57.14), "-57W")
         XCTAssertEqual(UnifiedInfoFormatters.menuWatts(-9.54), "-9.5W")
     }
-    
-    func testMenuBattery() {
-        XCTAssertEqual(UnifiedInfoFormatters.menuBattery(level: 87, minutes: 135), "87% 2:15")
-        XCTAssertEqual(UnifiedInfoFormatters.menuBattery(level: 100, minutes: 0), "100%")
-        XCTAssertEqual(UnifiedInfoFormatters.menuBattery(level: 8, minutes: 9), "8% 0:09")
-    }
-    
-    // MARK: - menu battery segment enablement
-    
-    func testMenuBatterySegmentEnabled() {
-        // QA knob and the explicit app-level toggle win outright
-        XCTAssertTrue(UnifiedPopupController.menuBatterySegmentEnabled(unifiedSetting: false, forced: true, batteryWidgetConfig: "mini"))
-        XCTAssertTrue(UnifiedPopupController.menuBatterySegmentEnabled(unifiedSetting: true, forced: false, batteryWidgetConfig: "mini"))
-        // the Battery module's own widget config drives the segment in
-        // unified mode — this is the store key's default ("battery"), so
-        // a default install shows the segment like classic Stats
-        XCTAssertTrue(UnifiedPopupController.menuBatterySegmentEnabled(unifiedSetting: false, forced: false, batteryWidgetConfig: "battery"))
-        XCTAssertTrue(UnifiedPopupController.menuBatterySegmentEnabled(unifiedSetting: false, forced: false, batteryWidgetConfig: "battery,battery_details"))
-        XCTAssertTrue(UnifiedPopupController.menuBatterySegmentEnabled(unifiedSetting: false, forced: false, batteryWidgetConfig: "battery_details"))
-        XCTAssertTrue(UnifiedPopupController.menuBatterySegmentEnabled(unifiedSetting: false, forced: false, batteryWidgetConfig: " battery , mini"))
-        // non-battery widgets leave the segment off
-        XCTAssertFalse(UnifiedPopupController.menuBatterySegmentEnabled(unifiedSetting: false, forced: false, batteryWidgetConfig: "mini"))
-        XCTAssertFalse(UnifiedPopupController.menuBatterySegmentEnabled(unifiedSetting: false, forced: false, batteryWidgetConfig: ""))
+
+    func testBatteryRowValue() {
+        XCTAssertEqual(UnifiedInfoFormatters.batteryRowValue(level: 83, minutes: 214), "83% · 3:34")
+        XCTAssertEqual(UnifiedInfoFormatters.batteryRowValue(level: 100, minutes: 0), "100%")
+        XCTAssertEqual(UnifiedInfoFormatters.batteryRowValue(level: 8, minutes: 9), "8% · 0:09")
     }
     
     // MARK: - all-sensors popover filter

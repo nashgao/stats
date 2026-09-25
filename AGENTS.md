@@ -107,6 +107,7 @@ from agent code — the hardened smoke test is expected to fail with the
 | `STATS_POPUP_MODULE=<name>` | force-enable + open that module's popup; `All` opens the unified panel |
 | `STATS_APPEARANCE=light\|dark` | force appearance |
 | `STATS_POPUP_CAPTURE=1` + `STATS_POPUP_CAPTURE_PATH` | render panel content to a PNG (lock-screen safe) |
+| `STATS_POPUP_CAPTURE_CHROME=1` | with `STATS_POPUP_CAPTURE=1`, also render the footer bar as `<path>-footer.png` — it lives in the panel chrome, outside the content render |
 | `STATS_POPUP_SCROLL_TO=bottom\|<points>` | scroll position for captures |
 | `STATS_POPUP_EXPAND=<module>` | expand a section at open |
 | `STATS_POPUP_PERF=1` | per-tick timing signposts (`[UnifiedPerf]`) |
@@ -114,8 +115,7 @@ from agent code — the hardened smoke test is expected to fail with the
 | `STATS_QA_ALERT=1` | force a synthetic RAM attention edge and log the composed notification (`[QA] alert:`) |
 | `STATS_QA_PANEL_TOGGLE=1` | drive the status-item toggle path open→closed→open and log the state transitions (`[QA] panel toggle:`) |
 | `STATS_QA_DISMISS=1` | synthesize click events inside/outside the icon frame to exercise the outside-click dismissal guards (`[QA] dismiss:`) |
-| `STATS_QA_LAYOUT=1` | log panel content/island height once per second (`[QA] layout tick:`) for the layout-stability smoke assertion |
+| `STATS_QA_LAYOUT=1` | log the panel content height once per second (`[QA] layout tick:`) for the layout-stability smoke assertion |
 | `STATS_QA_EXPAND=<module\|All>` | expand a section (or all of CPU/GPU/RAM/Sensors/Battery in sequence) and sample panel heights across +1.2s (`[QA] expand:`/`expand-seq:`) — two-phase expand detector |
-| `STATS_QA_ISLAND=1` | force an island appearance and sample its frame every 0.25s (`[QA] island:`) — island jump detector |
-| `STATS_QA_MENU_WATTS=1` | force both unified menu bar readout segments (watts + battery) on and log each composed title every tick (`[QA] menu watts:`, `[QA] menu battery:`) — smoke test asserts format + 1s cadence |
+| `STATS_QA_MENU_WATTS=1` | force the unified menu bar watts readout on and log the composed title every tick (`[QA] menu watts:`) — smoke test asserts format + 1s cadence. Battery level/time live in the panel's Battery row, not the menu bar |
 | `STATS_QA_SENSOR_TICK=1` | log reader/repeater lifecycle and every Sensors_List sample delivered to the panel (`[QA] reader …`, `[QA] repeater(…)`, `[QA] sensor sample:`) — used to catch reader idling (frozen sensors card) |

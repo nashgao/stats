@@ -125,9 +125,8 @@ grep -q "\[QA\] dismiss: outside event -> visible=0" "$QA_LOG" && pass "dismiss:
 quit_phase "phase 1 (toggle+dismiss)"
 
 # --- phase 2: expand every section in one pass ---
-# An island appearance mid-window is a REAL content transition (attention
-# threshold crossing), not a render defect: tolerated when the height
-# delta matches the island size and a transition is logged.
+# A mid-expand height transition is a real render defect: every section
+# must expand in a single layout pass.
 echo "-- phase 2: expand all sections --"
 if launch_phase STATS_QA_EXPAND=All; then
   pass "panel opened"
@@ -135,16 +134,12 @@ else
   fail "panel did not open"
 fi
 wait_for_log "\[QA\] expand-seq: collapse CPU " 60 || true
-ISLAND_APPEARANCES=$(grep -c "island=1 " "$QA_LOG")
 for module in CPU GPU RAM Sensors Battery Disk Network Thermal; do
   # last state=1 pair (samples after a live click are marked state=0)
   PAIR=$(grep "\[QA\] expand-seq: $module " "$QA_LOG" | grep "state=1" | tail -1 | grep -oE "panel [0-9]+->[0-9]+")
   FROM=${PAIR#panel }; FROM=${FROM%%->*}; TO=${PAIR##*->}
   if [ -n "$FROM" ] && [ "$FROM" = "$TO" ]; then
     pass "expand $module renders in one pass (panel ${FROM})"
-  elif [ -n "$FROM" ] && [ "$ISLAND_APPEARANCES" -ge 1 ] \
-       && python3 -c "exit(0 if 40 <= abs($TO - $FROM) <= 70 else 1)" 2>/dev/null; then
-    pass "expand $module one-pass up to an island transition ($(python3 -c "print(abs($TO - $FROM))")pt)"
   else
     fail "expand $module two-phase ($PAIR)"
   fi
@@ -225,90 +220,11 @@ fi
 ps -p "$QA_PID" >/dev/null 2>&1 && pass "process alive through phase 4" || fail "process died during phase 4"
 quit_phase "phase 4 (layout+latency)"
 
-# --- phase 5: island settles in one pass ---
-# The first visible island frame must be pinned at the panel top and
-# identical to the following samples — a correction after appearance is
-# the "wrong spot, then jumps" defect.
-echo "-- phase 5: island --"
-if launch_phase STATS_QA_ISLAND=1; then
-  pass "panel opened"
-else
-  fail "panel did not open"
-fi
-wait_for_log "\[QA\] island: sample visible=1" 22 || true
-ISLAND_RESULT=$(grep "\[QA\] island: sample" "$QA_LOG" | python3 -c '
-import sys, re
-frames = []
-for line in sys.stdin:
-    m = re.search(r"visible=1 frame=\{\{[\d.]+, ([\d.]+)\}, \{([\d.]+),", line)
-    if m:
-        frames.append((float(m.group(1)), float(m.group(2))))
-if not frames:
-    print("never-visible")
-elif frames[0][0] <= 0:
-    print("unpinned")
-elif any(f != frames[0] for f in frames[1:]):
-    print("moved")
-else:
-    print("stable@%d" % frames[0][0])
-')
-case "$ISLAND_RESULT" in
-  stable@*) pass "island settles in one pass (first visible frame pinned at y${ISLAND_RESULT#stable@})" ;;
-  *) fail "island placement defect: $ISLAND_RESULT" ;;
-esac
-quit_phase "phase 5 (island)"
-
-# --- phase 6: island pin through the expand spring (motion forced on) ---
-# STATS_QA_MOTION overrides the QA animation gate: the spring runs, and
-# the island must stay glued to the final top band for the entire
-# interpolation — the pin reads the target height, not the animating
-# frame.
-echo "-- phase 6: motion island pin --"
-if launch_phase STATS_QA_ISLAND=1 STATS_QA_MOTION=1; then
-  pass "panel opened"
-else
-  fail "panel did not open"
-fi
-wait_for_log "\[QA\] island-expand: " 22 || true
-ISLAND_EXPAND=$(grep "\[QA\] island-expand: island=" "$QA_LOG" | python3 -c '
-import sys, re
-
-def rects(field, lines):
-    out = []
-    for line in lines:
-        m = re.search(field + r"=\{\{([\d.-]+), ([\d.-]+)\}, \{([\d.-]+), ([\d.-]+)\}\}", line)
-        if m:
-            out.append(tuple(float(v) for v in m.groups()))
-    return out
-
-lines = sys.stdin.readlines()
-islands = rects("island", lines)
-headers = rects("header", lines)
-wins = rects("win", lines)
-if len(islands) < 5:
-    print("insufficient %d" % len(islands))
-else:
-    def spread(rs):
-        return max(max(r[i] for r in rs) - min(r[i] for r in rs) for i in range(4))
-    di, dh, dw = spread(islands), spread(headers), spread(wins)
-    # invariant: island + header screen-constant; the window itself
-    # genuinely resized during the samples (the spring ran)
-    if di <= 1 and dh <= 1 and dw >= 40:
-        print("invariant ok (island d%.1f header d%.1f window d%.1f)" % (di, dh, dw))
-    else:
-        print("violation island %.1f header %.1f window %.1f" % (di, dh, dw))
-')
-case "$ISLAND_EXPAND" in
-  "invariant ok"*) pass "screen-space invariant holds through the spring ($ISLAND_EXPAND)" ;;
-  *) fail "screen-space invariant violated: $ISLAND_EXPAND" ;;
-esac
-quit_phase "phase 6 (motion)"
-
-# --- phase 7: menu bar power readout (forced on, 1s cadence) ---
+# --- phase 5: menu bar power readout (forced on, 1s cadence) ---
 # STATS_QA_MENU_WATTS=1 overrides the store toggle and logs the composed
 # title every tick; the status item is installed at launch, no panel open
 # needed.
-echo "-- phase 7: menu watts --"
+echo "-- phase 5: menu watts --"
 for pid in $(pgrep -x Stats); do kill "$pid" 2>/dev/null; done
 sleep 1
 rm -f "$QA_LOG" "$CAPTURE"
@@ -323,19 +239,14 @@ for i in $(seq 1 15); do
   sleep 1
 done
 BAD_SAMPLE=$(grep "\[QA\] menu watts:" "$QA_LOG" | grep -vE "\[QA\] menu watts: (-?[0-9]+(\.[0-9])?W|n/a)$" | head -1)
-BATTERY_VALUES=$(grep "\[QA\] menu battery:" "$QA_LOG" | sed 's/.*\[QA\] menu battery: //')
-BAD_BATTERY=$(echo "$BATTERY_VALUES" | grep -vE "^[0-9]+%( [0-9]+:[0-9]{2})?$|^n/a$" | head -1)
-BATTERY_SAMPLES=$(grep -c "\[QA\] menu battery:" "$QA_LOG" 2>/dev/null || true)
 if [ -n "$BAD_SAMPLE" ]; then
   fail "menu watts malformed sample: $BAD_SAMPLE"
-elif [ -n "$BAD_BATTERY" ]; then
-  fail "menu battery malformed sample: $BAD_BATTERY"
-elif [ "${WATTS_SAMPLES:-0}" -ge 2 ] && [ "${BATTERY_SAMPLES:-0}" -ge 2 ]; then
-  pass "menu watts live (${WATTS_SAMPLES} watts + ${BATTERY_SAMPLES} battery samples at 1s cadence, format ok)"
+elif [ "${WATTS_SAMPLES:-0}" -ge 2 ]; then
+  pass "menu watts live (${WATTS_SAMPLES} samples at 1s cadence, format ok)"
 else
-  fail "menu watts: only ${WATTS_SAMPLES:-0}/${BATTERY_SAMPLES:-0} samples in 15s"
+  fail "menu watts: only ${WATTS_SAMPLES:-0} samples in 15s"
 fi
-quit_phase "phase 7 (menu watts)"
+quit_phase "phase 5 (menu watts)"
 
 # --- helper contract ---
 "$SCRIPT_DIR/check-helper-contract.sh" "$APP" && pass "helper contract" || fail "helper contract"

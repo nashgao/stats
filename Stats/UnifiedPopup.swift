@@ -18,7 +18,6 @@
 import Cocoa
 import Kit
 import Sensors
-import Battery
 import IOKit.ps
 
 private func withoutImplicitAnimation(_ block: () -> Void) {
@@ -42,6 +41,11 @@ final class UnifiedPopupController {
     /// 1s tick only rebuilds the attributed string when the number
     /// actually changed.
     private var menuPowerState: String = ""
+    /// Whether the watts readout currently owns the status item. While
+    /// true, the attention glyph is suppressed (menu bar shows watts
+    /// only); when watts turn off, the glyph returns so the item stays
+    /// visible.
+    private var wattsShown = false
     
     /// QA fan-cycle state (STATS_QA_FAN_CYCLE=1): latest real specs and
     /// speed of fan 0 from the sensors reader, captured off
@@ -69,15 +73,12 @@ final class UnifiedPopupController {
     private static var qaToggleArmed = false
     /// Same for the synthetic dismiss-guard exercise.
     private static var qaDismissArmed = false
-    /// STATS_QA_LAYOUT=1: log the panel content/island height once per
+    /// STATS_QA_LAYOUT=1: log the panel content height once per
     /// second so smoke can assert layout stability (no section jumping).
     private static let qaLayoutEnabled = ProcessInfo.processInfo.environment["STATS_QA_LAYOUT"] == "1"
     /// STATS_QA_EXPAND=1: drive a Sensors expand at +8s and sample the
     /// heights across the next 1.2s (two-phase expand detector).
     private static var qaExpandArmed = false
-    /// STATS_QA_ISLAND=1: force an island appearance and sample its frame
-    /// (`[QA] island:`) — island jump detector.
-    private static var qaIslandArmed = false
     
     /// Poll for the spin-up read-back after the RPM target; logs once —
     /// "(meets target)" when the speed reaches max(baseline, target/2),
@@ -289,6 +290,19 @@ final class UnifiedPopupController {
         button.sendAction(on: [.leftMouseDown, .rightMouseDown])
         button.toolTip = localizedString("Open unified popup")
         self.statusItem = item
+        // Post-sleep refresh of the menu readout: SMC.shared opens its
+        // AppleSMC connection once at launch and sleep/wake can leave it
+        // stale (reads against the old port, watts frozen on the
+        // pre-sleep value), so reopen it on wake and force the glyph and
+        // watts to re-evaluate immediately instead of waiting for the
+        // next value change. Workspace notifications arrive on the main
+        // thread; setupStatusItem's nil-guard makes this once per launch.
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(self.systemDidWake(_:)),
+            name: NSWorkspace.didWakeNotification,
+            object: nil
+        )
         if self.glyphTimer == nil {
             self.glyphTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
                 self?.updateGlyph()
@@ -302,7 +316,7 @@ final class UnifiedPopupController {
                         self?.panel.syncSize()
                     }
                     if Self.qaLayoutEnabled, let panel = self?.panel {
-                        NSLog("[QA] layout tick: content=%.1f island=%.1f", panel.contentHeight, panel.islandSpace)
+                        NSLog("[QA] layout tick: content=%.1f", panel.contentHeight)
                     }
                 }
                 UnifiedPerf.tick()
@@ -317,6 +331,18 @@ final class UnifiedPopupController {
         SMCHelper.shared.healIfNeeded()
         NSLog("[UnifiedPopup] status item installed (unified_widget=on) helper=%d",
               SMCHelper.shared.isActive() ? 1 : 0)
+    }
+    
+    /// Wake handler (registered with the status item): reopen the SMC
+    /// connection and reset the cached menu-bar states so updateGlyph()
+    /// and updateMenuPower() repaint even when the attention state and
+    /// the watts number did not change. Runs on the main thread.
+    @objc private func systemDidWake(_ notification: Notification) {
+        Kit.SMC.shared.reconnect()
+        self.menuPowerState = ""
+        self.glyphState = ""
+        self.updateGlyph()
+        self.updateMenuPower()
     }
     
     /// Adaptive glyph + tint, evaluated on a ~1s cadence from the shared
@@ -360,81 +386,74 @@ final class UnifiedPopupController {
         button.contentTintColor = nil
     }
     
-    /// Live readout next to the unified glyph, evaluated on the same ~1s
-    /// cadence as updateGlyph. Two opt-in segments — watts
-    /// (unified_widget_power) and battery level + time estimate — composed
-    /// as "29W · 87% · 2:15". The battery segment has a third enablement
-    /// path: the Battery module's own widget configuration (see
-    /// menuBatterySegmentEnabled), so the Battery settings page keeps
-    /// working in unified mode where the module's menu-bar widgets are
-    /// suppressed. STATS_QA_MENU_WATTS=1 forces both on and logs each
-    /// segment every tick for the smoke test. Values are read straight
-    /// from the SMC / IOPS each tick — the battery reader only broadcasts
-    /// on IOPS changes, which is not a realtime cadence. The watts
-    /// AC/battery choice matches the unified panel's Battery row (adapter
-    /// draw PDTR on AC, battery flow PPBR draining), shown as a magnitude:
-    /// the sign was cryptic without the panel's (battery) label.
+    /// Live watts readout next to the unified status item, evaluated on the
+    /// same ~1s cadence as updateGlyph. Opt-in via unified_widget_power; it
+    /// is the menu bar's entire content — the attention glyph is suppressed
+    /// while watts show (button.image cleared below, after updateGlyph's
+    /// pass in the same tick) and restored when watts turn off, so a
+    /// watts-off item never becomes invisible. Battery level + time live
+    /// in the unified panel's Battery row, not here. STATS_QA_MENU_WATTS=1
+    /// forces the segment on and logs the composed title every tick for the
+    /// smoke test. Values are read fresh from the SMC each tick, by
+    /// power state (see currentPowerDraw): battery drain (PPBR) on
+    /// battery; total system draw (PDTR) on AC when not charging; SoC
+    /// power (si10) on AC while charging, because the adapter sits at
+    /// its delivery limit then and PDTR pins at a constant. Shown as a
+    /// magnitude: the sign was cryptic without the panel's battery
+    /// label.
     private func updateMenuPower() {
         guard let item = self.statusItem, let button = item.button else { return }
         let forced = ProcessInfo.processInfo.environment["STATS_QA_MENU_WATTS"] == "1"
         let wattsEnabled = forced || Store.shared.bool(key: "unified_widget_power", defaultValue: false)
-        let batteryEnabled = Self.menuBatterySegmentEnabled(
-            unifiedSetting: Store.shared.bool(key: "unified_widget_battery", defaultValue: false),
-            forced: forced,
-            batteryWidgetConfig: Store.shared.string(key: "Battery_widget", defaultValue: widget_t.battery.rawValue)
-        )
         
-        let watts = wattsEnabled ? self.currentPowerDraw().map({ UnifiedInfoFormatters.menuWatts($0) }) : nil
-        let battery = batteryEnabled ? self.currentBatteryEstimate().map({
-            UnifiedInfoFormatters.menuBattery(level: min(max($0.level, 0), 100), minutes: $0.minutes)
-        }) : nil
+        let draw = self.currentPowerDraw()
+        let watts = wattsEnabled ? draw.map({ UnifiedInfoFormatters.menuWatts($0) }) : nil
         
         if forced {
             NSLog("[QA] menu watts: %@", watts ?? "n/a")
-            NSLog("[QA] menu battery: %@", battery ?? "n/a")
+            let rawPPBR = Kit.SMC.shared.getValue("PPBR")
+            let rawPDTR = Kit.SMC.shared.getValue("PDTR")
+            NSLog("[QA] watts raw: PPBR=%@ PDTR=%@",
+                  rawPPBR.map { String($0) } ?? "n/a",
+                  rawPDTR.map { String($0) } ?? "n/a")
         }
         
-        let next = [watts, battery].compactMap { $0 }.joined(separator: " · ")
-        guard next != self.menuPowerState else { return }
-        self.menuPowerState = next
-        
+        let next = watts ?? ""
         if next.isEmpty {
             button.attributedTitle = NSAttributedString()
             if item.length != NSStatusItem.squareLength {
                 item.length = NSStatusItem.squareLength
             }
-        } else {
-            button.attributedTitle = NSAttributedString(string: next, attributes: [
-                .font: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .regular)
-            ])
-            if item.length != NSStatusItem.variableLength {
-                item.length = NSStatusItem.variableLength
+            if self.wattsShown {
+                self.wattsShown = false
+                // glyphState is keyed on the attention state, which never
+                // changed while the glyph was suppressed — clear it so
+                // updateGlyph repaints the glyph now.
+                self.glyphState = ""
+                self.updateGlyph()
             }
+            self.menuPowerState = ""
+            return
+        }
+        // Watts own the item: keep the glyph suppressed even on ticks
+        // where the number did not change (updateGlyph may just have
+        // repainted it for an attention change — see the timer order).
+        self.wattsShown = true
+        button.image = nil
+        guard next != self.menuPowerState else { return }
+        self.menuPowerState = next
+        button.attributedTitle = NSAttributedString(string: next, attributes: [
+            .font: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .regular)
+        ])
+        if item.length != NSStatusItem.variableLength {
+            item.length = NSStatusItem.variableLength
         }
     }
     
-    /// Whether the unified menu-bar battery segment (level + time
-    /// estimate) shows. Three ways on: the QA knob, the explicit
-    /// app-level toggle (unified_widget_battery), or the Battery module's
-    /// own battery/battery-details widget being active. The widget path
-    /// keeps the Battery settings page functional in unified mode, where
-    /// the module's menu-bar widgets are suppressed and the widget config
-    /// would otherwise control nothing. `batteryWidgetConfig` is the raw
-    /// "Battery_widget" store value: comma-separated widget_t raw values,
-    /// defaulting to the module's default widget ("battery") — so the
-    /// segment follows the classic Stats default of a battery readout in
-    /// the menu bar.
-    static func menuBatterySegmentEnabled(unifiedSetting: Bool, forced: Bool, batteryWidgetConfig: String) -> Bool {
-        if forced || unifiedSetting { return true }
-        let widgets = batteryWidgetConfig
-            .split(separator: ",")
-            .compactMap { widget_t(rawValue: String($0).trimmingCharacters(in: .whitespaces)) }
-        return widgets.contains(.battery) || widgets.contains(.batteryDetails)
-    }
-    
     /// Current system draw in watts, as a magnitude (the menu bar shows
-    /// no sign): adapter draw when on AC, battery flow when draining;
-    /// nil only when no SMC power keys respond.
+    /// no sign): battery flow when draining; on AC the system's own
+    /// draw, never the raw adapter delivery; nil only when no SMC power
+    /// keys respond.
     private func currentPowerDraw() -> Double? {
         let batteryPower = Kit.SMC.shared.getValue("PPBR")
         let adapterPower = Kit.SMC.shared.getValue("PDTR")
@@ -442,9 +461,35 @@ final class UnifiedPopupController {
             return batteryPower.map(abs)
         }
         if let adapterPower, adapterPower > 0 {
+            // While charging, the adapter sits at its delivery limit and
+            // the charge current absorbs every load change, so PDTR pins
+            // at a constant (the "stuck at 84 W" reports). The only live
+            // usage signal then is the SoC power sensor (si10, ~15 W
+            // below PDTR since it excludes display/drives/etc). When not
+            // charging, PDTR IS the total system draw and moves every
+            // tick (verified: step response within 1 s).
+            if self.chargingOnAC(), let soc = Kit.SMC.shared.getValue("si10"), soc > 0 {
+                return soc
+            }
             return adapterPower
         }
         return batteryPower.map(abs)
+    }
+
+    /// Internal battery on AC with charging active (not the "not
+    /// charging" / optimized-charging hold states, where PDTR is live).
+    private func chargingOnAC() -> Bool {
+        let snapshot = IOPSCopyPowerSourcesInfo().takeRetainedValue()
+        let list = IOPSCopyPowerSourcesList(snapshot).takeRetainedValue() as [CFTypeRef]
+        for ps in list {
+            if let desc = IOPSGetPowerSourceDescription(snapshot, ps).takeUnretainedValue() as? [String: Any],
+               desc[kIOPSTypeKey] as? String == kIOPSInternalBatteryType,
+               desc[kIOPSPowerSourceStateKey] as? String == "AC Power",
+               desc[kIOPSIsChargingKey] as? Bool == true {
+                return true
+            }
+        }
+        return false
     }
     
     private func onBatteryPower() -> Bool {
@@ -460,38 +505,6 @@ final class UnifiedPopupController {
             }
         }
         return false
-    }
-    
-    /// Battery level and remaining-time estimate from IOPS: minutes are
-    /// time-to-empty when draining, time-to-full when charging; 0 when
-    /// the system reports none. Falls back to the battery module's latest
-    /// on-battery sample when the live read transiently loses the
-    /// estimate (the OS drops it for a stretch after power-source
-    /// changes) but the cached level still matches. Nil overall when no
-    /// internal battery is present.
-    private func currentBatteryEstimate() -> (level: Int, minutes: Int)? {
-        let onBattery = self.onBatteryPower()
-        let snapshot = IOPSCopyPowerSourcesInfo().takeRetainedValue()
-        let list = IOPSCopyPowerSourcesList(snapshot).takeRetainedValue() as [CFTypeRef]
-        for ps in list {
-            guard let desc = IOPSGetPowerSourceDescription(snapshot, ps).takeUnretainedValue() as? [String: Any] else {
-                continue
-            }
-            // kIOPSTypeInternalBattery is a C macro, not visible to Swift —
-            // its value is the literal "InternalBattery".
-            guard desc[kIOPSTypeKey] as? String == "InternalBattery" else { continue }
-            let level = desc[kIOPSCurrentCapacityKey] as? Int ?? 0
-            let key = onBattery ? kIOPSTimeToEmptyKey : kIOPSTimeToFullChargeKey
-            let minutes = desc[key] as? Int ?? 0
-            if minutes == 0, onBattery,
-               let usage = (modules.first(where: { $0 is Battery }) as? Battery)?.lastKnownUsage,
-               usage.isBatteryPowered,
-               abs(usage.level * 100 - Double(level)) <= 2 {
-                return (level, usage.timeToEmpty)
-            }
-            return (level, minutes)
-        }
-        return nil
     }
     
     /// Primary SFSymbol with a macOS 12-safe fallback for symbols newer
@@ -644,9 +657,9 @@ final class UnifiedPopupController {
         let t0 = CFAbsoluteTimeGetCurrent()
         self.panel.refreshContent()
         
-        // document + pinned island + pinned footer
+        // document + pinned footer
         let screenHeight = NSScreen.main?.visibleFrame.height ?? 800
-        let height = max(348, min(self.panel.contentHeight + self.panel.islandSpace + 28, screenHeight * 0.7))
+        let height = max(348, min(self.panel.contentHeight + 28, screenHeight * 0.7))
         let width = UnifiedPopupPanel.panelWidth
         let anchorX = origin.x + center
         var x = anchorX - width/2
@@ -787,7 +800,11 @@ final class UnifiedPopupController {
             // button — only screen location is), so the inside event must
             // be ignored by the location guard and the outside event must
             // dismiss.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 14) { [weak self] in
+            // Kept 3s clear of the toggle probe's "settled" sample (+13s):
+            // the samples used to be 1s apart, and a stalled runloop let
+            // this block's outside-dismiss run before the settled log,
+            // false-failing the flash assertion.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 16) { [weak self] in
                 guard let self, let buttonWindow = self.statusItem?.button?.window else { return }
                 // Guarantee a visible panel first (a real click during the
                 // run may have dismissed it), then exercise both guards
@@ -818,74 +835,6 @@ final class UnifiedPopupController {
                 if let outside = makeEvent(NSPoint(x: frame.maxX + 400, y: frame.midY)) {
                     self.dismissForOutsideClick(event: outside)
                     NSLog("[QA] dismiss: outside event -> visible=%d (expect 0)", self.panel.isVisible ? 1 : 0)
-                }
-            }
-        }
-        if ProcessInfo.processInfo.environment["STATS_QA_ISLAND"] == "1" && !Self.qaIslandArmed {
-            Self.qaIslandArmed = true
-            // Island one-pass probe: force an attention crossing (island
-            // appears) and sample the island frame every 0.25s. The first
-            // visible sample must already be pinned at the panel top
-            // (non-zero y) and identical to the following samples — the
-            // "appears in the wrong spot, then jumps" defect shows up as
-            // a frame change after appearance.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
-                NotificationCenter.default.post(name: .telemetrySample, object: TelemetrySample(
-                    metric: .temperature, value: 80, displayValue: "80°C", detail: "QA"
-                ))
-            }
-            // The evaluator latches this synthetic crossing under
-            // STATS_QA_ISLAND (see AttentionEvaluator), so one post keeps
-            // the island visible for the whole sampling window regardless
-            // of real reader samples. The crossing repeats a few times to
-            // win the race with real temperature samples at the boundary.
-            for crossing in [6.0, 8.0, 10.0] {
-                DispatchQueue.main.asyncAfter(deadline: .now() + crossing) {
-                    NotificationCenter.default.post(name: .telemetrySample, object: TelemetrySample(
-                        metric: .temperature, value: 94, displayValue: "94°C", detail: "QA"
-                    ))
-                }
-            }
-            for step in 0..<12 {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 6.5 + Double(step) * 0.25) { [weak self] in
-                    guard let self else { return }
-                    // a real click may have hidden the panel after the
-                    // crossing — re-show so the island state renders
-                    if step == 0, !self.isEffectivelyVisible,
-                       let button = self.statusItem?.button?.window {
-                        self.show(origin: button.frame.origin, center: button.frame.width / 2)
-                    }
-                    NSLog("[QA] island: sample visible=%d frame=%@",
-                          self.panel.islandIsHidden ? 0 : 1,
-                          NSStringFromRect(self.panel.islandFrame))
-                }
-            }
-            // Motion probe (STATS_QA_MOTION=1): with animations forced ON,
-            // expand a MIDDLE section (Disk — heroes above, rows below)
-            // while the island is visible, and sample SCREEN-SPACE rects
-            // at animation start, mid-frames, and end. Invariant: the
-            // island and the brand header keep IDENTICAL screen
-            // coordinates at every frame; only content at/below the
-            // expansion point translates (the Network row moves down).
-            if ProcessInfo.processInfo.environment["STATS_QA_MOTION"] == "1" {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 8.4) { [weak self] in
-                    guard let self else { return }
-                    if self.panel.islandIsHidden {
-                        NSLog("[QA] island-expand: skipped (island hidden)")
-                        return
-                    }
-                    self.panel.expandSection("Disk")
-                    for step in [0.0, 0.07, 0.14, 0.21, 0.28, 0.4] {
-                        DispatchQueue.main.asyncAfter(deadline: .now() + step) { [weak self] in
-                            guard let self else { return }
-                            NSLog("[QA] island-expand: island=%@ header=%@ cpu=%@ net=%@ win=%@",
-                                  NSStringFromRect(self.panel.islandScreenRect),
-                                  NSStringFromRect(self.panel.headerScreenRect),
-                                  NSStringFromRect(self.panel.cpuHeroScreenRect),
-                                  NSStringFromRect(self.panel.netRowScreenRect),
-                                  NSStringFromRect(self.panel.frame))
-                        }
-                    }
                 }
             }
         }
@@ -1064,11 +1013,9 @@ final class UnifiedPopupController {
 /// Standard system popover material with the mock's 16pt radius and
 /// 1pt panel border (white 14% dark / black 7% light).
 ///
-/// Top-origin coordinates for its chrome (island, scroll container,
-/// footer): the panel is anchored at the menu bar and grows DOWNWARD,
-/// so the band above the scroll content is expressed from the top and
-/// the island's frame is constant (see the invariant in
-/// UnifiedPopupPanel.layoutChrome).
+/// Top-origin coordinates for its chrome (scroll container, footer):
+/// the panel is anchored at the menu bar and grows DOWNWARD, so the
+/// band layout is expressed from the top.
 private final class UnifiedPanelMaterialView: NSVisualEffectView {
     override var isFlipped: Bool { true }
     
@@ -1214,13 +1161,6 @@ private final class UnifiedPopupPanel: NSPanel, NSWindowDelegate {
         self.effectView.frame = content.bounds
         self.effectView.autoresizingMask = [.width, .height]
         
-        self.effectView.addSubview(self.content.islandView)
-        // Fixed top-anchored band: the island's frame is constant and
-        // NEVER derives from the content height (see the invariant in
-        // layoutChrome). 8pt top padding, flush with the scroll content.
-        self.content.islandView.autoresizingMask = []
-        self.content.islandView.frame = NSRect(x: 12, y: 8, width: contentRect.width - 24, height: 46)
-        
         self.scrollContainer.wantsLayer = true
         self.scrollContainer.layer?.masksToBounds = true
         self.scrollContainer.frame = NSRect(x: 0, y: 0, width: contentRect.width, height: max(contentRect.height - 28, 60))
@@ -1252,8 +1192,8 @@ private final class UnifiedPopupPanel: NSPanel, NSWindowDelegate {
         let settings = NSButton()
         settings.isBordered = false
         settings.attributedTitle = NSAttributedString(string: localizedString("Settings"), attributes: [
-            .font: NSFont.systemFont(ofSize: 12, weight: .regular),
-            .foregroundColor: NSColor.tertiaryLabelColor
+            .font: NSFont.systemFont(ofSize: 12, weight: .medium),
+            .foregroundColor: NSColor.controlAccentColor
         ])
         settings.target = self
         settings.action = #selector(self.openSettings)
@@ -1282,7 +1222,7 @@ private final class UnifiedPopupPanel: NSPanel, NSWindowDelegate {
         
         chrome.addSubview(self.effectView)
         
-        // Content-layout changes (section expand, fan rebuild, island)
+        // Content-layout changes (section expand, fan rebuild)
         // must resize the window immediately — previously this hook was
         // never assigned, so an expand rendered partially for up to a
         // second until the glyph timer happened to run syncSize.
@@ -1299,14 +1239,12 @@ private final class UnifiedPopupPanel: NSPanel, NSWindowDelegate {
         fatalError("init(coder:) has not been implemented")
     }
     
-    var islandSpace: CGFloat { self.content.islandSpace }
-    
-    /// Total content size the panel needs: document + island + footer.
+    /// Total content size the panel needs: document + footer.
     var requiredContentSize: NSSize {
-        NSSize(width: Self.panelWidth, height: self.content.frame.height + self.content.islandSpace + 28)
+        NSSize(width: Self.panelWidth, height: self.content.frame.height + 28)
     }
     
-    /// Resize the window so the document, island, and footer fit without
+    /// Resize the window so the document and footer fit without
     /// scrolling; the top edge stays put.
     func syncSize() {
         let needed = self.requiredContentSize
@@ -1345,7 +1283,7 @@ private final class UnifiedPopupPanel: NSPanel, NSWindowDelegate {
         frame.origin.y = top - frame.height
         self.setFrameOrigin(frame.origin)
         // Re-pin against the FINAL height in the same pass — pinning
-        // against the pre-resize height leaves the island mis-placed for
+        // against the pre-resize height leaves the chrome mis-placed for
         // one visible frame (the "appears in the wrong spot, then jumps"
         // defect).
         self.layoutChrome()
@@ -1439,13 +1377,11 @@ private final class UnifiedPopupPanel: NSPanel, NSWindowDelegate {
     }
     
     func debugFrames() {
-        NSLog("[UnifiedPopup] window=%@ contentView=%@ effect=%@ container=%@ island=%@ islandHidden=%d",
+        NSLog("[UnifiedPopup] window=%@ contentView=%@ effect=%@ container=%@",
               NSStringFromRect(self.frame),
               NSStringFromRect(self.contentView?.frame ?? .zero),
               NSStringFromRect(self.effectView.frame),
-              NSStringFromRect(self.scrollContainer.frame),
-              NSStringFromRect(self.content.islandView.frame),
-              self.content.islandView.isHidden ? 1 : 0)
+              NSStringFromRect(self.scrollContainer.frame))
     }
     
     func refreshContent() {
@@ -1471,31 +1407,25 @@ private final class UnifiedPopupPanel: NSPanel, NSWindowDelegate {
     /// Target content height for the scroll container/footer geometry.
     /// syncSize/show set this BEFORE the frame reaches it, so chrome
     /// settles at final geometry in the same pass while the spring
-    /// animates the window frame (the island and header are constant
-    /// frames and never derive from this — see layoutChrome).
+    /// animates the window frame (the scroll container's top edge is
+    /// constant — only its height follows content; see layoutChrome).
     private var pendingContentHeight: CGFloat? = nil
     
     /// Panel geometry invariant: the window is anchored at the menu bar
     /// and grows DOWNWARD (syncSize preserves maxY in both the immediate
     /// and the spring paths). Therefore at EVERY frame of any resize —
-    /// including the expand spring — the elements above the expanding
-    /// section (island, brand header, all content before the expansion
-    /// point) keep IDENTICAL screen coordinates; only content at or
-    /// below the expansion point translates. Consequences:
-    ///  - the island lives in a FIXED top-anchored band (constant frame
-    ///    set at construction, never recomputed here);
-    ///  - the scroll container's TOP edge is constant (modulo the
-    ///    island-presence boolean) — only its HEIGHT follows content;
+    /// including the expand spring — the content above the expanding
+    /// section (brand header and everything before the expansion point)
+    /// keeps IDENTICAL screen coordinates; only content at or below the
+    /// expansion point translates. Consequences:
+    ///  - the scroll container's TOP edge is constant — only its HEIGHT
+    ///    follows content;
     ///  - the footer is bottom-anchored (moves with the bottom edge).
     /// `height` is the TARGET content height (pendingContentHeight) so
     /// the scroll/footer settle at final geometry in the same pass.
-    /// Nothing in this function positions the island or the header.
     func layoutChrome() {
-        let island = self.content.islandSpace
-        self.content.layoutIsland(width: Self.panelWidth)
         let height = self.pendingContentHeight ?? self.contentView?.frame.height ?? 0
-        let topInset: CGFloat = island > 0 ? 54 : 0
-        let containerFrame = NSRect(x: 0, y: topInset, width: Self.panelWidth, height: max(height - topInset - 28, 60))
+        let containerFrame = NSRect(x: 0, y: 0, width: Self.panelWidth, height: max(height - 28, 60))
         if self.scrollContainer.frame != containerFrame {
             UnifiedPerf.frameSet("container")
             self.scrollContainer.frame = containerFrame
@@ -1506,21 +1436,6 @@ private final class UnifiedPopupPanel: NSPanel, NSWindowDelegate {
         }
     }
     
-    /// QA accessors for the island phase probe.
-    var islandFrame: CGRect { self.content.islandView.frame }
-    var islandIsHidden: Bool { self.content.islandView.isHidden }
-    /// Per-frame screen-space rects for the motion invariant: the island
-    /// and the brand header must keep IDENTICAL screen coordinates at
-    /// every frame of an animated resize; content at/below the expanding
-    /// section translates. (convert(_:to: nil) yields WINDOW coords on
-    /// this OS version — convertToScreen gives true screen rects.)
-    private func screenRect(of view: NSView) -> CGRect {
-        self.convertToScreen(view.convert(view.bounds, to: nil))
-    }
-    var islandScreenRect: CGRect { self.screenRect(of: self.content.islandView) }
-    var headerScreenRect: CGRect { self.screenRect(of: self.content.headerForQA) }
-    var cpuHeroScreenRect: CGRect { self.screenRect(of: self.content.cpuHeroForQA) }
-    var netRowScreenRect: CGRect { self.screenRect(of: self.content.netRowForQA) }
     /// show() sizes the window itself — record its target so chrome
     /// pinning never reads a stale or animating frame.
     func setPendingContentHeight(_ value: CGFloat) { self.pendingContentHeight = value }
@@ -1572,6 +1487,9 @@ private final class UnifiedPopupPanel: NSPanel, NSWindowDelegate {
     
     /// Harness QA (STATS_POPUP_CAPTURE=1): renders the panel content into a
     /// PNG on disk, so captures work even when the console is locked.
+    /// STATS_POPUP_CAPTURE_CHROME=1 additionally renders the footer bar
+    /// next to the content capture as "<path>-footer.png" — the footer
+    /// lives in the panel chrome, outside the content view.
     func writeSelfCapture() {
         let content = self.content
         content.relayout()
@@ -1591,6 +1509,25 @@ private final class UnifiedPopupPanel: NSPanel, NSWindowDelegate {
         let path = ProcessInfo.processInfo.environment["STATS_POPUP_CAPTURE_PATH"] ?? "/tmp/unified-panel-selfcapture.png"
         try? png.write(to: URL(fileURLWithPath: path))
         NSLog("[UnifiedPopup] self capture written to %@", path)
+        if ProcessInfo.processInfo.environment["STATS_POPUP_CAPTURE_CHROME"] == "1" {
+            self.writeChromeCapture(self.footerBar, path: "\(path)-footer.png")
+        }
+    }
+    
+    /// Renders one chrome view (footer) into its own PNG. Skips hidden
+    /// views.
+    private func writeChromeCapture(_ view: NSView, path: String) {
+        let size = view.bounds.size
+        guard !view.isHidden, size.width > 0, size.height > 0,
+              let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(size.width * 2), pixelsHigh: Int(size.height * 2), bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0) else { return }
+        rep.size = size
+        self.effectiveAppearance.performAsCurrentDrawingAppearance {
+            view.display()
+            view.cacheDisplay(in: view.bounds, to: rep)
+        }
+        guard let png = rep.representation(using: NSBitmapImageRep.FileType.png, properties: [:]) else { return }
+        try? png.write(to: URL(fileURLWithPath: path))
+        NSLog("[UnifiedPopup] chrome capture written to %@", path)
     }
 }
 

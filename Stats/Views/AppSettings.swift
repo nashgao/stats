@@ -136,10 +136,6 @@ class ApplicationSettings: NSStackView {
             PreferencesRow(localizedString("Show power usage in menu bar"), component: switchView(
                 action: #selector(self.toggleMenuPower),
                 state: Store.shared.bool(key: "unified_widget_power", defaultValue: false)
-            )),
-            PreferencesRow(localizedString("Show battery level and time in menu bar"), component: switchView(
-                action: #selector(self.toggleMenuBattery),
-                state: Store.shared.bool(key: "unified_widget_battery", defaultValue: false)
             ))
         ]))
         
@@ -440,12 +436,6 @@ class ApplicationSettings: NSStackView {
     /// switch takes effect without a restart or a notification.
     @objc private func toggleMenuPower(_ sender: NSButton) {
         Store.shared.set(key: "unified_widget_power", value: sender.state == .on)
-    }
-    
-    /// Battery level + time estimate ("87% 2:15") next to the unified
-    /// menu bar item; composes with the watts segment when both are on.
-    @objc private func toggleMenuBattery(_ sender: NSButton) {
-        Store.shared.set(key: "unified_widget_battery", value: sender.state == .on)
     }
     
     // MARK: - fan control setup

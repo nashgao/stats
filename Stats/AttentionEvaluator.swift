@@ -126,12 +126,6 @@ final class AttentionEvaluator {
     /// Escalation is immediate; de-escalation and clearing require the
     /// metric's current value to drop strictly below the exit threshold
     /// for its held level. `levels` is the held state (mutated).
-    ///
-    /// QA knob (STATS_QA_ISLAND): latches a synthetic temperature
-    /// crossing for the island probe's sampling window — real reader
-    /// samples (arriving ~1s) must not clear it mid-phase, or the
-    /// assertion becomes machine-temperature-dependent.
-    static let qaIslandLatch = ProcessInfo.processInfo.environment["STATS_QA_ISLAND"] == "1"
     static func applyHysteresis(
         _ snapshot: [Attention],
         samples: [TelemetryMetric: TelemetrySample],
@@ -178,10 +172,6 @@ final class AttentionEvaluator {
         var toRemove: [TelemetryMetric] = []
         for (metric, held) in levels where !handled.contains(metric) {
             guard samples[metric] != nil else {
-                emitted.append(held)
-                continue
-            }
-            if Self.qaIslandLatch && metric == .temperature {
                 emitted.append(held)
                 continue
             }

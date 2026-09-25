@@ -57,15 +57,15 @@ enum UnifiedPerf {
 
 // MARK: - motion (env-gated)
 //
-// The motion set (panel entrance/exit, expand spring, island fade-slide,
-// chevron rotation) is disabled whenever ANY QA or capture knob is
+// The motion set (panel entrance/exit, expand spring, chevron
+// rotation) is disabled whenever ANY QA or capture knob is
 // active — captures and probes must see final state, never a
 // mid-animation frame.
 enum UnifiedMotion {
     static let enabled: Bool = {
         let env = ProcessInfo.processInfo.environment
         // QA escape hatch: force animations ON during a QA run so the
-        // motion path itself can be probed (island-expand phase).
+        // motion path itself can be probed.
         if env["STATS_QA_MOTION"] == "1" { return true }
         if env["STATS_POPUP_CAPTURE"] == "1" { return false }
         if env["STATS_POPUP_PERF"] == "1" { return false }
@@ -115,6 +115,7 @@ enum UnifiedTokens {
     static var amberSoft: NSColor { .systemOrange.withAlphaComponent(isDark ? 0.15 : 0.18) }
     static var amberBorder: NSColor { .systemOrange.withAlphaComponent(isDark ? 0.38 : 0.45) }
     static var redSoft: NSColor { .systemRed.withAlphaComponent(isDark ? 0.16 : 0.13) }
+    static var redBorder: NSColor { .systemRed.withAlphaComponent(isDark ? 0.38 : 0.45) }
     
     // mock: --shadow-card 0 1px 2px (dark .25 / light .06)
     static var cardShadowAlpha: CGFloat { isDark ? 0.25 : 0.06 }
@@ -265,22 +266,29 @@ private func unifiedSymbol(_ name: String, scale: NSImage.SymbolScale = .medium)
 }
 
 private class UnifiedCardView: NSView {
-    /// 0 quiet, 1 attention, 2 critical - tints the card background.
-    var statusLevel: Int = 0
-    
+    /// 0 quiet, 1 attention, 2 critical - tints the card background AND
+    /// border. The border is owned here alone (updateLayer); poking
+    /// layer?.borderColor from outside leaves a stale attention tint
+    /// behind after the recovery.
+    var statusLevel: Int = 0 {
+        didSet { self.updateLayer() }
+    }
+
     override var isFlipped: Bool { true }
-    
+
     override func updateLayer() {
         self.effectiveAppearance.performAsCurrentDrawingAppearance {
             switch self.statusLevel {
             case 1:
                 self.layer?.backgroundColor = UnifiedTokens.amberSoft.cgColor
+                self.layer?.borderColor = UnifiedTokens.amberBorder.cgColor
             case 2:
                 self.layer?.backgroundColor = UnifiedTokens.redSoft.cgColor
+                self.layer?.borderColor = UnifiedTokens.redBorder.cgColor
             default:
                 self.layer?.backgroundColor = UnifiedTokens.card.cgColor
+                self.layer?.borderColor = UnifiedTokens.cardBorder.cgColor
             }
-            self.layer?.borderColor = UnifiedTokens.cardBorder.cgColor
             self.layer?.shadowColor = NSColor(white: 0, alpha: UnifiedTokens.cardShadowAlpha).cgColor
         }
     }
@@ -302,7 +310,7 @@ private final class UnifiedHairline: NSView {
     }
 }
 
-/// Small rounded status chip (header verdict, island).
+/// Small rounded status chip (header verdict).
 private final class UnifiedChipView: NSView {
     let textField = unifiedLabel(font: .systemFont(ofSize: 11, weight: .medium), color: .secondaryLabelColor)
     /// 0 quiet, 1 attention, 2 critical.
@@ -443,7 +451,9 @@ private final class UnifiedHeroCard: UnifiedCardView {
         self.onToggle?()
     }
     
-    /// RAM capacity strip with soft bands at 70/90%.
+    /// RAM capacity strip with neutral bands marking 70/90% capacity.
+    /// Status hues (orange/red) are reserved for actual attention states —
+    /// static warm bands read as a warning on a healthy system.
     func installBullet() {
         let track = NSView()
         track.wantsLayer = true
@@ -451,10 +461,10 @@ private final class UnifiedHeroCard: UnifiedCardView {
         track.layer?.backgroundColor = NSColor.separatorColor.withAlphaComponent(0.15).cgColor
         let warn = NSView()
         warn.wantsLayer = true
-        warn.layer?.backgroundColor = NSColor.systemOrange.withAlphaComponent(0.25).cgColor
+        warn.layer?.backgroundColor = NSColor.separatorColor.withAlphaComponent(0.3).cgColor
         let crit = NSView()
         crit.wantsLayer = true
-        crit.layer?.backgroundColor = NSColor.systemRed.withAlphaComponent(0.25).cgColor
+        crit.layer?.backgroundColor = NSColor.separatorColor.withAlphaComponent(0.3).cgColor
         let fill = NSView()
         fill.wantsLayer = true
         fill.layer?.cornerRadius = 2
@@ -700,16 +710,6 @@ private final class UnifiedGrammarRow: NSView {
 final class UnifiedPanelContent: NSView {
     var onLayoutChange: (() -> Void)?
     
-    private let island = UnifiedCardView()
-    private let islandGlyph = unifiedLabel("▲", font: .systemFont(ofSize: 13, weight: .semibold), color: .systemOrange)
-    private let islandTitle = unifiedLabel(font: .systemFont(ofSize: 12, weight: .semibold), color: .labelColor)
-    private let islandSubtitle = unifiedLabel(font: .systemFont(ofSize: 11, weight: .regular), color: .secondaryLabelColor)
-    private let islandNote = unifiedLabel(font: .systemFont(ofSize: 10, weight: .regular), color: .systemOrange)
-    private let islandDismiss = NSButton()
-    private var islandDismissed: Bool = false
-    private var islandResolvedUntil: Date? = nil
-    private var lastAttentionKey: String = ""
-    
     private let brandIcon = NSImageView()
     private let brandLabel = unifiedLabel("Stats", font: .systemFont(ofSize: 13, weight: .semibold), color: .labelColor)
     private let verdictChip = UnifiedChipView()
@@ -727,9 +727,6 @@ final class UnifiedPanelContent: NSView {
     private var lastVerdictKey: String = ""
     private var lastContentFrame: NSRect = .zero
     private var lastFanAttention: Date? = nil
-    /// Tracks the island's applied visibility so in/out only animates on
-    /// real transitions (not per-tick relayouts).
-    private var islandShown = false
     /// Set by ANY explicit section toggle (the user is driving); the
     /// fan-attention sticky must not auto-open Sensors for the rest of
     /// the sticky window. Resets when the window expires, so the next
@@ -788,24 +785,6 @@ final class UnifiedPanelContent: NSView {
     init(width: CGFloat) {
         super.init(frame: NSRect(x: 0, y: 0, width: width, height: 600))
         self.wantsLayer = true
-        
-        self.island.wantsLayer = true
-        self.island.layer?.cornerRadius = UnifiedTokens.cardRadius
-        self.island.layer?.borderWidth = 1
-        self.island.addSubview(self.islandGlyph)
-        self.island.addSubview(self.islandTitle)
-        self.island.addSubview(self.islandSubtitle)
-        self.island.addSubview(self.islandNote)
-        self.islandDismiss.isBordered = false
-        self.islandDismiss.title = "×"
-        self.islandDismiss.font = NSFont.systemFont(ofSize: 13, weight: .medium)
-        self.islandDismiss.contentTintColor = .secondaryLabelColor
-        self.islandDismiss.target = self
-        self.islandDismiss.action = #selector(self.dismissIsland)
-        self.island.addSubview(self.islandDismiss)
-        self.island.isHidden = true
-        self.islandDismiss.wantsLayer = true
-        self.islandDismiss.layer?.cornerRadius = 10
         
         self.brandIcon.image = unifiedSymbol("chart.bar.fill", scale: .small)
         self.brandIcon.contentTintColor = .controlAccentColor
@@ -967,7 +946,6 @@ final class UnifiedPanelContent: NSView {
         var y: CGFloat = margin
         
         let attentions = AttentionEvaluator.shared.attentions
-        self.updateIsland(attentions: attentions, width: w - margin * 2)
         
         self.cpuHero.setStatus(level: Self.statusLevel(of: "CPU", in: attentions))
         self.gpuHero.setStatus(level: Self.statusLevel(of: "GPU", in: attentions))
@@ -1039,8 +1017,8 @@ final class UnifiedPanelContent: NSView {
         if newFrame != self.frame {
             if self.frame.height > 0, abs(newFrame.height - self.frame.height) > 1 {
                 // name the sections driving a real height change — the
-                // layout-jump forensics line (island flap, fan rebuild,
-                // expand): which section grew or shrank
+                // layout-jump forensics line (fan rebuild, expand): which
+                // section grew or shrank
                 let sections: [(String, CGFloat)] = [
                     ("CPU", self.cpuHero.totalHeight), ("GPU", self.gpuHero.totalHeight),
                     ("RAM", self.ramHero.totalHeight), ("Disk", self.diskRow.totalHeight),
@@ -1048,14 +1026,14 @@ final class UnifiedPanelContent: NSView {
                     ("Thermal", self.thermalRow.totalHeight), ("Battery", self.batteryRow.totalHeight)
                 ]
                 let dump = sections.map({ "\($0.0)=\($0.1)" }).joined(separator: " ")
-                NSLog("[UnifiedPerf] content height changed %.0f -> %.0f island=%d %@",
-                      self.frame.height, newFrame.height, self.island.isHidden ? 0 : 1, dump)
+                NSLog("[UnifiedPerf] content height changed %.0f -> %.0f %@",
+                      self.frame.height, newFrame.height, dump)
             }
             UnifiedPerf.frameSet("content")
             self.frame = newFrame
         }
         if wasAtTop {
-            // Inserting/removing the island grows the document and AppKit
+            // A document resize grows/shrinks the content and AppKit
             // shifts the bounds to keep content stable; re-assert the top
             // asynchronously so that adjustment cannot override it.
             DispatchQueue.main.async {
@@ -1093,127 +1071,6 @@ final class UnifiedPanelContent: NSView {
         self.onLayoutChange?()
     }
     
-    /// Pinned-above-document space the island needs (0 when hidden).
-    var islandSpace: CGFloat {
-        self.island.isHidden ? 0 : 54
-    }
-    
-    /// The island view is hosted by the panel above the scroll view.
-    var islandView: NSView { self.island }
-    
-    func layoutIsland(width: CGFloat) {
-        let margin = UnifiedTokens.contentMargin
-        // Fixed top-anchored band (see the invariant in the panel's
-        // layoutChrome): the island's own frame is constant — 8pt below
-        // the panel top — and never derives from the content height.
-        self.island.frame = NSRect(x: margin, y: 8, width: width - margin * 2, height: 46)
-        self.islandGlyph.frame = NSRect(x: 12, y: 14, width: 16, height: 16)
-        self.islandTitle.frame = NSRect(x: 34, y: 8, width: self.island.frame.width - 150, height: 15)
-        self.islandSubtitle.frame = NSRect(x: 34, y: 25, width: self.island.frame.width - 150, height: 14)
-        self.islandNote.frame = NSRect(x: self.island.frame.width - 96, y: 16, width: 56, height: 13)
-        self.islandNote.alignment = .right
-        self.islandDismiss.frame = NSRect(x: self.island.frame.width - 34, y: 12, width: 20, height: 20)
-    }
-    
-    private func updateIsland(attentions: [Attention], width: CGFloat) {
-        // Key on kind/module/level only — never on the label text, which
-        // carries live values ("TCMb 94°C") and would re-arm the island
-        // on every sample while a metric hovers near its threshold.
-        let key = attentions.map({ "\($0.kind.rawValue)-\($0.module)-\($0.level.rawValue)" }).sorted().joined(separator: "|")
-        let targetVisible: Bool
-        if attentions.isEmpty {
-            if !self.lastAttentionKey.isEmpty {
-                // attentions just cleared: brief "back to nominal" note
-                self.islandResolvedUntil = Date().addingTimeInterval(6)
-            }
-            self.lastAttentionKey = ""
-            if let until = self.islandResolvedUntil, until > Date() {
-                self.island.statusLevel = 0
-                self.islandGlyph.stringValue = "✓"
-                self.islandGlyph.textColor = UnifiedTokens.ok
-                self.islandTitle.stringValue = localizedString("Back to nominal")
-                self.islandTitle.textColor = .labelColor
-                self.islandSubtitle.stringValue = ""
-                self.islandNote.stringValue = ""
-                self.islandDismiss.isHidden = true
-                targetVisible = true
-            } else {
-                self.islandResolvedUntil = nil
-                targetVisible = false
-            }
-        } else {
-            self.islandResolvedUntil = nil
-            if key != self.lastAttentionKey {
-                // a new attention set re-arms a previously dismissed island
-                self.islandDismissed = false
-                self.lastAttentionKey = key
-            }
-            let level = attentions.map({ $0.level.rawValue }).max() ?? 1
-            if self.island.statusLevel != level {
-                self.island.statusLevel = level
-                self.island.layer?.borderColor = UnifiedTokens.amberBorder.cgColor
-            }
-            self.islandGlyph.stringValue = "▲"
-            self.islandGlyph.textColor = level == 2 ? UnifiedTokens.redInk : UnifiedTokens.amberInk
-            self.islandTitle.stringValue = attentions.first?.label ?? ""
-            self.islandTitle.textColor = level == 2 ? UnifiedTokens.redInk : UnifiedTokens.amberInk
-            self.islandSubtitle.stringValue = Array(attentions.dropFirst()).map({ $0.label }).joined(separator: " · ")
-            self.islandNote.stringValue = localizedString("auto-resolves")
-            self.islandNote.textColor = UnifiedTokens.amberInk
-            self.islandDismiss.isHidden = false
-            self.islandDismiss.contentTintColor = .secondaryLabelColor
-            targetVisible = !self.islandDismissed
-        }
-        if targetVisible != self.islandShown {
-            self.islandShown = targetVisible
-            self.applyIslandVisibility(targetVisible)
-        }
-    }
-    
-    /// Island in/out: fade 0→1 + slide 8px down, ~160ms, view-level
-    /// alpha+transform only. Instant when motion is gated.
-    private func applyIslandVisibility(_ show: Bool) {
-        let island = self.island
-        island.wantsLayer = true
-        if UnifiedMotion.enabled {
-            if show {
-                island.layer?.transform = CATransform3DMakeTranslation(0, -8, 0)
-                island.alphaValue = 0
-                island.isHidden = false
-                NSAnimationContext.runAnimationGroup({ context in
-                    context.duration = 0.16
-                    context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-                    island.animator().alphaValue = 1
-                })
-                let animation = CABasicAnimation(keyPath: "transform")
-                animation.fromValue = CATransform3DMakeTranslation(0, -8, 0)
-                animation.toValue = CATransform3DIdentity
-                animation.duration = 0.16
-                animation.timingFunction = CAMediaTimingFunction(name: .easeOut)
-                island.layer?.add(animation, forKey: "islandIn")
-                island.layer?.transform = CATransform3DIdentity
-            } else {
-                NSAnimationContext.runAnimationGroup({ context in
-                    context.duration = 0.16
-                    context.timingFunction = CAMediaTimingFunction(name: .easeIn)
-                    island.animator().alphaValue = 0
-                }, completionHandler: {
-                    island.isHidden = true
-                    island.alphaValue = 1
-                })
-            }
-        } else {
-            island.isHidden = !show
-            island.alphaValue = 1
-            island.layer?.transform = CATransform3DIdentity
-        }
-    }
-    
-    @objc private func dismissIsland() {
-        self.islandDismissed = true
-        self.relayout()
-    }
-    
     private static func statusLevel(of module: String, in attentions: [Attention]) -> Int {
         attentions.filter({ $0.module == module }).map({ $0.level.rawValue }).max() ?? 0
     }
@@ -1237,10 +1094,6 @@ final class UnifiedPanelContent: NSView {
     
     /// QA accessor: whether any section is expanded (collapse assertion).
     var expandedSectionForQA: String? { self.expandedSection }
-    /// QA accessors for the per-frame screen-space motion invariant.
-    var headerForQA: NSView { self.brandLabel }
-    var cpuHeroForQA: NSView { self.cpuHero }
-    var netRowForQA: NSView { self.netRow }
     /// QA hook: "name=1" pairs, 1 = collapsed (restore probe).
     var collapsedStatesForQA: String {
         let rows: [(String, Bool)] = [
@@ -1495,7 +1348,11 @@ final class UnifiedPanelContent: NSView {
             }
             self.rebuildFans()
         case let battery as Battery_Usage:
-            self.batteryRow.valueField.stringValue = "\(Int((abs(battery.level) * 100).rounded()))%"
+            let minutes = battery.isBatteryPowered ? battery.timeToEmpty : (battery.isCharging ? battery.timeToCharge : 0)
+            self.batteryRow.valueField.stringValue = UnifiedInfoFormatters.batteryRowValue(
+                level: Int((abs(battery.level) * 100).rounded()),
+                minutes: minutes
+            )
             self.batteryRow.spark.add(abs(battery.level) * 100)
             self.batteryCyclesField?.stringValue = "\(battery.cycles)"
             self.batteryHealthField?.stringValue = "\(UnifiedInfoFormatters.batteryPercent(battery.maxCapacity, of: battery.designedCapacity))% of design"
