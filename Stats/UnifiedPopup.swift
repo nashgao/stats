@@ -151,6 +151,9 @@ final class UnifiedPopupController {
                 object: nil
             )
         }
+        if ProcessInfo.processInfo.environment["STATS_QA_DIAGNOSTICS"] == "1" {
+            NSLog("[QA] diagnostics:\n%@", PowerDiagnostics.snapshot())
+        }
     }
     
     /// QA (STATS_QA_SENSOR_TICK=1): log every Sensors_List sample that
@@ -422,6 +425,9 @@ final class UnifiedPopupController {
         }
         
         let next = watts ?? ""
+        if !next.isEmpty {
+            PowerDiagnostics.record(watts: next)
+        }
         if next.isEmpty {
             button.attributedTitle = NSAttributedString()
             if item.length != NSStatusItem.squareLength {

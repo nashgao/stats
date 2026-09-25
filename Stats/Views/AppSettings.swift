@@ -13,6 +13,8 @@ import Cocoa
 import Kit
 
 class ApplicationSettings: NSStackView {
+    private var diagnosticsButton: NSButton?
+    
     private var updateIntervalValue: String {
         Store.shared.string(key: "update-interval", defaultValue: AppUpdateInterval.silent.rawValue)
     }
@@ -308,14 +310,14 @@ class ApplicationSettings: NSStackView {
     
     private func informationView() -> NSView {
         let view = NSStackView()
-        view.heightAnchor.constraint(equalToConstant: 220).isActive = true
+        view.heightAnchor.constraint(equalToConstant: 250).isActive = true
         view.orientation = .vertical
         view.distribution = .fill
         view.alignment = .centerY
         view.spacing = 0
         
         let container: NSGridView = NSGridView()
-        container.heightAnchor.constraint(equalToConstant: 180).isActive = true
+        container.heightAnchor.constraint(equalToConstant: 210).isActive = true
         container.rowSpacing = 0
         container.yPlacement = .center
         container.xPlacement = .center
@@ -345,14 +347,24 @@ class ApplicationSettings: NSStackView {
         updateButton.action = #selector(self.updateAction)
         updateButton.isEnabled = !isCustomBuild
         
+        let diagnosticsButton: NSButton = NSButton()
+        diagnosticsButton.title = localizedString("Copy diagnostics")
+        diagnosticsButton.bezelStyle = .rounded
+        diagnosticsButton.target = self
+        diagnosticsButton.action = #selector(self.copyDiagnosticsAction)
+        diagnosticsButton.toolTip = "Power state, raw SMC power keys, and recent menu bar watts samples — for bug reports."
+        self.diagnosticsButton = diagnosticsButton
+        
         container.addRow(with: [iconView])
         container.addRow(with: [statsName])
         container.addRow(with: [statsVersion])
         container.addRow(with: [updateButton])
+        container.addRow(with: [diagnosticsButton])
         
         container.row(at: 1).height = 22
         container.row(at: 2).height = 20
         container.row(at: 3).height = 30
+        container.row(at: 4).height = 30
         
         view.addArrangedSubview(container)
         
@@ -360,6 +372,18 @@ class ApplicationSettings: NSStackView {
     }
     
     // MARK: - actions
+    
+    @objc private func copyDiagnosticsAction() {
+        let report = PowerDiagnostics.snapshot()
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(report, forType: .string)
+        if let button = self.diagnosticsButton, button.title != localizedString("Copied") {
+            button.title = localizedString("Copied")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak button] in
+                button?.title = localizedString("Copy diagnostics")
+            }
+        }
+    }
     
     @objc private func updateAction() {
         guard !isCustomBuild else { return }

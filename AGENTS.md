@@ -135,6 +135,10 @@ Rules:
   battery-only. PDTR pins at the adapter delivery limit while
   charging (charge current absorbs every load change — unfixable from
   PDTR arithmetic).
+- Legacy per-module popups are quarantined (IMP-3): with unified
+  routing on, every widget click — Option included — opens the unified
+  panel; the classic popups remain in-tree but unmaintained and outside
+  the liveness audit. Full deletion is still an option if chosen.
 
 ## QA knobs (all env-var, launch-only)
 
@@ -155,4 +159,5 @@ Rules:
 | `STATS_QA_EXPAND=<module\|All>` | expand a section (or all of CPU/GPU/RAM/Sensors/Battery in sequence) and sample panel heights across +1.2s (`[QA] expand:`/`expand-seq:`) — two-phase expand detector |
 | `STATS_QA_MENU_WATTS=1` | force the unified menu bar watts readout on and log the composed title every tick (`[QA] menu watts:`, raw keys in `[QA] watts raw:`) — smoke test asserts format + 1s cadence + step-response liveness under a `yes` load, in both the natural power state and the forced charging branch. Battery level/time live in the panel's Battery row, not the menu bar |
 | `STATS_QA_WATTS_CHARGING=1` | with `STATS_QA_MENU_WATTS=1`, force `chargingOnAC()` true so the si10 charging-branch source is exercised without a real charge session |
+| `STATS_QA_DIAGNOSTICS=1` | log the `PowerDiagnostics` snapshot at launch (`[QA] diagnostics:`) — the same bundle Settings → "Copy diagnostics" puts on the pasteboard; smoke asserts its fields |
 | `STATS_QA_SENSOR_TICK=1` | log reader/repeater lifecycle and every Sensors_List sample delivered to the panel (`[QA] reader …`, `[QA] repeater(…)`, `[QA] sensor sample:`) — used to catch reader idling (frozen sensors card) |

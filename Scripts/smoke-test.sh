@@ -290,6 +290,11 @@ watts_liveness_pass() {
   fi
   pass "menu watts samples ($label, ${samples} at 1s cadence, format ok)"
 
+  grep -q "\[QA\] diagnostics:" "$QA_LOG" \
+    && grep -q "chargingOnAC:" "$QA_LOG" && grep -q "SMC PDTR:" "$QA_LOG" \
+    && pass "diagnostics snapshot complete ($label)" \
+    || fail "diagnostics snapshot missing/incomplete ($label)"
+
   step_load 4 8
   WATTS_SPREAD=$(series_spread "\[QA\] menu watts: -?[0-9]+(\.[0-9])?W" "s/.*\[QA\] menu watts: (-?[0-9]+(\.[0-9]+)?)W\$/\1/")
   assert_spread "menu watts ($label)" 4.0 "$WATTS_SPREAD"
@@ -298,13 +303,13 @@ watts_liveness_pass() {
 for pid in $(pgrep -x Stats); do kill "$pid" 2>/dev/null; done
 sleep 1
 rm -f "$QA_LOG" "$CAPTURE"
-env STATS_QA_MENU_WATTS=1 ./Stats >"$QA_LOG" 2>&1 &
+env STATS_QA_MENU_WATTS=1 STATS_QA_DIAGNOSTICS=1 ./Stats >"$QA_LOG" 2>&1 &
 QA_PID=$!
 watts_liveness_pass "natural state"
 quit_phase "phase 5a (menu watts, natural state)"
 
 rm -f "$QA_LOG"
-env STATS_QA_MENU_WATTS=1 STATS_QA_WATTS_CHARGING=1 ./Stats >"$QA_LOG" 2>&1 &
+env STATS_QA_MENU_WATTS=1 STATS_QA_DIAGNOSTICS=1 STATS_QA_WATTS_CHARGING=1 ./Stats >"$QA_LOG" 2>&1 &
 QA_PID=$!
 watts_liveness_pass "forced charging branch (si10)"
 quit_phase "phase 5 (menu watts)"

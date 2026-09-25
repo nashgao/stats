@@ -94,3 +94,45 @@ struct MenuPowerReadout {
         return batteryPower.map(abs)
     }
 }
+
+/// Field-report bundle for "the watts number looks wrong" reports:
+/// power state, fresh SMC key reads, and the recent composed readout —
+/// the data needed to classify stuck / pinned / garbage without a
+/// debugging session. UnifiedPopupController records every distinct
+/// composed value; Settings' "Copy diagnostics" button puts this
+/// snapshot on the pasteboard.
+enum PowerDiagnostics {
+    static private(set) var recentSamples: [(date: Date, watts: String)] = []
+
+    static func record(watts: String) {
+        if let last = self.recentSamples.last, last.watts == watts { return }
+        self.recentSamples.append((Date(), watts))
+        if self.recentSamples.count > 12 {
+            self.recentSamples.removeFirst(self.recentSamples.count - 12)
+        }
+    }
+
+    static func snapshot() -> String {
+        var lines: [String] = []
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
+        lines.append("Stats \(version) (build \(build))")
+        let probe = LiveMenuPowerProbe()
+        lines.append("onBattery: \(probe.onBattery())")
+        lines.append("chargingOnAC: \(probe.chargingOnAC())")
+        for key in ["PPBR", "PDTR", "si10"] {
+            lines.append("SMC \(key): \(probe.smc(key).map { String($0) } ?? "unreadable")")
+        }
+        let time = DateFormatter()
+        time.dateFormat = "HH:mm:ss"
+        if self.recentSamples.isEmpty {
+            lines.append("menu watts samples: none (readout off, or no ticks since launch)")
+        } else {
+            lines.append("menu watts samples (newest last):")
+            for sample in self.recentSamples {
+                lines.append("  \(time.string(from: sample.date)) \(sample.watts)")
+            }
+        }
+        return lines.joined(separator: "\n")
+    }
+}
