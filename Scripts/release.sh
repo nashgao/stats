@@ -72,16 +72,19 @@ ditto "$BUILT_APP" "$APP"
 
 step "Verify single Spotlight entry"
 # mdfind lags a few seconds behind a fresh ditto — retry before failing.
+# Records for paths that no longer exist (e.g. a deleted Xcode archive)
+# can linger in the index for a long while; they are not duplicate apps,
+# so count only entries that still exist on disk.
 SPOTLIGHT=""
 COUNT=0
 for attempt in 1 2 3 4 5 6; do
-  SPOTLIGHT=$(mdfind "kMDItemCFBundleIdentifier == 'eu.exelban.Stats'" 2>/dev/null)
+  SPOTLIGHT=$(mdfind "kMDItemCFBundleIdentifier == 'eu.exelban.Stats'" 2>/dev/null | while read -r p; do [ -e "$p" ] && echo "$p"; done)
   COUNT=$(echo "$SPOTLIGHT" | sed '/^$/d' | wc -l | tr -d ' ')
   if [ "$COUNT" = "1" ]; then break; fi
   sleep 3
 done
 echo "$SPOTLIGHT"
-[ "$COUNT" = "1" ] || { echo "FAIL: expected 1 Spotlight entry, got $COUNT"; exit 1; }
+[ "$COUNT" = "1" ] || { echo "FAIL: expected 1 existing Spotlight entry, got $COUNT"; exit 1; }
 echo "$SPOTLIGHT" | grep -q "^/Applications/Stats.app$" || { echo "FAIL: Spotlight entry is not /Applications/Stats.app"; exit 1; }
 
 step "Relaunch"
