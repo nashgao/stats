@@ -30,9 +30,15 @@ public enum UnifiedPopupRouting {
         return Store.shared.bool(key: self.showWidgetsKey, defaultValue: false)
     }
     
+    /// Quarantine (IMP-3): while unified routing is on, EVERY widget
+    /// click — with or without Option — goes to the unified panel. The
+    /// classic per-module popups stay in-tree but are unmaintained: their
+    /// live values are not covered by the liveness audit (the battery
+    /// rows were fixed at the reader level only because they shared it).
+    /// Turning `unified_widget` off still restores the legacy popups
+    /// wholesale for anyone running the pre-unified UI.
     public static var widgetClickRoutesToUnified: Bool {
-        guard self.isEnabled else { return false }
-        return NSApp.currentEvent?.modifierFlags.contains(.option) != true
+        self.isEnabled
     }
 }
 
