@@ -198,6 +198,8 @@
 		2C48B5B4A89D5187AFEE5B9A /* UnifiedPanelContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EEFAD302D6B32D46D18F3F1 /* UnifiedPanelContent.swift */; };
 		6E7F8091A2B3C4D5E6F70819 /* SensorsAllPopover.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D6E7F8091A2B3C4D5E6F708 /* SensorsAllPopover.swift */; };
 		6bd3da4cf63e691a4a38e3fc /* UnifiedDesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23e413e70a6842ffbedb2df7 /* UnifiedDesignSystem.swift */; };
+		902f15ae6a1785dd0e562d0d /* UnifiedPanelSamples.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75bc94602a2b2a667a610778 /* UnifiedPanelSamples.swift */; };
+		73e59b2871b75b03fa67bda2 /* UnifiedPanelBuilders.swift in Sources */ = {isa = PBXBuildFile; fileRef = d4d40a965bee04c7ee01e1f0 /* UnifiedPanelBuilders.swift */; };
 		9AAC5E41280ACC210043D892 /* RAM.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AAC5E40280ACC210043D892 /* RAM.swift */; };
 		9AB14B77248CEF3500DC6731 /* config.plist in Resources */ = {isa = PBXBuildFile; fileRef = 9AF9EE192464A7B3005D2270 /* config.plist */; };
 		9AB14B78248CEF3B00DC6731 /* config.plist in Resources */ = {isa = PBXBuildFile; fileRef = 9AF9EE12246492E8005D2270 /* config.plist */; };
@@ -756,6 +758,8 @@
 		4EEFAD302D6B32D46D18F3F1 /* UnifiedPanelContent.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = UnifiedPanelContent.swift; sourceTree = "<group>"; };
 		5D6E7F8091A2B3C4D5E6F708 /* SensorsAllPopover.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SensorsAllPopover.swift; sourceTree = "<group>"; };
 		23e413e70a6842ffbedb2df7 /* UnifiedDesignSystem.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = UnifiedDesignSystem.swift; sourceTree = "<group>"; };
+		75bc94602a2b2a667a610778 /* UnifiedPanelSamples.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = UnifiedPanelSamples.swift; sourceTree = "<group>"; };
+		d4d40a965bee04c7ee01e1f0 /* UnifiedPanelBuilders.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = UnifiedPanelBuilders.swift; sourceTree = "<group>"; };
 		9AAC5E2A280ACC120043D892 /* Tests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = Tests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		9AAC5E2E280ACC120043D892 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		9AAC5E40280ACC210043D892 /* RAM.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RAM.swift; sourceTree = "<group>"; };
@@ -1109,6 +1113,8 @@
 				4EEFAD302D6B32D46D18F3F1 /* UnifiedPanelContent.swift */,
 				5D6E7F8091A2B3C4D5E6F708 /* SensorsAllPopover.swift */,
 				23e413e70a6842ffbedb2df7 /* UnifiedDesignSystem.swift */,
+				75bc94602a2b2a667a610778 /* UnifiedPanelSamples.swift */,
+				d4d40a965bee04c7ee01e1f0 /* UnifiedPanelBuilders.swift */,
 				9AD33AC524BCD3EE007E8820 /* helpers.swift */,
 			);
 			path = Stats;
@@ -2248,6 +2254,8 @@
 				2C48B5B4A89D5187AFEE5B9A /* UnifiedPanelContent.swift in Sources */,
 				6E7F8091A2B3C4D5E6F70819 /* SensorsAllPopover.swift in Sources */,
 				6bd3da4cf63e691a4a38e3fc /* UnifiedDesignSystem.swift in Sources */,
+				902f15ae6a1785dd0e562d0d /* UnifiedPanelSamples.swift in Sources */,
+				73e59b2871b75b03fa67bda2 /* UnifiedPanelBuilders.swift in Sources */,
 				9A9EA9452476D34500E3B883 /* Update.swift in Sources */,
 				9A045EB72594F8D100ED58F2 /* Dashboard.swift in Sources */,
 				9A81C74E24499C7000825D92 /* Settings.swift in Sources */,

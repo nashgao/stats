@@ -29,14 +29,14 @@ final class UnifiedPanelContent: NSView {
     private let brandLabel = unifiedLabel("Stats", font: .systemFont(ofSize: 13, weight: .semibold), color: .labelColor)
     private let verdictChip = UnifiedChipView()
     
-    private let cpuHero = UnifiedHeroCard(module: "CPU", icon: "cpu", detailHeight: 178)
-    private let gpuHero = UnifiedHeroCard(module: "GPU", icon: "display", detailHeight: 36)
-    private let ramHero = UnifiedHeroCard(module: "RAM", icon: "memorychip", detailHeight: 160)
-    private let diskRow = UnifiedGrammarRow(module: "Disk", label: localizedString("Disk"), icon: "internaldrive", expandable: true)
-    private let netRow = UnifiedGrammarRow(module: "Network", label: localizedString("Network"), icon: "arrow.up.arrow.down", expandable: true)
-    private let sensorsRow = UnifiedGrammarRow(module: "Sensors", label: localizedString("Sensors"), icon: "thermometer.medium", expandable: true)
-    private let thermalRow = UnifiedGrammarRow(module: "Thermal", label: localizedString("Thermal"), icon: "thermometer.low", expandable: true)
-    private let batteryRow = UnifiedGrammarRow(module: "Battery", label: localizedString("Battery"), icon: "battery.75percent", expandable: true)
+    let cpuHero = UnifiedHeroCard(module: "CPU", icon: "cpu", detailHeight: 178)
+    let gpuHero = UnifiedHeroCard(module: "GPU", icon: "display", detailHeight: 36)
+    let ramHero = UnifiedHeroCard(module: "RAM", icon: "memorychip", detailHeight: 160)
+    let diskRow = UnifiedGrammarRow(module: "Disk", label: localizedString("Disk"), icon: "internaldrive", expandable: true)
+    let netRow = UnifiedGrammarRow(module: "Network", label: localizedString("Network"), icon: "arrow.up.arrow.down", expandable: true)
+    let sensorsRow = UnifiedGrammarRow(module: "Sensors", label: localizedString("Sensors"), icon: "thermometer.medium", expandable: true)
+    let thermalRow = UnifiedGrammarRow(module: "Thermal", label: localizedString("Thermal"), icon: "thermometer.low", expandable: true)
+    let batteryRow = UnifiedGrammarRow(module: "Battery", label: localizedString("Battery"), icon: "battery.75percent", expandable: true)
     
     private var expandedSection: String? = nil
     private var lastVerdictKey: String = ""
@@ -49,51 +49,51 @@ final class UnifiedPanelContent: NSView {
     private var sensorsStickySuppressed = false
     
     // latest samples
-    private var cpuLoad: CPU_Load?
-    private var cpuFreqValue: Double?
-    private var cpuTempValue: Double?
-    private var cpuAvg: CPU_AverageLoad?
-    private var cpuTop: [TopProcess] = []
-    private var gpuInfo: GPU_Info?
-    private var ramUsage: RAM_Usage?
-    private var ramTop: [TopProcess] = []
-    private var sensorsList: Sensors_List?
+    var cpuLoad: CPU_Load?
+    var cpuFreqValue: Double?
+    var cpuTempValue: Double?
+    var cpuAvg: CPU_AverageLoad?
+    var cpuTop: [TopProcess] = []
+    var gpuInfo: GPU_Info?
+    var ramUsage: RAM_Usage?
+    var ramTop: [TopProcess] = []
+    var sensorsList: Sensors_List?
     
     private var cpuDetail: NSView!
     private var gpuDetail: NSView!
     private var ramDetail: NSView!
-    private var sensorsFansContainer: NSView!
-    private var batteryDetailContainer: UnifiedFlippedView!
-    private var batteryCyclesField: NSTextField?
-    private var batteryHealthField: NSTextField?
-    private var batteryFullChargeField: NSTextField?
-    private var batteryConditionField: NSTextField?
-    private var batteryPowerField: NSTextField?
-    private var batteryTimeField: NSTextField?
+    var sensorsFansContainer: NSView!
+    var batteryDetailContainer: UnifiedFlippedView!
+    var batteryCyclesField: NSTextField?
+    var batteryHealthField: NSTextField?
+    var batteryFullChargeField: NSTextField?
+    var batteryConditionField: NSTextField?
+    var batteryPowerField: NSTextField?
+    var batteryTimeField: NSTextField?
     // expandable grammar-row details (Disk / Network / Thermal)
-    private var diskDetail: UnifiedDetailRows!
-    private var diskReadField: NSTextField?
-    private var diskWriteField: NSTextField?
-    private var diskVolumeFields: [NSTextField] = []
-    private var netDetail: UnifiedDetailRows!
-    private var netDownField: NSTextField?
-    private var netUpField: NSTextField?
-    private var netTotalInField: NSTextField?
-    private var netTotalOutField: NSTextField?
-    private var netInterfaceField: NSTextField?
-    private var netAddressField: NSTextField?
-    private var thermalDetail: UnifiedDetailRows!
-    private var thermalStateField: NSTextField?
-    private var thermalImpactField: NSTextField?
+    var diskDetail: UnifiedDetailRows!
+    var diskReadField: NSTextField?
+    var diskWriteField: NSTextField?
+    var diskVolumeFields: [NSTextField] = []
+    var netDetail: UnifiedDetailRows!
+    var netDownField: NSTextField?
+    var netUpField: NSTextField?
+    var netTotalInField: NSTextField?
+    var netTotalOutField: NSTextField?
+    var netInterfaceField: NSTextField?
+    var netAddressField: NSTextField?
+    var thermalDetail: UnifiedDetailRows!
+    var thermalStateField: NSTextField?
+    var thermalImpactField: NSTextField?
     // CPU/RAM hero detail extras
-    private var ramDetailRows: UnifiedDetailRows!
-    private var ramWiredField: NSTextField?
-    private var ramAppField: NSTextField?
-    private var ramCompressedField: NSTextField?
-    private var cpuCoresRowE: UnifiedCoreClusterRowView?
-    private var cpuCoresRowP: UnifiedCoreClusterRowView?
+    var ramDetailRows: UnifiedDetailRows!
+    var ramWiredField: NSTextField?
+    var ramAppField: NSTextField?
+    var ramCompressedField: NSTextField?
+    var cpuCoresRowE: UnifiedCoreClusterRowView?
+    var cpuCoresRowP: UnifiedCoreClusterRowView?
     private var cpuCoresRows: UnifiedDetailRows?
-    private var corePartition: (efficiency: [Int], performance: [Int])?
+    var corePartition: (efficiency: [Int], performance: [Int])?
     
     override var isFlipped: Bool { true }
     
@@ -460,499 +460,23 @@ final class UnifiedPanelContent: NSView {
         return value
     }
     
-    // MARK: - detail builders
-    
-    private func buildCPUDetail() -> NSView {
-        let view = UnifiedFlippedView()
-        let container = UnifiedFlippedView()
-        container.frame = NSRect(x: 0, y: 0, width: 324, height: 178)
-        let system = UnifiedMiniMetric(label: localizedString("System"), value: "–", fraction: 0)
-        let user = UnifiedMiniMetric(label: localizedString("User"), value: "–", fraction: 0)
-        let idle = UnifiedMiniMetric(label: localizedString("Idle"), value: "–", fraction: 0, color: .tertiaryLabelColor)
-        container.addSubview(system)
-        container.addSubview(user)
-        container.addSubview(idle)
-        system.frame = NSRect(x: 0, y: 0, width: 100, height: 32)
-        user.frame = NSRect(x: 112, y: 0, width: 100, height: 32)
-        idle.frame = NSRect(x: 224, y: 0, width: 100, height: 32)
-        system.identifier = NSUserInterfaceItemIdentifier("cpu.system")
-        user.identifier = NSUserInterfaceItemIdentifier("cpu.user")
-        idle.identifier = NSUserInterfaceItemIdentifier("cpu.idle")
-        view.addSubview(container)
-        container.frame = NSRect(x: 0, y: 0, width: 324, height: 32)
-        let tops = UnifiedTopProcesses(title: localizedString("Top processes"),
-                                       rows: [("", 0, ""), ("", 0, ""), ("", 0, ""), ("", 0, "")])
-        tops.identifier = NSUserInterfaceItemIdentifier("cpu.tops")
-        view.addSubview(tops)
-        tops.frame = NSRect(x: 0, y: 40, width: 324, height: 132)
-        return view
-    }
-    
-    private func buildGPUDetail() -> NSView {
-        let view = UnifiedFlippedView()
-        let render = UnifiedMiniMetric(label: localizedString("Render"), value: "–", fraction: 0)
-        let tiler = UnifiedMiniMetric(label: localizedString("Tiler"), value: "–", fraction: 0)
-        let fps = UnifiedMiniMetric(label: localizedString("Frame rate"), value: "–", fraction: 0)
-        render.identifier = NSUserInterfaceItemIdentifier("gpu.render")
-        tiler.identifier = NSUserInterfaceItemIdentifier("gpu.tiler")
-        fps.identifier = NSUserInterfaceItemIdentifier("gpu.fps")
-        view.addSubview(render)
-        view.addSubview(tiler)
-        view.addSubview(fps)
-        render.frame = NSRect(x: 0, y: 0, width: 100, height: 32)
-        tiler.frame = NSRect(x: 112, y: 0, width: 100, height: 32)
-        fps.frame = NSRect(x: 224, y: 0, width: 100, height: 32)
-        view.frame = NSRect(x: 0, y: 0, width: 324, height: 32)
-        return view
-    }
-    
-    private func buildRAMDetail() -> NSView {
-        let view = UnifiedFlippedView()
-        let app = UnifiedMiniMetric(label: localizedString("App"), value: "–", fraction: 0)
-        let wired = UnifiedMiniMetric(label: localizedString("Wired"), value: "–", fraction: 0)
-        let compressed = UnifiedMiniMetric(label: localizedString("Compressed"), value: "–", fraction: 0)
-        app.identifier = NSUserInterfaceItemIdentifier("ram.app")
-        wired.identifier = NSUserInterfaceItemIdentifier("ram.wired")
-        compressed.identifier = NSUserInterfaceItemIdentifier("ram.compressed")
-        view.addSubview(app)
-        view.addSubview(wired)
-        view.addSubview(compressed)
-        app.frame = NSRect(x: 0, y: 0, width: 100, height: 32)
-        wired.frame = NSRect(x: 112, y: 0, width: 100, height: 32)
-        compressed.frame = NSRect(x: 224, y: 0, width: 100, height: 32)
-        let tops = UnifiedTopProcesses(title: localizedString("Top processes"),
-                                       rows: [("", 0, ""), ("", 0, "")])
-        tops.identifier = NSUserInterfaceItemIdentifier("ram.tops")
-        view.addSubview(tops)
-        tops.frame = NSRect(x: 0, y: 40, width: 324, height: 60)
-        view.frame = NSRect(x: 0, y: 0, width: 324, height: 100)
-        return view
-    }
-    
-    // MARK: - samples
-    
-    @objc private func sample(_ notification: Notification) {
-        guard let value = notification.object else { return }
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            UnifiedPerf.measure("handle") {
-                self.handle(value, userInfo: notification.userInfo)
-            }
-        }
-    }
-    
-    private func handle(_ value: Any, userInfo: [AnyHashable: Any]?) {
-        switch value {
-        case let load as CPU_Load:
-            self.cpuLoad = load
-            self.cpuHero.setValue(Int((load.totalUsage * 100).rounded()))
-            self.cpuHero.spark.add(load.totalUsage * 100)
-            let partition = self.coreIndices()
-            let perCore = load.usagePerCore
-            self.cpuCoresRowE?.update(partition.efficiency.map({ $0 < perCore.count ? perCore[$0] : 0 }), avg: load.usageECores)
-            self.cpuCoresRowP?.update(partition.performance.map({ $0 < perCore.count ? perCore[$0] : 0 }), avg: load.usagePCores)
-            let loadStr = self.cpuAvg.map { "\($0.load1.rounded(toPlaces: 1)) / \($0.load5.rounded(toPlaces: 1)) / \($0.load15.rounded(toPlaces: 1))" } ?? "–"
-            let freqStr = self.cpuFreqValue.map { "\(($0/1000).rounded(toPlaces: 2)) GHz" } ?? "–"
-            let tempStr = self.cpuTempValue.map { "\(Int($0))°C" } ?? "–"
-            self.cpuHero.setPills([freqStr, tempStr, "load \(loadStr)"])
-            self.updateMini("cpu.system", value: "\(Int((load.systemLoad * 100).rounded()))%", fraction: load.systemLoad)
-            self.updateMini("cpu.user", value: "\(Int((load.userLoad * 100).rounded()))%", fraction: load.userLoad)
-            self.updateMini("cpu.idle", value: "\(Int((load.idleLoad * 100).rounded()))%", fraction: load.idleLoad)
-        case let freq as CPU_Frequency:
-            self.cpuFreqValue = freq.value
-        case let temp as Double:
-            self.cpuTempValue = temp
-        case let avg as CPU_AverageLoad:
-            self.cpuAvg = avg
-        case let procs as [TopProcess]:
-            let module = userInfo?["module"] as? String ?? "CPU"
-            if module == "RAM" {
-                self.ramTop = procs
-                let maxUsage = procs.map({ $0.usage }).max() ?? 0
-                let rows = Array(procs.prefix(2)).map { proc in
-                    (name: proc.name, share: maxUsage > 0 ? proc.usage / maxUsage : 0, value: Units(bytes: Int64(proc.usage)).getReadableMemory(style: .memory))
-                }
-                self.replaceTops("ram.tops", title: localizedString("Top processes"), rows: rows)
-            } else {
-                self.cpuTop = procs
-                let maxUsage = procs.map({ $0.usage }).max() ?? 0
-                let rows = Array(procs.prefix(4)).map { proc in
-                    (name: proc.name, share: maxUsage > 0 ? proc.usage / maxUsage : 0, value: "\(Int(proc.usage.rounded()))%")
-                }
-                self.replaceTops("cpu.tops", title: localizedString("Top processes"), rows: rows)
-            }
-        case let gpu as GPU_Info:
-            self.gpuInfo = gpu
-            let usage = gpu.utilization ?? 0
-            self.gpuHero.setValue(Int((usage * 100).rounded()))
-            self.gpuHero.spark.add(usage * 100)
-            let fps = gpu.fps.map { "\(Int($0)) FPS" } ?? "–"
-            let render = gpu.renderUtilization.map { "\(Int(($0 * 100).rounded()))" } ?? "–"
-            let tiler = gpu.tilerUtilization.map { "\(Int(($0 * 100).rounded()))" } ?? "–"
-            self.gpuHero.setPills([fps, "render \(render)", "tiler \(tiler)"])
-            self.updateMini("gpu.render", value: gpu.renderUtilization.map { "\(Int(($0 * 100).rounded()))%" } ?? "–", fraction: gpu.renderUtilization ?? 0)
-            self.updateMini("gpu.tiler", value: gpu.tilerUtilization.map { "\(Int(($0 * 100).rounded()))%" } ?? "–", fraction: gpu.tilerUtilization ?? 0)
-            self.updateMini("gpu.fps", value: gpu.fps.map { "\(Int($0))" } ?? "–", fraction: min((gpu.fps ?? 0) / 120, 1))
-        case let ram as RAM_Usage:
-            self.ramUsage = ram
-            self.ramHero.setValue(Int((ram.usage * 100).rounded()))
-            self.ramHero.spark.add(ram.usage * 100)
-            self.ramWiredField?.stringValue = Units(bytes: Int64(ram.wired)).getReadableMemory(style: .memory)
-            self.ramAppField?.stringValue = Units(bytes: Int64(ram.app)).getReadableMemory(style: .memory)
-            self.ramCompressedField?.stringValue = Units(bytes: Int64(ram.compressed)).getReadableMemory(style: .memory)
-            let used = Units(bytes: Int64(ram.used)).getReadableMemory(style: .memory)
-            let total = Units(bytes: Int64(ram.total)).getReadableMemory(style: .memory)
-            let swap = Units(bytes: Int64(ram.swap.used)).getReadableMemory(style: .memory)
-            self.ramHero.setPills(["\(used) of \(total)", ram.pressure.value.rawValue, "swap \(swap)"])
-            self.ramHero.setBullet(ram.usage)
-            let totalBytes = ram.total == 0 ? 1 : ram.total
-            self.updateMini("ram.app", value: Units(bytes: Int64(ram.app)).getReadableMemory(style: .memory), fraction: ram.app / totalBytes)
-            self.updateMini("ram.wired", value: Units(bytes: Int64(ram.wired)).getReadableMemory(style: .memory), fraction: ram.wired / totalBytes)
-            self.updateMini("ram.compressed", value: Units(bytes: Int64(ram.compressed)).getReadableMemory(style: .memory), fraction: ram.compressed / totalBytes)
-        case let disks as Disks:
-            let drive = disks.array.first(where: { $0.root }) ?? disks.array.first
-            guard let drive else { return }
-            let total = Double(drive.activity.read + drive.activity.write)
-            self.diskRow.valueField.stringValue = Units(bytes: Int64(total)).getReadableSpeed()
-            self.diskRow.spark.add(total / 1024)
-            self.diskReadField?.stringValue = Units(bytes: drive.activity.read).getReadableSpeed()
-            self.diskWriteField?.stringValue = Units(bytes: drive.activity.write).getReadableSpeed()
-            let volumes = disks.array.sorted { ($0.root ? 1 : 0) > ($1.root ? 1 : 0) }
-            // live prefix first — it un-hides every row; the per-slot
-            // hiding for empty volume slots runs after, so they stay gone
-            self.diskDetail.setLiveRows(5)
-            for (index, field) in self.diskVolumeFields.enumerated() {
-                guard index < volumes.count else {
-                    self.diskDetail.setRowHidden(2 + index, hidden: true)
-                    continue
-                }
-                self.diskDetail.setRowHidden(2 + index, hidden: false)
-                let volume = volumes[index]
-                let used = volume.size - volume.free
-                let title = volume.mediaName.isEmpty ? volume.BSDName : volume.mediaName
-                self.diskDetail.setName(2 + index, title)
-                field.stringValue = "\(Units(bytes: used).getReadableMemory(style: .memory)) of \(Units(bytes: volume.size).getReadableMemory(style: .memory))"
-                field.toolTip = title
-            }
-            // Since-boot SMART totals are deliberately not shown here:
-            // the NVMe data-unit counters read ~1000x too high on this
-            // class of controller (hundreds of "TB" per day), and an
-            // unverifiable number is worse than none. The classic popup
-            // still shows them for anyone who wants the raw figures.
-        case let net as Network_Usage:
-            let down = UnifiedInfoFormatters.compactRate(net.bandwidth.download)
-            let up = UnifiedInfoFormatters.compactRate(net.bandwidth.upload)
-            self.netRow.valueField.stringValue = "\(down)↓ \(up)↑"
-            self.netRow.spark.add(Double(net.bandwidth.download + net.bandwidth.upload) / 1024)
-            self.netDownField?.stringValue = Units(bytes: net.bandwidth.download).getReadableSpeed()
-            self.netUpField?.stringValue = Units(bytes: net.bandwidth.upload).getReadableSpeed()
-            self.netTotalInField?.stringValue = Units(bytes: net.total.download).getReadableMemory(style: .memory)
-            self.netTotalOutField?.stringValue = Units(bytes: net.total.upload).getReadableMemory(style: .memory)
-            self.netInterfaceField?.stringValue = net.interface?.displayName ?? "–"
-            if let address = net.interface?.address, !address.isEmpty {
-                self.netAddressField?.stringValue = address
-            } else {
-                self.netAddressField?.stringValue = "–"
-            }
-        case let sensors as Sensors_List:
-            self.sensorsList = sensors
-            let temps = sensors.sensors.filter({ $0.type == .temperature && $0.popupState && $0.value.isFinite })
-            if let hottest = temps.max(by: { $0.value < $1.value }) {
-                self.sensorsRow.valueField.stringValue = hottest.formattedValue
-                self.sensorsRow.spark.add(hottest.value)
-            }
-            self.rebuildFans()
-        case let battery as Battery_Usage:
-            let minutes = battery.isBatteryPowered ? battery.timeToEmpty : (battery.isCharging ? battery.timeToCharge : 0)
-            self.batteryRow.valueField.stringValue = UnifiedInfoFormatters.batteryRowValue(
-                level: Int((abs(battery.level) * 100).rounded()),
-                minutes: minutes
-            )
-            self.batteryRow.spark.add(abs(battery.level) * 100)
-            self.batteryCyclesField?.stringValue = "\(battery.cycles)"
-            self.batteryHealthField?.stringValue = "\(UnifiedInfoFormatters.batteryPercent(battery.maxCapacity, of: battery.designedCapacity))% of design"
-            self.batteryFullChargeField?.stringValue = "\(battery.fullChargeCapacity.formatted(.number.grouping(.automatic))) mAh · \(UnifiedInfoFormatters.batteryPercent(battery.fullChargeCapacity, of: battery.designedCapacity))% of design"
-            self.batteryConditionField?.stringValue = localizedString(UnifiedInfoFormatters.batteryCondition(battery.health))
-            self.batteryPowerField?.stringValue = UnifiedInfoFormatters.batteryPowerText(
-                batteryPower: battery.batteryPower,
-                adapterPower: battery.adapterPower,
-                onBattery: battery.isBatteryPowered,
-                isCharging: battery.isCharging
-            )
-            self.batteryTimeField?.stringValue = UnifiedInfoFormatters.batteryTimeText(
-                onBattery: battery.isBatteryPowered,
-                isCharging: battery.isCharging,
-                minutesToEmpty: battery.timeToEmpty,
-                minutesToFull: battery.timeToCharge,
-                optimizedCharging: battery.optimizedChargingEngaged
-            )
-        default:
-            break
-        }
-    }
-    
-    private func updateMini(_ identifier: String, value: String, fraction: Double) {
-        for hero in [self.cpuHero, self.gpuHero, self.ramHero] {
-            if let metric = hero.expandContainer.findView(withIdentifier: identifier) as? UnifiedMiniMetric {
-                metric.set(value: value, fraction: fraction)
-            }
-        }
-    }
-    
-    private func replaceTops(_ identifier: String, title: String, rows: [(name: String, share: Double, value: String)]) {
-        for hero in [self.cpuHero, self.gpuHero, self.ramHero] {
-            if let tops = hero.expandContainer.findView(withIdentifier: identifier) as? UnifiedTopProcesses {
-                tops.update(rows: rows)
-            }
-        }
-    }
-    
-    private var fanKeys: [String] = []
-    private var fanHeights: [CGFloat] = []
+    var fanKeys: [String] = []
+    var fanHeights: [CGFloat] = []
     /// Option B temperature detail: current visible member keys (hot
     /// first), the latest sample per key, and the live row views. Rows
     /// update values in place; the view order only changes when the
     /// membership actually changes (with a deadband, so a single-sample
     /// swap at the boundary doesn't reshuffle the list).
-    private var tempKeys: [String] = []
-    private var latestTemps: [String: Sensor_p] = [:]
-    private var tempRows: [(key: String, name: NSTextField, value: NSTextField)] = []
-    private var totalTempCount = 0
-    private let tempDeadband: Double = 0.5
-    private let showAllButton = NSButton()
+    var tempKeys: [String] = []
+    var latestTemps: [String: Sensor_p] = [:]
+    var tempRows: [(key: String, name: NSTextField, value: NSTextField)] = []
+    var totalTempCount = 0
+    let tempDeadband: Double = 0.5
+    let showAllButton = NSButton()
     
-    // MARK: - battery health detail
-    
-    private func batteryDetailRow(_ label: String) -> NSTextField {
-        let name = unifiedLabel(label, font: .systemFont(ofSize: 11, weight: .regular), color: .secondaryLabelColor)
-        let value = unifiedLabel(font: .monospacedDigitSystemFont(ofSize: 11, weight: .semibold), color: .labelColor, alignment: .right)
-        name.identifier = NSUserInterfaceItemIdentifier("battery.detail")
-        value.identifier = NSUserInterfaceItemIdentifier("battery.detail")
-        self.batteryDetailContainer.addSubview(name)
-        self.batteryDetailContainer.addSubview(value)
-        self.batteryDetailRows.append((name: name, value: value))
-        return value
-    }
-
     /// Explicit (label, value) pairs — never derive pairing from subview
     /// enumeration order; that z-order dependence shifted every value one
     /// row up (Cycles empty, health showing the cycle count, …).
-    private var batteryDetailRows: [(name: NSTextField, value: NSTextField)] = []
+    var batteryDetailRows: [(name: NSTextField, value: NSTextField)] = []
 
-    private func layoutBatteryDetail() {
-        let width = max(self.batteryRow.expandContainer.bounds.width, 100)
-        var y: CGFloat = 0
-        for row in self.batteryDetailRows {
-            row.name.frame = NSRect(x: 0, y: y + 1, width: 180, height: 14)
-            row.value.frame = NSRect(x: width - 160, y: y + 1, width: 160, height: 14)
-            y += 18
-        }
-        self.batteryDetailContainer.frame = NSRect(x: 0, y: 0, width: width, height: max(ceil(y), 30))
-        self.batteryRow.detailHeight = max(ceil(y), 30)
-    }
-    
-    // MARK: - thermal pressure row
-    
-    @objc private func thermalStateChanged(_ notification: Notification) {
-        self.updateThermalRow()
-    }
-    
-    /// Static E/P core-id partition (usagePerCore is indexed by core id),
-    /// cached once per process. Super cores ride in the performance
-    /// cluster, matching the classic popup's grouping.
-    private func coreIndices() -> (efficiency: [Int], performance: [Int]) {
-        if let partition = self.corePartition {
-            return partition
-        }
-        var efficiency: [Int] = []
-        var performance: [Int] = []
-        for core in SystemKit.shared.device.info.cpu?.cores ?? [] {
-            if core.type == .efficiency {
-                efficiency.append(Int(core.id))
-            } else {
-                performance.append(Int(core.id))
-            }
-        }
-        let partition = (efficiency, performance)
-        self.corePartition = partition
-        return partition
-    }
-    
-    private func updateThermalRow() {
-        let state = ProcessInfo.processInfo.thermalState
-        let name = localizedString(UnifiedInfoFormatters.thermalStateName(state))
-        if self.thermalRow.valueField.stringValue != name {
-            self.thermalRow.valueField.stringValue = name
-        }
-        self.thermalRow.setStatus(level: UnifiedInfoFormatters.thermalStatusLevel(state))
-        // Step series of the pressure level, normalized to the fixed
-        // 0...100 chart range: nominal sits at the bottom, a state change
-        // jumps the line by a third of the height. Fed per tick (this
-        // runs from every relayout) and on state-change notifications.
-        self.thermalRow.spark.add(Double(state.rawValue) * 100.0 / 3.0)
-        // Tint the stroke with the row's semantic state color.
-        let stroke: NSColor
-        switch state {
-        case .fair: stroke = UnifiedTokens.amberInk
-        case .serious, .critical: stroke = UnifiedTokens.redInk
-        default: stroke = UnifiedTokens.ok
-        }
-        if self.thermalRow.spark.strokeColor != stroke {
-            self.thermalRow.spark.strokeColor = stroke
-        }
-        // Detail rows: state word + plain-language impact, tinted per
-        // state, updated in place.
-        self.thermalStateField?.stringValue = name
-        let impact = localizedString(UnifiedInfoFormatters.thermalStateDescription(state))
-        self.thermalImpactField?.stringValue = impact
-        self.thermalImpactField?.textColor = stroke
-    }
-    
-    private func rebuildFans() {
-        guard let sensors = self.sensorsList else { return }
-        let fans = sensors.sensors.compactMap({ $0 as? Fan }).filter({ !$0.isComputed && $0.maxSpeed > 1 })
-        let keys = fans.map({ $0.key }).sorted()
-        if keys != self.fanKeys {
-            self.fanKeys = keys
-            for view in self.sensorsFansContainer.subviews {
-                view.removeFromSuperview()
-            }
-            for fan in fans {
-                // The module's own fan control: it sizes itself and reports
-                // height changes through the callback.
-                let fanView = FanView(fan, width: self.sensorsRow.expandContainer.bounds.width) { [weak self] in
-                    self?.layoutFanContainer()
-                    self?.relayout()
-                    self?.onLayoutChange?()
-                }
-                self.sensorsFansContainer.addSubview(fanView)
-            }
-            // Measure synchronously so the expanded height is final in
-            // the same pass — the previous async measure produced a
-            // second layout (and a visible height jump) a beat later.
-            self.sensorsFansContainer.layoutSubtreeIfNeeded()
-            self.fanHeights = self.sensorsFansContainer.subviews
-                .compactMap({ $0 as? FanView })
-                .map({ max(ceil($0.frame.height), 64) })
-        } else {
-            // Same fan set: forward live values. The reader keeps sensor
-            // order stable, so index pairing is exact — without this the
-            // expanded card froze fan values at build time.
-            let fanViews = self.sensorsFansContainer.subviews.compactMap({ $0 as? FanView })
-            for (index, fanView) in fanViews.enumerated() where index < fans.count {
-                fanView.update(fans[index])
-            }
-        }
-        // Temperature rows (Option B): hot-first, top 5 in the panel; the
-        // full list lives in the all-sensors popover ("All sensors (N)").
-        // Membership changes require the newcomer to beat the held 5th
-        // value by a deadband; values update in place.
-        let temps = sensors.sensors
-            .filter({ $0.type == .temperature && $0.popupState && $0.value.isFinite })
-            .sorted(by: { $0.value > $1.value })
-        self.totalTempCount = temps.count
-        for temp in temps { self.latestTemps[temp.key] = temp }
-        
-        var desired = Array(temps.prefix(min(5, temps.count)).map({ $0.key }))
-        if desired != self.tempKeys, !self.tempKeys.isEmpty {
-            let threshold = self.latestTemps[self.tempKeys[min(4, self.tempKeys.count - 1)]]?.value ?? -.infinity
-            let newcomers = desired.filter { !self.tempKeys.contains($0) }
-            let accepted = newcomers.allSatisfy { key in
-                (self.latestTemps[key]?.value ?? -.infinity) > threshold + self.tempDeadband
-            }
-            if !accepted {
-                desired = self.tempKeys
-            }
-        }
-        if desired != self.tempKeys {
-            self.rebuildTempRows(desired)
-        }
-        for row in self.tempRows {
-            guard let sensor = self.latestTemps[row.key] else { continue }
-            if row.value.stringValue != sensor.formattedValue {
-                row.value.stringValue = sensor.formattedValue
-            }
-        }
-        self.updateShowAllRow()
-        // keep the disclosure row on top of the z-order across fan rebuilds
-        self.sensorsFansContainer.addSubview(self.showAllButton)
-        self.layoutFanContainer()
-        self.onLayoutChange?()
-    }
-    
-    private func rebuildTempRows(_ keys: [String]) {
-        for row in self.tempRows {
-            row.name.removeFromSuperview()
-            row.value.removeFromSuperview()
-        }
-        self.tempRows = keys.map { key in
-            let name = unifiedLabel(self.latestTemps[key]?.name ?? key, font: .systemFont(ofSize: 11, weight: .regular), color: .secondaryLabelColor)
-            let value = unifiedLabel(self.latestTemps[key]?.formattedValue ?? "–", font: .monospacedDigitSystemFont(ofSize: 11, weight: .semibold), color: .labelColor, alignment: .right)
-            name.identifier = NSUserInterfaceItemIdentifier("temp")
-            value.identifier = NSUserInterfaceItemIdentifier("temp")
-            self.sensorsFansContainer.addSubview(name)
-            self.sensorsFansContainer.addSubview(value)
-            return (key, name, value)
-        }
-        self.tempKeys = keys
-    }
-    
-    private func updateShowAllRow() {
-        let extra = max(self.totalTempCount - 5, 0)
-        self.showAllButton.isHidden = extra == 0
-        let title = "\(localizedString("All sensors")) (\(self.totalTempCount)) ›"
-        self.showAllButton.attributedTitle = NSAttributedString(string: title, attributes: [
-            .font: NSFont.systemFont(ofSize: 11, weight: .medium),
-            .foregroundColor: NSColor.secondaryLabelColor
-        ])
-    }
-    
-    @objc private func openAllSensors() {
-        SensorsAllPopover.shared.show(relativeTo: self.showAllButton.bounds, of: self.showAllButton)
-    }
-    
-    /// QA hook: open the all-sensors popover (same path as the row tap).
-    func openAllSensorsForQA() {
-        self.openAllSensors()
-    }
-    
-    private func layoutFanContainer() {
-        let width = max(self.sensorsRow.expandContainer.bounds.width, 100)
-        var y: CGFloat = 0
-        var index = 0
-        for case let fanView as FanView in self.sensorsFansContainer.subviews {
-            let height = index < self.fanHeights.count ? self.fanHeights[index] : max(ceil(fanView.frame.height), 64)
-            fanView.frame = NSRect(x: 0, y: y, width: width, height: height)
-            y += height + 6
-            index += 1
-        }
-        for row in self.tempRows {
-            row.name.frame = NSRect(x: 0, y: y + 1, width: 220, height: 14)
-            row.value.frame = NSRect(x: width - 100, y: y + 1, width: 100, height: 14)
-            y += 18
-        }
-        if !self.showAllButton.isHidden {
-            self.showAllButton.frame = NSRect(x: 0, y: y + 3, width: width, height: 16)
-            y += 24
-        }
-        let height = max(ceil(y), 30)
-        self.sensorsFansContainer.frame = NSRect(x: 0, y: 0, width: width, height: height)
-        self.sensorsRow.detailHeight = height
-        self.sensorsRow.expandContainer.frame = NSRect(x: 8, y: 44, width: self.sensorsRow.bounds.width - 16, height: height)
-    }
-}
-
-
-private extension NSView {
-    func findView(withIdentifier identifier: String) -> NSView? {
-        if self.identifier?.rawValue == identifier {
-            return self
-        }
-        for subview in self.subviews {
-            if let found = subview.findView(withIdentifier: identifier) {
-                return found
-            }
-        }
-        return nil
-    }
 }
