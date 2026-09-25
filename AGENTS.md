@@ -100,6 +100,42 @@ from agent code — the hardened smoke test is expected to fail with the
 - Sixteen `yes > /dev/null` jobs for ~25s trips the temperature/CPU
   attention states for alert-path testing; kill by exact PIDs.
 
+## Live-metric readouts (verification playbook)
+
+"Stuck number" readouts have three distinct causes — identify which
+before attempting a fix:
+
+1. **Wrong source semantics** — the feed is accurate but is not the
+   quantity the user expects. (Menu watts showed adapter delivery
+   PDTR = system + battery charge: pinned ~84 W whenever charging.)
+2. **Slow feed** — the registry snapshot refreshes far slower than the
+   UI cadence. AppleSmartBattery properties, *including the
+   PowerTelemetryData accumulators*, publish every 25–60 s on this
+   machine; a per-second readout drawn from them is frozen that whole
+   time. (The "stuck at 52 W" report.)
+3. **Dead connection** — the launch-opened SMC connection goes stale
+   over sleep/wake, freezing every SMC-fed readout. (Fixed: NSLock +
+   `reconnect()` on wake.)
+
+Rules:
+
+- **Format/cadence QA is not liveness QA** — a pinned number passes
+  format checks. Every live readout needs a step-response assertion:
+  known load step (4–6 × `yes`, exact PIDs), require the composed
+  value to move ≥ 4 W within ~10 s. Smoke phase 5 does this for menu
+  watts; extend the pattern to any new live metric.
+- Characterize a candidate source before trusting it:
+  `swift Scripts/audit-power-keys.swift scan` enumerates every SMC key
+  twice (8 s apart) and diffs — keys that changed are live feeds;
+  `watch KEY…` tracks keys at 1 s cadence through a load step.
+- This machine's verified power sources (2026-09-25): menu watts =
+  PPBR (drain) on battery · PDTR (total system draw, 1 s step
+  response) on AC not charging · si10 (SoC power, live even while
+  charging) on AC charging. PPBR reads ~0.6–4 on AC — garbage,
+  battery-only. PDTR pins at the adapter delivery limit while
+  charging (charge current absorbs every load change — unfixable from
+  PDTR arithmetic).
+
 ## QA knobs (all env-var, launch-only)
 
 | Knob | Effect |
@@ -117,5 +153,5 @@ from agent code — the hardened smoke test is expected to fail with the
 | `STATS_QA_DISMISS=1` | synthesize click events inside/outside the icon frame to exercise the outside-click dismissal guards (`[QA] dismiss:`) |
 | `STATS_QA_LAYOUT=1` | log the panel content height once per second (`[QA] layout tick:`) for the layout-stability smoke assertion |
 | `STATS_QA_EXPAND=<module\|All>` | expand a section (or all of CPU/GPU/RAM/Sensors/Battery in sequence) and sample panel heights across +1.2s (`[QA] expand:`/`expand-seq:`) — two-phase expand detector |
-| `STATS_QA_MENU_WATTS=1` | force the unified menu bar watts readout on and log the composed title every tick (`[QA] menu watts:`) — smoke test asserts format + 1s cadence. Battery level/time live in the panel's Battery row, not the menu bar |
+| `STATS_QA_MENU_WATTS=1` | force the unified menu bar watts readout on and log the composed title every tick (`[QA] menu watts:`, raw keys in `[QA] watts raw:`) — smoke test asserts format + 1s cadence + step-response liveness under a `yes` load. Battery level/time live in the panel's Battery row, not the menu bar |
 | `STATS_QA_SENSOR_TICK=1` | log reader/repeater lifecycle and every Sensors_List sample delivered to the panel (`[QA] reader …`, `[QA] repeater(…)`, `[QA] sensor sample:`) — used to catch reader idling (frozen sensors card) |
