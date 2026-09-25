@@ -480,7 +480,13 @@ final class UnifiedPopupController {
 
     /// Internal battery on AC with charging active (not the "not
     /// charging" / optimized-charging hold states, where PDTR is live).
+    /// STATS_QA_WATTS_CHARGING=1 forces true so the smoke test can
+    /// exercise the si10 branch without waiting for a real charge
+    /// session; the `[QA] watts raw:` log keeps the true state visible.
     private func chargingOnAC() -> Bool {
+        if ProcessInfo.processInfo.environment["STATS_QA_WATTS_CHARGING"] == "1" {
+            return true
+        }
         let snapshot = IOPSCopyPowerSourcesInfo().takeRetainedValue()
         let list = IOPSCopyPowerSourcesList(snapshot).takeRetainedValue() as [CFTypeRef]
         for ps in list {

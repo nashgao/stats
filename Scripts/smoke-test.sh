@@ -223,50 +223,66 @@ quit_phase "phase 4 (layout+latency)"
 # --- phase 5: menu bar power readout (forced on, 1s cadence) ---
 # STATS_QA_MENU_WATTS=1 overrides the store toggle and logs the composed
 # title every tick; the status item is installed at launch, no panel open
-# needed.
+# needed. Two liveness passes: the natural power state, then the charging
+# branch forced via STATS_QA_WATTS_CHARGING=1 — the si10 source only
+# engages while charging, and waiting for a real charge session to verify
+# it is not acceptable (the whole stuck-readout class passed quietly
+# until a user watched it). Format + cadence cannot tell a pinned number
+# from a live one, so each pass steps 4 yes jobs and requires the
+# composed readout to actually move.
 echo "-- phase 5: menu watts --"
+cd "$(dirname "$BIN")"
+
+watts_liveness_pass() {
+  local label="$1"
+  local samples=0
+  for i in $(seq 1 15); do
+    samples=$(grep -c "\[QA\] menu watts:" "$QA_LOG" 2>/dev/null || true)
+    [ "${samples:-0}" -ge 2 ] && break
+    ps -p "$QA_PID" >/dev/null 2>&1 || break
+    sleep 1
+  done
+  BAD_SAMPLE=$(grep "\[QA\] menu watts:" "$QA_LOG" | grep -vE "\[QA\] menu watts: (-?[0-9]+(\.[0-9])?W|n/a)$" | head -1)
+  if [ -n "$BAD_SAMPLE" ]; then
+    fail "menu watts malformed sample ($label): $BAD_SAMPLE"
+    return
+  fi
+  if [ "${samples:-0}" -lt 2 ]; then
+    fail "menu watts: only ${samples:-0} samples in 15s ($label)"
+    return
+  fi
+  pass "menu watts samples ($label, ${samples} at 1s cadence, format ok)"
+
+  LOAD_PIDS=""
+  for i in 1 2 3 4; do
+    yes > /dev/null & LOAD_PIDS="$LOAD_PIDS $!"
+  done
+  sleep 8
+  for pid in $LOAD_PIDS; do kill "$pid" 2>/dev/null; done
+  sleep 2
+  WATTS_VALUES=$(grep -E "\[QA\] menu watts: -?[0-9]+(\.[0-9])?W" "$QA_LOG" | sed -E 's/.*\[QA\] menu watts: (-?[0-9]+(\.[0-9]+)?)W$/\1/')
+  WATTS_SPREAD=$(printf '%s\n' "$WATTS_VALUES" | python3 -c "import sys; v=[float(x) for x in sys.stdin if x.strip()]; print(f\"{max(v)-min(v):.1f}\" if len(v)>=2 else \"\")" 2>/dev/null)
+  if [ -z "$WATTS_SPREAD" ]; then
+    fail "menu watts liveness ($label): no numeric samples captured around the load step"
+  else
+    python3 -c "exit(0 if float('$WATTS_SPREAD') >= 4.0 else 1)" \
+      && pass "menu watts liveness ($label, spread ${WATTS_SPREAD}W across 4x yes step)" \
+      || fail "menu watts pinned ($label, spread ${WATTS_SPREAD}W across 4x yes step — readout not tracking load)"
+  fi
+}
+
 for pid in $(pgrep -x Stats); do kill "$pid" 2>/dev/null; done
 sleep 1
 rm -f "$QA_LOG" "$CAPTURE"
-cd "$(dirname "$BIN")"
 env STATS_QA_MENU_WATTS=1 ./Stats >"$QA_LOG" 2>&1 &
 QA_PID=$!
-WATTS_SAMPLES=0
-for i in $(seq 1 15); do
-  WATTS_SAMPLES=$(grep -c "\[QA\] menu watts:" "$QA_LOG" 2>/dev/null || true)
-  [ "${WATTS_SAMPLES:-0}" -ge 2 ] && break
-  ps -p "$QA_PID" >/dev/null 2>&1 || break
-  sleep 1
-done
-BAD_SAMPLE=$(grep "\[QA\] menu watts:" "$QA_LOG" | grep -vE "\[QA\] menu watts: (-?[0-9]+(\.[0-9])?W|n/a)$" | head -1)
-if [ -n "$BAD_SAMPLE" ]; then
-  fail "menu watts malformed sample: $BAD_SAMPLE"
-elif [ "${WATTS_SAMPLES:-0}" -ge 2 ]; then
-  pass "menu watts live (${WATTS_SAMPLES} samples at 1s cadence, format ok)"
-else
-  fail "menu watts: only ${WATTS_SAMPLES:-0} samples in 15s"
-fi
+watts_liveness_pass "natural state"
+quit_phase "phase 5a (menu watts, natural state)"
 
-# Liveness: format + cadence cannot tell a pinned number from a live one
-# (both stuck-at-84W delivery-pinning and stuck-at-52W 30-60s telemetry
-# feeds passed them). Step the CPU load with 4 yes jobs and require the
-# composed readout to actually move.
-LOAD_PIDS=""
-for i in 1 2 3 4; do
-  yes > /dev/null & LOAD_PIDS="$LOAD_PIDS $!"
-done
-sleep 8
-for pid in $LOAD_PIDS; do kill "$pid" 2>/dev/null; done
-sleep 2
-WATTS_VALUES=$(grep -E "\[QA\] menu watts: -?[0-9]+(\.[0-9])?W" "$QA_LOG" | sed -E 's/.*\[QA\] menu watts: (-?[0-9]+(\.[0-9]+)?)W$/\1/')
-WATTS_SPREAD=$(printf '%s\n' "$WATTS_VALUES" | python3 -c "import sys; v=[float(x) for x in sys.stdin if x.strip()]; print(f\"{max(v)-min(v):.1f}\" if len(v)>=2 else \"\")" 2>/dev/null)
-if [ -z "$WATTS_SPREAD" ]; then
-  fail "menu watts liveness: no numeric samples captured around the load step"
-else
-  python3 -c "exit(0 if float('$WATTS_SPREAD') >= 4.0 else 1)" \
-    && pass "menu watts liveness (spread ${WATTS_SPREAD}W across 4x yes step)" \
-    || fail "menu watts pinned (spread ${WATTS_SPREAD}W across 4x yes step — readout not tracking load)"
-fi
+rm -f "$QA_LOG"
+env STATS_QA_MENU_WATTS=1 STATS_QA_WATTS_CHARGING=1 ./Stats >"$QA_LOG" 2>&1 &
+QA_PID=$!
+watts_liveness_pass "forced charging branch (si10)"
 quit_phase "phase 5 (menu watts)"
 
 # --- helper contract ---
