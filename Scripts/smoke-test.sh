@@ -7,7 +7,7 @@
 #   1. panel toggle open→closed→open + outside-click dismissal guards
 #   2. expand every section (one-pass render)
 #   3. real helper XPC round trip (fan mode/rpm) + attention alerts
-#   4. layout stability + open-latency budget
+#   4. layout stability + open-latency budget + sensor liveness under load
 # Ends with crash-report checks per phase and the helper contract check.
 #
 # Usage: Scripts/smoke-test.sh [/Applications/Stats.app]
@@ -82,6 +82,36 @@ wait_for_log() {
     sleep 1
   done
   return 1
+}
+
+# step_load JOBS SECONDS — CPU load step for liveness assertions. Exact
+# PIDs only, never pkill.
+step_load() {
+  local jobs="${1:-4}" secs="${2:-8}" pids="" i
+  for i in $(seq 1 "$jobs"); do yes > /dev/null & pids="$pids $!"; done
+  sleep "$secs"
+  for i in $pids; do kill "$i" 2>/dev/null; done
+  sleep 2
+}
+
+# series_spread 'grep -E PATTERN' 'sed -E EXPR' — max-min of the numeric
+# series extracted from QA_LOG; empty when fewer than two values.
+series_spread() {
+  grep -E "$1" "$QA_LOG" | sed -E "$2" | python3 -c "import sys; v=[float(x) for x in sys.stdin if x.strip()]; print(f\"{max(v)-min(v):.1f}\" if len(v)>=2 else \"\")" 2>/dev/null
+}
+
+# assert_spread LABEL MIN SPREAD — liveness verdict for a load-step metric:
+# format/cadence checks cannot tell a pinned number from a live one, so
+# every live readout must move when the load moves.
+assert_spread() {
+  local label="$1" min="$2" spread="$3"
+  if [ -z "$spread" ]; then
+    fail "$label: no numeric samples captured around the load step"
+  else
+    python3 -c "exit(0 if float('$spread') >= float('$min') else 1)" \
+      && pass "$label liveness (spread ${spread} across load step)" \
+      || fail "$label pinned (spread ${spread} < min ${min} — readout not tracking)"
+  fi
 }
 
 # quit_phase NAME — AppleEvent quit (SIGTERM fallback, exact PID), then a
@@ -199,7 +229,7 @@ quit_phase "phase 3 (helper+alerts)"
 
 # --- phase 4: layout stability + open latency ---
 echo "-- phase 4: layout + latency --"
-if launch_phase STATS_QA_LAYOUT=1; then
+if launch_phase STATS_QA_LAYOUT=1 STATS_QA_SENSOR_TICK=1; then
   pass "panel opened"
 else
   fail "panel did not open"
@@ -218,6 +248,13 @@ else
     || fail "open latency ${OPEN_TOTAL}ms over 100ms budget"
 fi
 ps -p "$QA_PID" >/dev/null 2>&1 && pass "process alive through phase 4" || fail "process died during phase 4"
+# Sensor liveness through the app: the hottest-temperature readout must
+# climb under CPU load (TCMb idles 88-94C here; a 4-job step for ~15s
+# moves it several degrees — 16 jobs for 25s trips temperature attention).
+wait_for_log "\[QA\] sensor sample:" 20 || true
+step_load 4 15
+SENSOR_SPREAD=$(series_spread "\[QA\] sensor sample: " "s/.*hottest=[^ ]+ ([0-9.]+) .*/\1/")
+assert_spread "sensors hottest temp" 1.0 "$SENSOR_SPREAD"
 quit_phase "phase 4 (layout+latency)"
 
 # --- phase 5: menu bar power readout (forced on, 1s cadence) ---
@@ -253,22 +290,9 @@ watts_liveness_pass() {
   fi
   pass "menu watts samples ($label, ${samples} at 1s cadence, format ok)"
 
-  LOAD_PIDS=""
-  for i in 1 2 3 4; do
-    yes > /dev/null & LOAD_PIDS="$LOAD_PIDS $!"
-  done
-  sleep 8
-  for pid in $LOAD_PIDS; do kill "$pid" 2>/dev/null; done
-  sleep 2
-  WATTS_VALUES=$(grep -E "\[QA\] menu watts: -?[0-9]+(\.[0-9])?W" "$QA_LOG" | sed -E 's/.*\[QA\] menu watts: (-?[0-9]+(\.[0-9]+)?)W$/\1/')
-  WATTS_SPREAD=$(printf '%s\n' "$WATTS_VALUES" | python3 -c "import sys; v=[float(x) for x in sys.stdin if x.strip()]; print(f\"{max(v)-min(v):.1f}\" if len(v)>=2 else \"\")" 2>/dev/null)
-  if [ -z "$WATTS_SPREAD" ]; then
-    fail "menu watts liveness ($label): no numeric samples captured around the load step"
-  else
-    python3 -c "exit(0 if float('$WATTS_SPREAD') >= 4.0 else 1)" \
-      && pass "menu watts liveness ($label, spread ${WATTS_SPREAD}W across 4x yes step)" \
-      || fail "menu watts pinned ($label, spread ${WATTS_SPREAD}W across 4x yes step — readout not tracking load)"
-  fi
+  step_load 4 8
+  WATTS_SPREAD=$(series_spread "\[QA\] menu watts: -?[0-9]+(\.[0-9])?W" "s/.*\[QA\] menu watts: (-?[0-9]+(\.[0-9]+)?)W\$/\1/")
+  assert_spread "menu watts ($label)" 4.0 "$WATTS_SPREAD"
 }
 
 for pid in $(pgrep -x Stats); do kill "$pid" 2>/dev/null; done
