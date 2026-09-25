@@ -447,3 +447,357 @@ enum UnifiedInfoFormatters {
         }
     }
 }
+
+// MARK: - hero card
+
+final class UnifiedHeroCard: UnifiedCardView {
+    let module: String
+    let nameLabel = unifiedLabel(font: .systemFont(ofSize: 12, weight: .semibold), color: .labelColor)
+    let valueField = unifiedLabel(font: .monospacedDigitSystemFont(ofSize: 26, weight: .semibold), color: .labelColor, alignment: .right)
+    let pillRow = UnifiedPillRow()
+    let chevron = NSButton()
+    /// Always-visible utilization chart; utilization % history at a
+    /// glance, fixed 0–100 scale like the grammar-row charts.
+    let spark = UnifiedSparklineView()
+    private var valuePercentage: Int = -1
+    private var valueInk: NSColor = .labelColor
+    private let iconView = NSImageView()
+    private var bulletTrack: NSView?
+    private var bulletBands: [NSView] = []
+    private var bulletFill: NSView?
+    var expanded: Bool = false
+    var onToggle: (() -> Void)?
+    /// Fixed-height detail content installed by the panel; hidden when collapsed.
+    let expandContainer = UnifiedFlippedView()
+    
+    init(module: String, icon: String, detailHeight: CGFloat) {
+        self.module = module
+        self.detailHeight = detailHeight
+        super.init(frame: .zero)
+        self.wantsLayer = true
+        self.layer?.cornerRadius = UnifiedTokens.cardRadius
+        self.layer?.borderWidth = 1
+        self.layer?.masksToBounds = false
+        self.nameLabel.stringValue = module
+        
+        // macOS 12-safe fallback: newer symbols resolve nil on older
+        // systems and the hero must never show a bare label.
+        self.iconView.image = unifiedSymbol(icon) ?? unifiedSymbol("rectangle.on.rectangle")
+        self.iconView.contentTintColor = .controlAccentColor
+        self.addSubview(self.iconView)
+        self.addSubview(self.nameLabel)
+        self.addSubview(self.spark)
+        self.addSubview(self.valueField)
+        self.spark.scale = .fixed
+        
+        self.chevron.isBordered = false
+        self.chevron.imageScaling = .scaleProportionallyDown
+        self.chevron.image = unifiedSymbol("chevron.right", scale: .small)
+        self.chevron.contentTintColor = .secondaryLabelColor
+        self.chevron.target = self
+        self.chevron.action = #selector(self.toggle)
+        self.addSubview(self.chevron)
+        // The whole header band toggles the hero — not just the chevron
+        // (same convention as the grammar rows). Clicks on the chevron
+        // itself and on the pill row are excluded.
+        let tap = NSClickGestureRecognizer(target: self, action: #selector(self.headerTapped(_:)))
+        self.addGestureRecognizer(tap)
+        self.addSubview(self.pillRow)
+        self.addSubview(self.expandContainer)
+        self.expandContainer.isHidden = true
+    }
+    
+    /// QA hook: drives the same toggle path as a header tap.
+    func simulateHeaderTap() {
+        self.onToggle?()
+    }
+    
+    @objc private func headerTapped(_ recognizer: NSClickGestureRecognizer) {
+        let point = recognizer.location(in: self)
+        guard point.y <= 40 else { return }
+        guard !self.chevron.frame.contains(point) else { return }
+        self.onToggle?()
+    }
+    
+    /// Big tabular number; the unit is demoted to 14pt secondary, per the mock.
+    func setValue(_ percentage: Int, force: Bool = false) {
+        guard force || percentage != self.valuePercentage else { return }
+        self.valuePercentage = percentage
+        let text = NSMutableAttributedString(string: "\(percentage)", attributes: [
+            .font: NSFont.monospacedDigitSystemFont(ofSize: 26, weight: .semibold),
+            .foregroundColor: self.valueInk
+        ])
+        text.append(NSAttributedString(string: "%", attributes: [
+            .font: NSFont.systemFont(ofSize: 14, weight: .semibold),
+            .foregroundColor: NSColor.secondaryLabelColor
+        ]))
+        self.valueField.attributedStringValue = text
+    }
+    
+    func setPills(_ texts: [String]) {
+        self.pillRow.setPills(texts)
+    }
+    
+    private let detailHeight: CGFloat
+    
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+    
+    @objc private func toggle() {
+        self.onToggle?()
+    }
+    
+    /// RAM capacity strip with neutral bands marking 70/90% capacity.
+    /// Status hues (orange/red) are reserved for actual attention states —
+    /// static warm bands read as a warning on a healthy system.
+    func installBullet() {
+        let track = NSView()
+        track.wantsLayer = true
+        track.layer?.cornerRadius = 2
+        track.layer?.backgroundColor = NSColor.separatorColor.withAlphaComponent(0.15).cgColor
+        let warn = NSView()
+        warn.wantsLayer = true
+        warn.layer?.backgroundColor = NSColor.separatorColor.withAlphaComponent(0.3).cgColor
+        let crit = NSView()
+        crit.wantsLayer = true
+        crit.layer?.backgroundColor = NSColor.separatorColor.withAlphaComponent(0.3).cgColor
+        let fill = NSView()
+        fill.wantsLayer = true
+        fill.layer?.cornerRadius = 2
+        fill.layer?.backgroundColor = NSColor.controlAccentColor.cgColor
+        self.addSubview(track)
+        self.addSubview(warn)
+        self.addSubview(crit)
+        self.addSubview(fill)
+        self.bulletTrack = track
+        self.bulletBands = [warn, crit]
+        self.bulletFill = fill
+    }
+    
+    func setBullet(_ fraction: Double) {
+        guard let track = self.bulletTrack else { return }
+        let x: CGFloat = 36
+        let width = self.bounds.width - x - 12
+        track.frame = NSRect(x: x, y: 66, width: width, height: 4)
+        self.bulletBands[0].frame = NSRect(x: x + width * 0.7, y: 66, width: width * 0.2, height: 4)
+        self.bulletBands[1].frame = NSRect(x: x + width * 0.9, y: 66, width: width * 0.1, height: 4)
+        self.bulletFill?.frame = NSRect(x: x, y: 66, width: width * CGFloat(min(max(fraction, 0), 1)), height: 4)
+    }
+    
+    func setExpanded(_ state: Bool) {
+        self.expanded = state
+        self.expandContainer.isHidden = !state
+        self.chevron.image = unifiedSymbol(state ? "chevron.down" : "chevron.right", scale: .small)
+        self.chevron.contentTintColor = .secondaryLabelColor
+        let rotation: CGFloat = state ? .pi / 2 : 0
+        self.chevron.wantsLayer = true
+        if UnifiedMotion.enabled {
+            let animation = CABasicAnimation(keyPath: "transform.rotation.z")
+            animation.toValue = rotation
+            animation.duration = 0.09
+            animation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            self.chevron.layer?.add(animation, forKey: "rotate")
+        }
+        self.chevron.layer?.transform = CATransform3DMakeRotation(rotation, 0, 0, 1)
+        self.layoutCard()
+    }
+    
+    /// Redundant encoding for attention: tint plus ink, never hue alone.
+    func setStatus(level: Int) {
+        guard level != self.statusLevel else { return }
+        self.statusLevel = level
+        self.valueInk = level == 2 ? UnifiedTokens.redInk : (level == 1 ? UnifiedTokens.amberInk : .labelColor)
+        self.setValue(self.valuePercentage, force: true)
+        self.updateLayer()
+    }
+    
+    var collapsedHeight: CGFloat {
+        self.bulletTrack == nil ? 70 : 78
+    }
+    
+    var totalHeight: CGFloat {
+        self.collapsedHeight + (self.expanded ? self.detailHeight + 12 : 0)
+    }
+    
+    func layoutCard() {
+        let w = self.bounds.width
+        self.iconView.frame = NSRect(x: 12, y: 14, width: 16, height: 16)
+        self.nameLabel.frame = NSRect(x: 36, y: 13, width: 120, height: 18)
+        self.valueField.frame = NSRect(x: w - 12 - 14 - 8 - 100, y: 8, width: 100, height: 30)
+        self.chevron.frame = NSRect(x: w - 12 - 14, y: 15, width: 14, height: 14)
+        self.spark.frame = NSRect(x: 80, y: 10, width: max(self.valueField.frame.origin.x - 8 - 80, 40), height: 26)
+        self.pillRow.frame = NSRect(x: 36, y: 42, width: w - 48, height: 18)
+        self.expandContainer.frame = NSRect(x: 12, y: self.collapsedHeight - 6, width: w - 24, height: self.detailHeight)
+    }
+}
+
+// MARK: - grammar row
+
+final class UnifiedGrammarRow: NSView {
+    let module: String
+    /// 0 quiet, 1 attention, 2 critical - tints the row background.
+    var statusLevel: Int = 0
+    
+    override var isFlipped: Bool { true }
+    let nameLabel = unifiedLabel(font: .systemFont(ofSize: 12, weight: .medium), color: .labelColor)
+    let valueField = unifiedLabel(font: .monospacedDigitSystemFont(ofSize: 12, weight: .semibold), color: .labelColor, alignment: .right)
+    let glyphField = unifiedLabel("✓", font: .systemFont(ofSize: 10, weight: .semibold), color: .systemGreen, alignment: .center)
+    let spark = UnifiedSparklineView()
+    let chevron = NSButton()
+    let expandContainer = UnifiedFlippedView()
+    private let iconView = NSImageView()
+    private let hairline = UnifiedHairline()
+    var expanded: Bool = false
+    var onToggle: (() -> Void)?
+    var detailHeight: CGFloat = 0
+    private let expandable: Bool
+    
+    init(module: String, label: String, icon: String, expandable: Bool) {
+        self.module = module
+        self.expandable = expandable
+        super.init(frame: .zero)
+        self.wantsLayer = true
+        self.layer?.cornerRadius = 8
+        self.iconView.image = unifiedSymbol(icon)
+        self.iconView.contentTintColor = .controlAccentColor
+        self.addSubview(self.iconView)
+        self.nameLabel.stringValue = label
+        self.addSubview(self.nameLabel)
+        self.addSubview(self.spark)
+        self.addSubview(self.valueField)
+        self.addSubview(self.glyphField)
+        self.addSubview(self.hairline)
+        if expandable {
+            self.chevron.isBordered = false
+            self.chevron.imageScaling = .scaleProportionallyDown
+            self.chevron.image = unifiedSymbol("chevron.right", scale: .small)
+            self.chevron.contentTintColor = .secondaryLabelColor
+            self.chevron.target = self
+            self.chevron.action = #selector(self.toggle)
+            self.addSubview(self.chevron)
+            self.addSubview(self.expandContainer)
+            self.expandContainer.isHidden = true
+            // The whole header row toggles the section — not just the
+            // 14pt chevron. Clicks in the detail area (fan sliders, mode
+            // buttons) and on the chevron itself are excluded.
+            let tap = NSClickGestureRecognizer(target: self, action: #selector(self.headerTapped(_:)))
+            self.addGestureRecognizer(tap)
+        }
+    }
+    
+    /// QA hook: drives the exact same toggle path as a header tap.
+    func simulateHeaderTap() {
+        guard self.expandable else { return }
+        self.onToggle?()
+    }
+    
+    @objc private func headerTapped(_ recognizer: NSClickGestureRecognizer) {
+        let point = recognizer.location(in: self)
+        guard point.y <= 46 else { return }
+        guard !self.chevron.frame.contains(point) else { return }
+        self.onToggle?()
+    }
+    
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+    
+    @objc private func toggle() {
+        self.onToggle?()
+    }
+    
+    func setExpanded(_ state: Bool) {
+        guard state != self.expanded else { return }
+        self.expanded = state
+        self.expandContainer.isHidden = !state
+        self.chevron.image = unifiedSymbol(state ? "chevron.down" : "chevron.right", scale: .small)
+        self.chevron.contentTintColor = .secondaryLabelColor
+        self.applyChevronRotation(state)
+        self.layoutRow()
+    }
+    
+    /// 0°→90° on expand (and back), 90ms layer transform — the native
+    /// disclosure convention. Instant when motion is gated.
+    private func applyChevronRotation(_ expanded: Bool) {
+        let rotation: CGFloat = expanded ? .pi / 2 : 0
+        self.chevron.wantsLayer = true
+        if UnifiedMotion.enabled {
+            let animation = CABasicAnimation(keyPath: "transform.rotation.z")
+            animation.toValue = rotation
+            animation.duration = 0.09
+            animation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            self.chevron.layer?.add(animation, forKey: "rotate")
+        }
+        self.chevron.layer?.transform = CATransform3DMakeRotation(rotation, 0, 0, 1)
+    }
+    
+    override func updateLayer() {
+        guard self.wantsLayer else { return }
+        self.effectiveAppearance.performAsCurrentDrawingAppearance {
+            switch self.statusLevel {
+            case 1:
+                self.layer?.backgroundColor = UnifiedTokens.amberSoft.cgColor
+            case 2:
+                self.layer?.backgroundColor = UnifiedTokens.redSoft.cgColor
+            default:
+                self.layer?.backgroundColor = NSColor.clear.cgColor
+            }
+        }
+    }
+    
+    /// Redundant encoding for attention: tint plus glyph, never hue alone.
+    func setStatus(level: Int) {
+        guard level != self.statusLevel else { return }
+        self.statusLevel = level
+        if level == 0 {
+            self.glyphField.stringValue = "✓"
+            self.glyphField.textColor = UnifiedTokens.ok
+        } else {
+            self.glyphField.stringValue = "▲"
+            self.glyphField.textColor = level == 2 ? UnifiedTokens.redInk : UnifiedTokens.amberInk
+        }
+        self.updateLayer()
+    }
+    
+    var totalHeight: CGFloat {
+        46 + (self.expanded ? self.detailHeight + 8 : 0)
+    }
+    
+    func layoutRow() {
+        let w = self.bounds.width
+        self.hairline.frame = NSRect(x: 0, y: 0, width: w, height: 1)
+        self.iconView.frame = NSRect(x: 4, y: 15, width: 16, height: 16)
+        self.nameLabel.frame = NSRect(x: 26, y: 15, width: 70, height: 16)
+        self.chevron.frame = NSRect(x: w - 4 - 14, y: 16, width: 14, height: 14)
+        // Fixed-width value slot: the text is right-aligned inside it, so
+        // changing values ("6.1K↓ 17K↑" ↔ "2.0K↓ 1.0K↑") resize nothing —
+        // with a text-sized frame every tick moved the field and the
+        // sparkline with it, which read as constant flicker.
+        let valueWidth: CGFloat = 84
+        self.valueField.frame = NSRect(x: w - 4 - 14 - 8 - valueWidth, y: 15, width: valueWidth, height: 16)
+        // Status glyph placement: the chevron owns the trailing slot on
+        // expandable rows, so the glyph (✓/▲) sits just LEFT of the value
+        // in BOTH collapsed and expanded states — the two glyphs never
+        // share a slot. Non-expandable rows keep the glyph in the
+        // trailing slot.
+        // Status glyph placement: the chevron owns the trailing slot on
+        // expandable rows, so the glyph (✓/▲) sits just LEFT of the value
+        // in BOTH collapsed and expanded states — the two glyphs never
+        // share a slot. Non-expandable rows keep the glyph in the
+        // trailing slot.
+        let sparkX: CGFloat = 100
+        let sparkEnd: CGFloat
+        if self.expandable {
+            self.glyphField.isHidden = false
+            self.glyphField.frame = NSRect(x: self.valueField.frame.origin.x - 18, y: 16, width: 14, height: 14)
+            sparkEnd = self.glyphField.frame.origin.x - 8
+        } else {
+            self.glyphField.isHidden = false
+            self.glyphField.frame = NSRect(x: w - 4 - 14, y: 16, width: 14, height: 14)
+            sparkEnd = self.valueField.frame.origin.x - 8
+        }
+        self.spark.frame = NSRect(x: sparkX, y: 9, width: max(sparkEnd - sparkX, 40), height: 28)
+        self.expandContainer.frame = NSRect(x: 8, y: 50, width: w - 16, height: self.detailHeight)
+    }
+}
