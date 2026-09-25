@@ -413,9 +413,11 @@ final class UnifiedPopupController {
             NSLog("[QA] menu watts: %@", watts ?? "n/a")
             let rawPPBR = Kit.SMC.shared.getValue("PPBR")
             let rawPDTR = Kit.SMC.shared.getValue("PDTR")
-            NSLog("[QA] watts raw: PPBR=%@ PDTR=%@",
+            let rawSI10 = Kit.SMC.shared.getValue("si10")
+            NSLog("[QA] watts raw: PPBR=%@ PDTR=%@ SI10=%@",
                   rawPPBR.map { String($0) } ?? "n/a",
-                  rawPDTR.map { String($0) } ?? "n/a")
+                  rawPDTR.map { String($0) } ?? "n/a",
+                  rawSI10.map { String($0) } ?? "n/a")
         }
         
         let next = watts ?? ""

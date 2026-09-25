@@ -246,6 +246,27 @@ elif [ "${WATTS_SAMPLES:-0}" -ge 2 ]; then
 else
   fail "menu watts: only ${WATTS_SAMPLES:-0} samples in 15s"
 fi
+
+# Liveness: format + cadence cannot tell a pinned number from a live one
+# (both stuck-at-84W delivery-pinning and stuck-at-52W 30-60s telemetry
+# feeds passed them). Step the CPU load with 4 yes jobs and require the
+# composed readout to actually move.
+LOAD_PIDS=""
+for i in 1 2 3 4; do
+  yes > /dev/null & LOAD_PIDS="$LOAD_PIDS $!"
+done
+sleep 8
+for pid in $LOAD_PIDS; do kill "$pid" 2>/dev/null; done
+sleep 2
+WATTS_VALUES=$(grep -E "\[QA\] menu watts: -?[0-9]+(\.[0-9])?W" "$QA_LOG" | sed -E 's/.*\[QA\] menu watts: (-?[0-9]+(\.[0-9]+)?)W$/\1/')
+WATTS_SPREAD=$(printf '%s\n' "$WATTS_VALUES" | python3 -c "import sys; v=[float(x) for x in sys.stdin if x.strip()]; print(f\"{max(v)-min(v):.1f}\" if len(v)>=2 else \"\")" 2>/dev/null)
+if [ -z "$WATTS_SPREAD" ]; then
+  fail "menu watts liveness: no numeric samples captured around the load step"
+else
+  python3 -c "exit(0 if float('$WATTS_SPREAD') >= 4.0 else 1)" \
+    && pass "menu watts liveness (spread ${WATTS_SPREAD}W across 4x yes step)" \
+    || fail "menu watts pinned (spread ${WATTS_SPREAD}W across 4x yes step — readout not tracking load)"
+fi
 quit_phase "phase 5 (menu watts)"
 
 # --- helper contract ---
