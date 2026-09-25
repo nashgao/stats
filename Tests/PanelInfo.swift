@@ -144,4 +144,44 @@ final class PanelInfoTests: XCTestCase {
         XCTAssertEqual(UnifiedInfoFormatters.clock(135), "2:15")
         XCTAssertEqual(UnifiedInfoFormatters.clock(1440), "24:00")
     }
+
+    // MARK: - menu power readout
+
+    private struct FakePowerProbe: MenuPowerProbing {
+        var values: [String: Double]
+        var battery = false
+        var charging = false
+        func smc(_ key: String) -> Double? { self.values[key] }
+        func onBattery() -> Bool { self.battery }
+        func chargingOnAC() -> Bool { self.charging }
+    }
+
+    /// The state × key-availability matrix the stuck-readout regressions
+    /// rode through: each cell pins the source table in Stats/UnifiedPopup.swift.
+    func testMenuPowerReadoutMatrix() {
+        // on battery: PPBR drain, as a magnitude
+        var probe = FakePowerProbe(values: ["PPBR": -42.5, "PDTR": 84.4], battery: true)
+        XCTAssertEqual(MenuPowerReadout(probe: probe).watts(), 42.5)
+        // on battery, PPBR missing: no readout at all
+        probe = FakePowerProbe(values: ["PDTR": 84.4], battery: true)
+        XCTAssertNil(MenuPowerReadout(probe: probe).watts())
+        // AC, not charging: PDTR is the total system draw
+        probe = FakePowerProbe(values: ["PPBR": 1.5, "PDTR": 30.2])
+        XCTAssertEqual(MenuPowerReadout(probe: probe).watts(), 30.2)
+        // AC, not charging, PDTR absent: PPBR fallback (magnitude)
+        probe = FakePowerProbe(values: ["PPBR": 1.5])
+        XCTAssertEqual(MenuPowerReadout(probe: probe).watts(), 1.5)
+        // AC, not charging, PDTR zero (not > 0): same fallback
+        probe = FakePowerProbe(values: ["PPBR": 1.5, "PDTR": 0])
+        XCTAssertEqual(MenuPowerReadout(probe: probe).watts(), 1.5)
+        // AC, charging: si10 (live SoC power) wins over the pinned PDTR
+        probe = FakePowerProbe(values: ["PPBR": 0.9, "PDTR": 84.4, "si10": 27.3], charging: true)
+        XCTAssertEqual(MenuPowerReadout(probe: probe).watts(), 27.3)
+        // AC, charging, si10 missing: PDTR fallback
+        probe = FakePowerProbe(values: ["PPBR": 0.9, "PDTR": 84.4], charging: true)
+        XCTAssertEqual(MenuPowerReadout(probe: probe).watts(), 84.4)
+        // AC, charging, si10 non-positive: PDTR fallback
+        probe = FakePowerProbe(values: ["PPBR": 0.9, "PDTR": 84.4, "si10": 0], charging: true)
+        XCTAssertEqual(MenuPowerReadout(probe: probe).watts(), 84.4)
+    }
 }
