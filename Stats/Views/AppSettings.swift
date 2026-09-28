@@ -135,9 +135,16 @@ class ApplicationSettings: NSStackView {
                 action: #selector(self.toggleAttentionAlerts),
                 state: Store.shared.bool(key: AttentionNotifier.settingKey, defaultValue: true)
             )),
-            PreferencesRow(localizedString("Show power usage in menu bar"), component: switchView(
-                action: #selector(self.toggleMenuPower),
-                state: Store.shared.bool(key: "unified_widget_power", defaultValue: false)
+            PreferencesRow(localizedString("Menu bar readout"), component: selectView(
+                action: #selector(self.toggleMenuReadout),
+                items: [
+                    KeyValue_t(key: MenuReadoutPreset.off.rawValue, value: "Off"),
+                    KeyValue_t(key: MenuReadoutPreset.watts.rawValue, value: "Watts"),
+                    KeyValue_t(key: MenuReadoutPreset.battery.rawValue, value: "Battery %"),
+                    KeyValue_t(key: MenuReadoutPreset.wattsBattery.rawValue, value: "Watts + Battery %"),
+                    KeyValue_t(key: MenuReadoutPreset.batteryTime.rawValue, value: "Battery % + Time")
+                ],
+                selected: MenuReadoutSelection.current().rawValue
             ))
         ]))
         
@@ -455,11 +462,14 @@ class ApplicationSettings: NSStackView {
         }
     }
     
-    /// Live system draw ("128W" / "29W") next to the unified menu bar
-    /// item. The unified controller reads the key on its 1s tick, so the
-    /// switch takes effect without a restart or a notification.
-    @objc private func toggleMenuPower(_ sender: NSButton) {
-        Store.shared.set(key: "unified_widget_power", value: sender.state == .on)
+    /// Selectable readout next to the unified menu bar item. The unified
+    /// controller re-reads the preset on its 1s tick, so the picker takes
+    /// effect without a restart; the new key wins over the legacy
+    /// unified_widget_power boolean by construction.
+    @objc private func toggleMenuReadout(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String,
+              let preset = MenuReadoutPreset(rawValue: raw) else { return }
+        Store.shared.set(key: MenuReadoutSelection.storeKey, value: preset.rawValue)
     }
     
     // MARK: - fan control setup
