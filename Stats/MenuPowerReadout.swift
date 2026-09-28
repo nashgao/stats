@@ -95,6 +95,94 @@ struct MenuPowerReadout {
     }
 }
 
+/// Selectable menu-bar readout presets for the unified status item
+/// (MEN-1): which live quantities the 1s tick composes into the title.
+enum MenuReadoutPreset: String {
+    case off
+    case watts
+    case battery
+    case wattsBattery = "watts_battery"
+    case batteryTime = "battery_time"
+}
+
+/// Storage boundary for the preset: the Store key, the legacy boolean it
+/// replaces, and the read-through migration between them. Read-through
+/// means nothing writes the legacy key back — when the new key is absent
+/// but `unified_widget_power` is true, the preset is watts; once the new
+/// key holds a valid value it wins over the legacy boolean.
+enum MenuReadoutSelection {
+    static let storeKey = "unified_menu_readout"
+    static let legacyPowerKey = "unified_widget_power"
+
+    static func current() -> MenuReadoutPreset {
+        let stored = Store.shared.string(key: self.storeKey, defaultValue: "")
+        if let preset = MenuReadoutPreset(rawValue: stored) {
+            return preset
+        }
+        if Store.shared.bool(key: self.legacyPowerKey, defaultValue: false) {
+            return .watts
+        }
+        return .off
+    }
+}
+
+/// Pure composer for the selectable menu-bar readout: preset + live
+/// inputs -> title segments, no I/O. The status-item tick gathers the
+/// inputs (watts via MenuPowerReadout; battery values via
+/// Battery.lastKnownUsage — the same sample the unified panel's Battery
+/// row renders) and this struct decides which segments exist. At most
+/// two segments per preset, joined with " · "; a preset whose inputs
+/// are all missing yields no segments, which the tick renders as the
+/// glyph-only item.
+struct MenuReadoutComposer {
+    struct Input {
+        var watts: Double?
+        var batteryLevel: Double?
+        var timeToEmptyMinutes: Int?
+        var isBatteryPowered: Bool
+    }
+
+    /// Title segments for the preset. Missing inputs drop their segment.
+    static func segments(preset: MenuReadoutPreset, input: Input) -> [String] {
+        let percent = input.batteryLevel.map { self.percent($0) }
+        switch preset {
+        case .off:
+            return []
+        case .watts:
+            return input.watts.map { [UnifiedInfoFormatters.menuWatts($0)] } ?? []
+        case .battery:
+            return percent.map { [$0] } ?? []
+        case .wattsBattery:
+            var segments: [String] = []
+            if let watts = input.watts {
+                segments.append(UnifiedInfoFormatters.menuWatts(watts))
+            }
+            if let percent {
+                segments.append(percent)
+            }
+            return segments
+        case .batteryTime:
+            guard let percent else { return [] }
+            var segments = [percent]
+            if input.isBatteryPowered, let minutes = input.timeToEmptyMinutes, minutes > 0 {
+                segments.append(UnifiedInfoFormatters.clock(minutes))
+            }
+            return segments
+        }
+    }
+
+    /// Joined title; "" when no segment exists.
+    static func title(preset: MenuReadoutPreset, input: Input) -> String {
+        self.segments(preset: preset, input: input).joined(separator: " · ")
+    }
+
+    /// 0...1 -> "67%". Rounded, not truncated: Int(0.67 * 100) is 66 —
+    /// the classic float trap — and Battery's own telemetry rounds.
+    static func percent(_ level: Double) -> String {
+        "\(Int((min(max(level, 0), 1) * 100).rounded()))%"
+    }
+}
+
 /// Field-report bundle for "the watts number looks wrong" reports:
 /// power state, fresh SMC key reads, and the recent composed readout —
 /// the data needed to classify stuck / pinned / garbage without a

@@ -18,6 +18,7 @@
 import Cocoa
 import Kit
 import Sensors
+import Battery
 import IOKit.ps
 
 private func withoutImplicitAnimation(_ block: () -> Void) {
@@ -42,11 +43,11 @@ final class UnifiedPopupController {
     /// 1s tick only rebuilds the attributed string when the number
     /// actually changed.
     private var menuPowerState: String = ""
-    /// Whether the watts readout currently owns the status item. While
-    /// true, the attention glyph is suppressed (menu bar shows watts
-    /// only); when watts turn off, the glyph returns so the item stays
-    /// visible.
-    private var wattsShown = false
+    /// Whether the readout text currently owns the status item. While
+    /// true, the attention glyph is suppressed (menu bar shows the
+    /// composed title only); when the text goes away, the glyph returns
+    /// so the item stays visible.
+    private var textShown = false
     
     /// QA fan-cycle state (STATS_QA_FAN_CYCLE=1): latest real specs and
     /// speed of fan 0 from the sensors reader, captured off
@@ -298,7 +299,7 @@ final class UnifiedPopupController {
         // AppleSMC connection once at launch and sleep/wake can leave it
         // stale (reads against the old port, watts frozen on the
         // pre-sleep value), so reopen it on wake and force the glyph and
-        // watts to re-evaluate immediately instead of waiting for the
+        // readout to re-evaluate immediately instead of waiting for the
         // next value change. Workspace notifications arrive on the main
         // thread; setupStatusItem's nil-guard makes this once per launch.
         NotificationCenter.default.addObserver(
@@ -310,7 +311,7 @@ final class UnifiedPopupController {
         if self.glyphTimer == nil {
             self.glyphTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
                 self?.updateGlyph()
-                self?.updateMenuPower()
+                self?.updateMenuReadout()
                 if SMCHelper.shared.reachabilityRefreshDue(maxAge: 5) {
                     SMCHelper.shared.refreshReachability()
                 }
@@ -327,7 +328,7 @@ final class UnifiedPopupController {
             }
         }
         self.updateGlyph()
-        self.updateMenuPower()
+        self.updateMenuReadout()
         // Unified mode hides the module widgets, so nothing else may touch
         // the helper; establish the XPC connection here (idempotent, no-op
         // unless the daemon is registered and loaded).
@@ -339,14 +340,14 @@ final class UnifiedPopupController {
     
     /// Wake handler (registered with the status item): reopen the SMC
     /// connection and reset the cached menu-bar states so updateGlyph()
-    /// and updateMenuPower() repaint even when the attention state and
-    /// the watts number did not change. Runs on the main thread.
+    /// and updateMenuReadout() repaint even when the attention state and
+    /// the composed title did not change. Runs on the main thread.
     @objc private func systemDidWake(_ notification: Notification) {
         Kit.SMC.shared.reconnect()
         self.menuPowerState = ""
         self.glyphState = ""
         self.updateGlyph()
-        self.updateMenuPower()
+        self.updateMenuReadout()
     }
     
     /// Adaptive glyph + tint, evaluated on a ~1s cadence from the shared
@@ -390,31 +391,32 @@ final class UnifiedPopupController {
         button.contentTintColor = nil
     }
     
-    /// Live watts readout next to the unified status item, evaluated on the
-    /// same ~1s cadence as updateGlyph. Opt-in via unified_widget_power; it
-    /// is the menu bar's entire content — the attention glyph is suppressed
-    /// while watts show (button.image cleared below, after updateGlyph's
-    /// pass in the same tick) and restored when watts turn off, so a
-    /// watts-off item never becomes invisible. Battery level + time live
-    /// in the unified panel's Battery row, not here. STATS_QA_MENU_WATTS=1
-    /// forces the segment on and logs the composed title every tick for the
-    /// smoke test. Values are read fresh from the SMC each tick, by
-    /// power state (see currentPowerDraw): battery drain (PPBR) on
+    /// Live readout next to the unified status item, evaluated on the same
+    /// ~1s cadence as updateGlyph. The preset (MenuReadoutSelection — off /
+    /// watts / battery / watts_battery / battery_time) picks the segments
+    /// and MenuReadoutComposer composes them; the legacy
+    /// unified_widget_power=true reads through as the watts preset. The
+    /// readout is the menu bar's entire content — the attention glyph is
+    /// suppressed while text shows (button.image cleared below, after
+    /// updateGlyph's pass in the same tick) and restored when the text
+    /// goes away, so an off item never becomes invisible. STATS_QA_MENU_WATTS=1
+    /// forces the watts preset and logs the composed title every tick for
+    /// the smoke test. Watts are read fresh from the SMC each tick, by
+    /// power state (see MenuPowerReadout): battery drain (PPBR) on
     /// battery; total system draw (PDTR) on AC when not charging; SoC
     /// power (si10) on AC while charging, because the adapter sits at
-    /// its delivery limit then and PDTR pins at a constant. Shown as a
-    /// magnitude: the sign was cryptic without the panel's battery
-    /// label.
-    private func updateMenuPower() {
+    /// its delivery limit then and PDTR pins at a constant. Battery
+    /// values come from Battery.lastKnownUsage — the same sample the
+    /// unified panel's Battery row renders (see UnifiedPanelContent).
+    private func updateMenuReadout() {
         guard let item = self.statusItem, let button = item.button else { return }
         let forced = ProcessInfo.processInfo.environment["STATS_QA_MENU_WATTS"] == "1"
-        let wattsEnabled = forced || Store.shared.bool(key: "unified_widget_power", defaultValue: false)
-        
+        let preset: MenuReadoutPreset = forced ? .watts : MenuReadoutSelection.current()
+
         let draw = self.menuPower.watts()
-        let watts = wattsEnabled ? draw.map({ UnifiedInfoFormatters.menuWatts($0) }) : nil
-        
+
         if forced {
-            NSLog("[QA] menu watts: %@", watts ?? "n/a")
+            NSLog("[QA] menu watts: %@", draw.map { UnifiedInfoFormatters.menuWatts($0) } ?? "n/a")
             let rawPPBR = Kit.SMC.shared.getValue("PPBR")
             let rawPDTR = Kit.SMC.shared.getValue("PDTR")
             let rawSI10 = Kit.SMC.shared.getValue("si10")
@@ -423,8 +425,15 @@ final class UnifiedPopupController {
                   rawPDTR.map { String($0) } ?? "n/a",
                   rawSI10.map { String($0) } ?? "n/a")
         }
-        
-        let next = watts ?? ""
+
+        let usage = (modules.first(where: { $0 is Battery }) as? Battery)?.lastKnownUsage
+        let input = MenuReadoutComposer.Input(
+            watts: draw,
+            batteryLevel: usage?.level,
+            timeToEmptyMinutes: usage?.timeToEmpty,
+            isBatteryPowered: usage?.isBatteryPowered ?? false
+        )
+        let next = MenuReadoutComposer.title(preset: preset, input: input)
         if !next.isEmpty {
             PowerDiagnostics.record(watts: next)
         }
@@ -433,8 +442,8 @@ final class UnifiedPopupController {
             if item.length != NSStatusItem.squareLength {
                 item.length = NSStatusItem.squareLength
             }
-            if self.wattsShown {
-                self.wattsShown = false
+            if self.textShown {
+                self.textShown = false
                 // glyphState is keyed on the attention state, which never
                 // changed while the glyph was suppressed — clear it so
                 // updateGlyph repaints the glyph now.
@@ -444,10 +453,10 @@ final class UnifiedPopupController {
             self.menuPowerState = ""
             return
         }
-        // Watts own the item: keep the glyph suppressed even on ticks
-        // where the number did not change (updateGlyph may just have
+        // Text owns the item: keep the glyph suppressed even on ticks
+        // where the title did not change (updateGlyph may just have
         // repainted it for an attention change — see the timer order).
-        self.wattsShown = true
+        self.textShown = true
         button.image = nil
         guard next != self.menuPowerState else { return }
         self.menuPowerState = next

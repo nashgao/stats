@@ -184,4 +184,106 @@ final class PanelInfoTests: XCTestCase {
         probe = FakePowerProbe(values: ["PPBR": 0.9, "PDTR": 84.4, "si10": 0], charging: true)
         XCTAssertEqual(MenuPowerReadout(probe: probe).watts(), 84.4)
     }
+
+    // MARK: - menu readout composer
+
+    private func readoutInput(
+        watts: Double? = 49.4,
+        level: Double? = 0.67,
+        minutes: Int? = 152,
+        onBattery: Bool = true
+    ) -> MenuReadoutComposer.Input {
+        MenuReadoutComposer.Input(
+            watts: watts,
+            batteryLevel: level,
+            timeToEmptyMinutes: minutes,
+            isBatteryPowered: onBattery
+        )
+    }
+
+    /// The preset × input-availability matrix for the selectable menu-bar
+    /// readout: which segments each preset composes, and which drop out
+    /// when an input is missing.
+    func testMenuReadoutComposerMatrix() {
+        let full = self.readoutInput()
+        // every preset at full inputs
+        XCTAssertEqual(MenuReadoutComposer.segments(preset: .off, input: full), [])
+        XCTAssertEqual(MenuReadoutComposer.segments(preset: .watts, input: full), ["49W"])
+        XCTAssertEqual(MenuReadoutComposer.segments(preset: .battery, input: full), ["67%"])
+        XCTAssertEqual(MenuReadoutComposer.segments(preset: .wattsBattery, input: full), ["49W", "67%"])
+        XCTAssertEqual(MenuReadoutComposer.segments(preset: .batteryTime, input: full), ["67%", "2:32"])
+        // joined title uses the " · " separator
+        XCTAssertEqual(MenuReadoutComposer.title(preset: .wattsBattery, input: full), "49W · 67%")
+        XCTAssertEqual(MenuReadoutComposer.title(preset: .batteryTime, input: full), "67% · 2:32")
+
+        // watts missing: watts-only preset yields nothing; mixed preset
+        // keeps its battery segment
+        let noWatts = self.readoutInput(watts: nil)
+        XCTAssertEqual(MenuReadoutComposer.segments(preset: .watts, input: noWatts), [])
+        XCTAssertEqual(MenuReadoutComposer.title(preset: .watts, input: noWatts), "")
+        XCTAssertEqual(MenuReadoutComposer.segments(preset: .wattsBattery, input: noWatts), ["67%"])
+
+        // level missing: percent segment drops everywhere, including the
+        // whole battery_time preset (percent is its anchor)
+        let noLevel = self.readoutInput(level: nil)
+        XCTAssertEqual(MenuReadoutComposer.segments(preset: .battery, input: noLevel), [])
+        XCTAssertEqual(MenuReadoutComposer.segments(preset: .wattsBattery, input: noLevel), ["49W"])
+        XCTAssertEqual(MenuReadoutComposer.segments(preset: .batteryTime, input: noLevel), [])
+
+        // battery_time on AC: percent only, even with an estimate present
+        let onAC = self.readoutInput(onBattery: false)
+        XCTAssertEqual(MenuReadoutComposer.segments(preset: .batteryTime, input: onAC), ["67%"])
+        // on battery, the time segment needs minutes > 0
+        XCTAssertEqual(MenuReadoutComposer.segments(preset: .batteryTime, input: self.readoutInput(minutes: 0)), ["67%"])
+        XCTAssertEqual(MenuReadoutComposer.segments(preset: .batteryTime, input: self.readoutInput(minutes: nil)), ["67%"])
+        // time formatting is h:mm
+        XCTAssertEqual(MenuReadoutComposer.segments(preset: .batteryTime, input: self.readoutInput(minutes: 9)), ["67%", "0:09"])
+        // percent rounds, not truncates (0.67 * 100 is 66.999... as a Double)
+        XCTAssertEqual(MenuReadoutComposer.segments(preset: .battery, input: self.readoutInput(level: 0.995)), ["100%"])
+    }
+
+    /// Read-through migration from the legacy watts boolean. The tests run
+    /// inside the Stats test host, so the real Store domain is snapshotted
+    /// and restored around the mutations.
+    func testMenuReadoutSelectionMigration() {
+        let key = MenuReadoutSelection.storeKey
+        let legacyKey = MenuReadoutSelection.legacyPowerKey
+        let hadNew = Store.shared.exist(key: key)
+        let oldNew = Store.shared.string(key: key, defaultValue: "")
+        let hadLegacy = Store.shared.exist(key: legacyKey)
+        let oldLegacy = Store.shared.bool(key: legacyKey, defaultValue: false)
+        defer {
+            if hadNew { Store.shared.set(key: key, value: oldNew) } else { Store.shared.remove(key) }
+            if hadLegacy { Store.shared.set(key: legacyKey, value: oldLegacy) } else { Store.shared.remove(legacyKey) }
+        }
+
+        // default: nothing set -> off
+        Store.shared.remove(key)
+        Store.shared.remove(legacyKey)
+        XCTAssertEqual(MenuReadoutSelection.current(), .off)
+
+        // legacy boolean on, new key absent -> watts
+        Store.shared.set(key: legacyKey, value: true)
+        XCTAssertEqual(MenuReadoutSelection.current(), .watts)
+
+        // a valid new key wins over the legacy boolean
+        Store.shared.set(key: key, value: "battery")
+        XCTAssertEqual(MenuReadoutSelection.current(), .battery)
+
+        // every stored preset name parses
+        Store.shared.set(key: key, value: "off")
+        XCTAssertEqual(MenuReadoutSelection.current(), .off)
+        Store.shared.set(key: key, value: "watts")
+        XCTAssertEqual(MenuReadoutSelection.current(), .watts)
+        Store.shared.set(key: key, value: "watts_battery")
+        XCTAssertEqual(MenuReadoutSelection.current(), .wattsBattery)
+        Store.shared.set(key: key, value: "battery_time")
+        XCTAssertEqual(MenuReadoutSelection.current(), .batteryTime)
+
+        // unknown value falls through to the legacy boolean, then off
+        Store.shared.set(key: key, value: "bogus")
+        XCTAssertEqual(MenuReadoutSelection.current(), .watts)
+        Store.shared.remove(legacyKey)
+        XCTAssertEqual(MenuReadoutSelection.current(), .off)
+    }
 }
