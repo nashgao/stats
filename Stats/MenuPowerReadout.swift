@@ -140,13 +140,21 @@ enum MenuReadoutElement: String {
 /// for widget lists. The structural cap (at most two elements) is
 /// enforced only at the write boundary: the menu bar item is one or two
 /// segments wide, and the stacked layout renders one segment per line.
-/// Reads migrate read-through: a non-empty elements key wins, even when
-/// every member is unknown (unknown members are skipped, which can yield
-/// an empty set); an empty stored value falls through to the MEN-1
-/// preset key, below that to the legacy watts boolean, and defaults to
-/// the empty set.
+/// The empty set is stored as the reserved "off" sentinel so "uncheck
+/// all" survives read-through migration: a stored sentinel maps to []
+/// WITHOUT falling through, unlike a stored "" — which still falls
+/// through, treating absent and empty as "no preference expressed".
+/// Reads migrate read-through: a non-empty elements key wins (unknown
+/// members are skipped, which can yield an empty set); below the
+/// elements key the MEN-1 preset mapping, below that the legacy watts
+/// boolean, default the empty set.
 enum MenuReadoutElements {
     static let storeKey = "unified_menu_readout_elements"
+    /// Reserved raw value for the explicit off state (save([])). Not a
+    /// MenuReadoutElement rawValue, so it can never appear in a real
+    /// element list; anywhere else in a stored list it parses as an
+    /// unknown member and is skipped.
+    static let offSentinel = "off"
 
     /// The MEN-1 presets are exactly the subsets the old composer
     /// supported; the preset mapping in the migration chain runs through
@@ -162,19 +170,24 @@ enum MenuReadoutElements {
     }
 
     /// Write boundary: dedup, keep at most the first two, store the
-    /// comma-separated raw values.
+    /// comma-separated raw values. The empty set persists as the "off"
+    /// sentinel so it reads back as off instead of falling through.
     static func save(_ elements: [MenuReadoutElement]) {
         var kept: [MenuReadoutElement] = []
         for element in elements where !kept.contains(element) {
             kept.append(element)
             if kept.count == 2 { break }
         }
-        Store.shared.set(key: self.storeKey, value: kept.map { $0.rawValue }.joined(separator: ","))
+        let raw = kept.isEmpty ? self.offSentinel : kept.map { $0.rawValue }.joined(separator: ",")
+        Store.shared.set(key: self.storeKey, value: raw)
     }
 
     static func current() -> [MenuReadoutElement] {
         let stored = Store.shared.string(key: self.storeKey, defaultValue: "")
         if !stored.isEmpty {
+            if stored == self.offSentinel {
+                return []
+            }
             return stored.split(separator: ",").compactMap { MenuReadoutElement(rawValue: String($0)) }
         }
         return self.elements(for: MenuReadoutSelection.current())

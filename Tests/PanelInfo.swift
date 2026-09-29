@@ -349,6 +349,22 @@ final class PanelInfoTests: XCTestCase {
         Store.shared.set(key: key, value: "")
         Store.shared.set(key: presetKey, value: "battery")
         XCTAssertEqual(MenuReadoutElements.current(), [.battery])
+
+        // the explicit off state: the sentinel reads back as [] WITHOUT
+        // falling through to the legacy bool or preset key
+        Store.shared.set(key: presetKey, value: "watts")
+        Store.shared.set(key: legacyKey, value: true)
+        Store.shared.set(key: key, value: MenuReadoutElements.offSentinel)
+        XCTAssertEqual(MenuReadoutElements.current(), [])
+
+        // save([]) writes the sentinel — "uncheck all" survives migration
+        MenuReadoutElements.save([])
+        XCTAssertEqual(Store.shared.string(key: key, defaultValue: ""), MenuReadoutElements.offSentinel)
+        XCTAssertEqual(MenuReadoutElements.current(), [])
+
+        // a later real selection overwrites the sentinel
+        MenuReadoutElements.save([.battery])
+        XCTAssertEqual(MenuReadoutElements.current(), [.battery])
     }
 
     /// The structural cap lives at the write boundary: more than two
@@ -376,9 +392,11 @@ final class PanelInfoTests: XCTestCase {
         XCTAssertEqual(Store.shared.string(key: key, defaultValue: ""), "time")
         XCTAssertEqual(MenuReadoutElements.current(), [.time])
 
-        // the empty set persists as "" — which reads back as fall-through
+        // the empty set persists as the "off" sentinel — an explicit off
+        // state, not a fall-through
         MenuReadoutElements.save([])
-        XCTAssertEqual(Store.shared.string(key: key, defaultValue: "unset"), "")
+        XCTAssertEqual(Store.shared.string(key: key, defaultValue: "unset"), MenuReadoutElements.offSentinel)
+        XCTAssertEqual(MenuReadoutElements.current(), [])
     }
 
     /// Layout only changes the separator: " · " horizontal, newline
