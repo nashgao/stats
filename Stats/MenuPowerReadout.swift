@@ -127,22 +127,24 @@ enum MenuReadoutSelection {
     }
 }
 
-/// A single composable quantity in the menu-bar readout (DIS-1). The
-/// declaration order is the display order: watts, then battery, then time.
+/// A single composable quantity in the menu-bar readout (DIS-1, DIS-4).
+/// The declaration order is the display order: watts, then battery,
+/// then temperature, then time.
 enum MenuReadoutElement: String {
     case watts
     case battery
+    case temperature
     case time
 }
 
 /// Storage boundary for the element set (DIS-1): comma-separated raw
 /// values in a string key — the same idiom Kit/module/widget.swift uses
-/// for widget lists. The structural cap (at most two elements) is
-/// enforced only at the write boundary: the menu bar item is one or two
-/// segments wide, and the stacked layout renders one segment per line.
-/// The empty set is stored as the reserved "off" sentinel so "uncheck
-/// all" survives read-through migration: a stored sentinel maps to []
-/// WITHOUT falling through, unlike a stored "" — which still falls
+/// for widget lists. The structural cap (at most three elements) is
+/// enforced only at the write boundary: the menu bar item renders one
+/// to three segments, and the stacked layout renders one segment per
+/// line. The empty set is stored as the reserved "off" sentinel so
+/// "uncheck all" survives read-through migration: a stored sentinel maps
+/// to [] WITHOUT falling through, unlike a stored "" — which still falls
 /// through, treating absent and empty as "no preference expressed".
 /// Reads migrate read-through: a non-empty elements key wins (unknown
 /// members are skipped, which can yield an empty set); below the
@@ -169,14 +171,14 @@ enum MenuReadoutElements {
         }
     }
 
-    /// Write boundary: dedup, keep at most the first two, store the
+    /// Write boundary: dedup, keep at most the first three, store the
     /// comma-separated raw values. The empty set persists as the "off"
     /// sentinel so it reads back as off instead of falling through.
     static func save(_ elements: [MenuReadoutElement]) {
         var kept: [MenuReadoutElement] = []
         for element in elements where !kept.contains(element) {
             kept.append(element)
-            if kept.count == 2 { break }
+            if kept.count == 3 { break }
         }
         let raw = kept.isEmpty ? self.offSentinel : kept.map { $0.rawValue }.joined(separator: ",")
         Store.shared.set(key: self.storeKey, value: raw)
@@ -211,27 +213,33 @@ enum MenuReadoutLayoutSelection {
     }
 }
 
-/// Pure composer for the menu-bar readout (MEN-1, generalized by DIS-1):
-/// element subset + live inputs -> title segments, no I/O. The
-/// status-item tick gathers the inputs (watts via MenuPowerReadout;
+/// Pure composer for the menu-bar readout (MEN-1, generalized by DIS-1
+/// and DIS-4): element subset + live inputs -> title segments, no I/O.
+/// The status-item tick gathers the inputs (watts via MenuPowerReadout;
 /// battery values via Battery.lastKnownUsage — the same sample the
 /// unified panel's Battery row renders) and this struct decides which
 /// segments exist. A segment whose input is missing drops out; the
 /// element order defines the segment order. The subset is structurally
-/// capped at two (MenuReadoutElements.save) — horizontal renders them
-/// " · "-joined on one line, stacked newline-joined on two; no segments
+/// capped at three (MenuReadoutElements.save) — horizontal renders them
+/// " · "-joined on one line, stacked one segment per line; no segments
 /// at all renders as the glyph-only item.
 struct MenuReadoutComposer {
     struct Input {
         var watts: Double?
         var batteryLevel: Double?
+        /// Pre-formatted hottest temperature (e.g. "65°C"). The tick
+        /// reads it from the Sensors module so the composer stays pure
+        /// and the string matches the panel byte-for-byte.
+        var temperatureText: String?
         var timeToEmptyMinutes: Int?
         var isBatteryPowered: Bool
     }
 
     /// Title segments for an element subset. Missing inputs drop their
     /// segment; the time segment additionally requires battery power
-    /// with a positive estimate (it collapses on AC).
+    /// with a positive estimate (it collapses on AC). The temperature
+    /// segment has no power-state condition — it shows whenever the
+    /// tick provides the text.
     static func segments(elements: [MenuReadoutElement], input: Input) -> [String] {
         let percent = input.batteryLevel.map { self.percent($0) }
         return elements.compactMap { element in
@@ -240,6 +248,8 @@ struct MenuReadoutComposer {
                 return input.watts.map { UnifiedInfoFormatters.menuWatts($0) }
             case .battery:
                 return percent
+            case .temperature:
+                return input.temperatureText
             case .time:
                 guard input.isBatteryPowered, let minutes = input.timeToEmptyMinutes, minutes > 0 else { return nil }
                 return UnifiedInfoFormatters.clock(minutes)

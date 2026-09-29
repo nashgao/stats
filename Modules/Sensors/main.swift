@@ -98,9 +98,17 @@ public class Sensors: Module {
         }
     }
     
+    /// Latest sample delivered to the popup/panel path, exposed for
+    /// non-popup consumers (the unified menu readout). Mirrors
+    /// Battery.lastKnownUsage: set in usageCallback, so it reflects
+    /// exactly what the panel receives — nil until the first read,
+    /// unchanged while the module is disabled.
+    public private(set) var lastKnownList: Sensors_List?
+
     private func usageCallback(_ raw: Sensors_List?) {
         guard let value = raw, self.enabled else { return }
-        
+
+        self.lastKnownList = value
         self.popupView.usageCallback(value.sensors)
         NotificationCenter.default.post(name: .unifiedPanelSample, object: value)
         self.portalView.usageCallback(value.sensors)

@@ -190,12 +190,14 @@ final class PanelInfoTests: XCTestCase {
     private func readoutInput(
         watts: Double? = 49.4,
         level: Double? = 0.67,
+        temperature: String? = nil,
         minutes: Int? = 152,
         onBattery: Bool = true
     ) -> MenuReadoutComposer.Input {
         MenuReadoutComposer.Input(
             watts: watts,
             batteryLevel: level,
+            temperatureText: temperature,
             timeToEmptyMinutes: minutes,
             isBatteryPowered: onBattery
         )
@@ -367,7 +369,7 @@ final class PanelInfoTests: XCTestCase {
         XCTAssertEqual(MenuReadoutElements.current(), [.battery])
     }
 
-    /// The structural cap lives at the write boundary: more than two
+    /// The structural cap lives at the write boundary: more than three
     /// elements are truncated, duplicates collapse without consuming a
     /// slot, and the stored form is the comma-separated raw values.
     func testMenuReadoutElementsCap() {
@@ -378,9 +380,15 @@ final class PanelInfoTests: XCTestCase {
             if hadElements { Store.shared.set(key: key, value: oldElements) } else { Store.shared.remove(key) }
         }
 
-        MenuReadoutElements.save([.watts, .battery, .time])
-        XCTAssertEqual(Store.shared.string(key: key, defaultValue: ""), "watts,battery")
-        XCTAssertEqual(MenuReadoutElements.current(), [.watts, .battery])
+        // the cap keeps the first three of four
+        MenuReadoutElements.save([.watts, .battery, .temperature, .time])
+        XCTAssertEqual(Store.shared.string(key: key, defaultValue: ""), "watts,battery,temperature")
+        XCTAssertEqual(MenuReadoutElements.current(), [.watts, .battery, .temperature])
+
+        // three distinct elements fit — the raised DIS-4 cap
+        MenuReadoutElements.save([.battery, .temperature, .time])
+        XCTAssertEqual(Store.shared.string(key: key, defaultValue: ""), "battery,temperature,time")
+        XCTAssertEqual(MenuReadoutElements.current(), [.battery, .temperature, .time])
 
         // duplicates collapse without consuming a slot
         MenuReadoutElements.save([.battery, .battery, .time])
@@ -433,5 +441,53 @@ final class PanelInfoTests: XCTestCase {
             MenuReadoutComposer.title(elements: [.watts, .battery], input: full, layout: .stacked),
             "49W\n67%"
         )
+    }
+
+    /// Temperature segment (DIS-4): included iff the element is selected
+    /// AND the tick provided the pre-formatted text; it sits between
+    /// battery and time in display order and has no power-state
+    /// condition.
+    func testMenuReadoutComposerTemperature() {
+        // present when text is provided; three elements join " · "
+        let withTemp = self.readoutInput(watts: 44, level: 1.0, temperature: "65°C")
+        XCTAssertEqual(
+            MenuReadoutComposer.segments(elements: [.watts, .battery, .temperature], input: withTemp),
+            ["44W", "100%", "65°C"]
+        )
+        XCTAssertEqual(
+            MenuReadoutComposer.title(elements: [.watts, .battery, .temperature], input: withTemp, layout: .horizontal),
+            "44W · 100% · 65°C"
+        )
+
+        // nil text drops only the temperature segment
+        let noTemp = self.readoutInput(watts: 44, level: 1.0)
+        XCTAssertEqual(
+            MenuReadoutComposer.segments(elements: [.watts, .battery, .temperature], input: noTemp),
+            ["44W", "100%"]
+        )
+
+        // text provided but the element not selected: no segment
+        XCTAssertEqual(
+            MenuReadoutComposer.segments(elements: [.watts, .battery, .time], input: withTemp),
+            ["44W", "100%", "2:32"]
+        )
+
+        // display order puts temperature between battery and time
+        let full = self.readoutInput(temperature: "65°C")
+        XCTAssertEqual(
+            MenuReadoutComposer.segments(elements: [.watts, .battery, .temperature, .time], input: full),
+            ["49W", "67%", "65°C", "2:32"]
+        )
+
+        // a selected temperature with no data skips in place
+        XCTAssertEqual(
+            MenuReadoutComposer.segments(elements: [.watts, .battery, .temperature, .time], input: self.readoutInput()),
+            ["49W", "67%", "2:32"]
+        )
+
+        // no AC/battery condition: shown on AC too
+        let onAC = self.readoutInput(temperature: "65°C", onBattery: false)
+        XCTAssertEqual(MenuReadoutComposer.segments(elements: [.temperature], input: onAC), ["65°C"])
+        XCTAssertEqual(MenuReadoutComposer.title(elements: [.temperature], input: onAC, layout: .stacked), "65°C")
     }
 }

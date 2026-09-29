@@ -410,7 +410,10 @@ final class UnifiedPopupController {
     /// power (si10) on AC while charging, because the adapter sits at
     /// its delivery limit then and PDTR pins at a constant. Battery
     /// values come from Battery.lastKnownUsage — the same sample the
-    /// unified panel's Battery row renders (see UnifiedPanelContent).
+    /// unified panel's Battery row renders (see UnifiedPanelContent);
+    /// temperature comes from Sensors.lastKnownList via
+    /// hottestTemperatureText — the same hottest value the panel's
+    /// Sensors row renders.
     private func updateMenuReadout() {
         guard let item = self.statusItem, let button = item.button else { return }
         let forced = ProcessInfo.processInfo.environment["STATS_QA_MENU_WATTS"] == "1"
@@ -431,9 +434,11 @@ final class UnifiedPopupController {
         }
 
         let usage = (modules.first(where: { $0 is Battery }) as? Battery)?.lastKnownUsage
+        let sensorsList = (modules.first(where: { $0 is Sensors }) as? Sensors)?.lastKnownList
         let input = MenuReadoutComposer.Input(
             watts: draw,
             batteryLevel: usage?.level,
+            temperatureText: Self.hottestTemperatureText(sensorsList?.sensors ?? []),
             timeToEmptyMinutes: usage?.timeToEmpty,
             isBatteryPowered: usage?.isBatteryPowered ?? false
         )
@@ -476,10 +481,23 @@ final class UnifiedPopupController {
         }
     }
 
+    /// Hottest popup-visible temperature, formatted exactly as the
+    /// unified panel's Sensors row renders it — Stats/UnifiedPanelSamples
+    /// .swift:147-153 is the reference copy of this filter. Kept beside
+    /// the tick so the menu readout and the panel cannot drift; when
+    /// UnifiedPanelSamples is next touched it should call this instead
+    /// of repeating the filter inline.
+    private static func hottestTemperatureText(_ sensors: [Sensor_p]) -> String? {
+        sensors
+            .filter({ $0.type == .temperature && $0.popupState && $0.value.isFinite })
+            .max(by: { $0.value < $1.value })?
+            .formattedValue
+    }
+
     /// Title attributes for the composed readout. Horizontal is a single
     /// 12pt line, matching every other menu bar readout; stacked shrinks
-    /// to 9.5pt and centers each line so the two-line block sits evenly
-    /// under the item.
+    /// to 9.5pt and centers each line so the multi-line block sits
+    /// evenly under the item.
     private func menuReadoutAttributes(layout: MenuReadoutLayout) -> [NSAttributedString.Key: Any] {
         switch layout {
         case .horizontal:
