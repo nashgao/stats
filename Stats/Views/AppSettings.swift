@@ -70,6 +70,8 @@ class ApplicationSettings: NSStackView {
     private var fanSetupStatusField: NSTextField?
     private var fanSetupInstallButton: NSButton?
     private var opensAtLoginBtn: NSSwitch?
+    private var menuReadoutElementSwitches: [NSSwitch] = []
+    private var menuReadoutElementCapLabel: NSTextField?
     
     private var updateWindow: UpdateWindow?
     private let moduleSelector: ModuleSelectorView = ModuleSelectorView()
@@ -135,16 +137,14 @@ class ApplicationSettings: NSStackView {
                 action: #selector(self.toggleAttentionAlerts),
                 state: Store.shared.bool(key: AttentionNotifier.settingKey, defaultValue: true)
             )),
-            PreferencesRow(localizedString("Menu bar readout"), component: selectView(
-                action: #selector(self.toggleMenuReadout),
+            PreferencesRow(localizedString("Menu bar readout"), component: self.menuReadoutElementsComponent()),
+            PreferencesRow(localizedString("Readout layout"), component: selectView(
+                action: #selector(self.toggleMenuReadoutLayout),
                 items: [
-                    KeyValue_t(key: MenuReadoutPreset.off.rawValue, value: "Off"),
-                    KeyValue_t(key: MenuReadoutPreset.watts.rawValue, value: "Watts"),
-                    KeyValue_t(key: MenuReadoutPreset.battery.rawValue, value: "Battery %"),
-                    KeyValue_t(key: MenuReadoutPreset.wattsBattery.rawValue, value: "Watts + Battery %"),
-                    KeyValue_t(key: MenuReadoutPreset.batteryTime.rawValue, value: "Battery % + Time")
+                    KeyValue_t(key: MenuReadoutLayout.horizontal.rawValue, value: "Horizontal"),
+                    KeyValue_t(key: MenuReadoutLayout.stacked.rawValue, value: "Stacked")
                 ],
-                selected: MenuReadoutSelection.current().rawValue
+                selected: MenuReadoutLayoutSelection.current().rawValue
             ))
         ]))
         
@@ -462,14 +462,78 @@ class ApplicationSettings: NSStackView {
         }
     }
     
-    /// Selectable readout next to the unified menu bar item. The unified
-    /// controller re-reads the preset on its 1s tick, so the picker takes
-    /// effect without a restart; the new key wins over the legacy
-    /// unified_widget_power boolean by construction.
-    @objc private func toggleMenuReadout(_ sender: NSMenuItem) {
+    /// Element picker for the unified menu bar readout (DIS-2): three
+    /// labeled switches gathered in the fixed watts→battery→time order
+    /// and saved through MenuReadoutElements, whose write boundary caps
+    /// the set at two. The unified controller re-reads the key on its
+    /// 1s tick, so toggles take effect without a restart.
+    private func menuReadoutElementsComponent() -> NSView {
+        let elements: [MenuReadoutElement] = [.watts, .battery, .time]
+        let labels = ["Watts", "Battery %", "Time remaining"]
+        let selected = Set(MenuReadoutElements.current())
+
+        let toggles = NSStackView()
+        toggles.orientation = .horizontal
+        toggles.alignment = .centerY
+        toggles.spacing = Constants.Design.space3
+        for (element, label) in zip(elements, labels) {
+            let pair = NSStackView()
+            pair.orientation = .horizontal
+            pair.alignment = .centerY
+            pair.spacing = Constants.Design.space1
+            let toggle = switchView(
+                action: #selector(self.toggleMenuReadoutElement),
+                state: selected.contains(element)
+            )
+            pair.addArrangedSubview(toggle)
+            let caption = textView(localizedString(label))
+            caption.font = NSFont.systemFont(ofSize: 12, weight: .regular)
+            pair.addArrangedSubview(caption)
+            toggles.addArrangedSubview(pair)
+            self.menuReadoutElementSwitches.append(toggle)
+        }
+
+        let component = NSStackView()
+        component.orientation = .vertical
+        component.alignment = .trailing
+        component.spacing = 2
+        component.addArrangedSubview(toggles)
+        let cap = textView(localizedString("Maximum 2 readouts"))
+        cap.font = NSFont.systemFont(ofSize: 11, weight: .regular)
+        cap.textColor = .secondaryLabelColor
+        cap.isHidden = true
+        component.addArrangedSubview(cap)
+        self.menuReadoutElementCapLabel = cap
+        return component
+    }
+
+    /// The just-toggled switch is reverted when the change would exceed
+    /// the two-element cap (the write boundary would otherwise truncate
+    /// silently, leaving the checkboxes and the stored set disagreeing);
+    /// the caption under the switches explains the refusal and hides
+    /// again on the next accepted toggle.
+    @objc private func toggleMenuReadoutElement(_ sender: NSSwitch) {
+        let elements: [MenuReadoutElement] = [.watts, .battery, .time]
+        let selected = self.menuReadoutElementSwitches.enumerated().compactMap { pair in
+            pair.element.state == .on ? elements[pair.offset] : nil
+        }
+        guard selected.count <= 2 else {
+            sender.state = .off
+            self.menuReadoutElementCapLabel?.isHidden = false
+            return
+        }
+        self.menuReadoutElementCapLabel?.isHidden = true
+        MenuReadoutElements.save(selected)
+    }
+
+    /// Layout for the composed readout: horizontal joins the segments
+    /// " · " on one line; stacked renders one segment per line. A single
+    /// selected element renders identically in both, so there is no
+    /// special handling for one-element sets.
+    @objc private func toggleMenuReadoutLayout(_ sender: NSMenuItem) {
         guard let raw = sender.representedObject as? String,
-              let preset = MenuReadoutPreset(rawValue: raw) else { return }
-        Store.shared.set(key: MenuReadoutSelection.storeKey, value: preset.rawValue)
+              let layout = MenuReadoutLayout(rawValue: raw) else { return }
+        Store.shared.set(key: MenuReadoutLayoutSelection.storeKey, value: layout.rawValue)
     }
     
     // MARK: - fan control setup
