@@ -2,10 +2,11 @@
 //  MenuPowerReadout.swift
 //  Stats
 //
-//  Source selection for the menu bar watts readout (the unified status
-//  item's live power number). Extracted from UnifiedPopupController so
-//  the hardware-boundary protocol is unit-testable: Tests/PanelInfo.swift
-//  covers the state × key-availability matrix with a fake probe. See
+//  Source selection and title composition for the menu bar power
+//  readout (the unified status item's live numbers). Extracted from
+//  UnifiedPopupController so the hardware boundary and the composition
+//  rules are unit-testable: Tests/PanelInfo.swift covers the
+//  state × key-availability matrix with a fake probe. See
 //  AGENTS.md "Live-metric readouts" for why each source is trusted (all
 //  verified live by step-response against a CPU load).
 //
@@ -126,14 +127,87 @@ enum MenuReadoutSelection {
     }
 }
 
-/// Pure composer for the selectable menu-bar readout: preset + live
-/// inputs -> title segments, no I/O. The status-item tick gathers the
-/// inputs (watts via MenuPowerReadout; battery values via
-/// Battery.lastKnownUsage — the same sample the unified panel's Battery
-/// row renders) and this struct decides which segments exist. At most
-/// two segments per preset, joined with " · "; a preset whose inputs
-/// are all missing yields no segments, which the tick renders as the
-/// glyph-only item.
+/// A single composable quantity in the menu-bar readout (DIS-1). The
+/// declaration order is the display order: watts, then battery, then time.
+enum MenuReadoutElement: String {
+    case watts
+    case battery
+    case time
+}
+
+/// Storage boundary for the element set (DIS-1): comma-separated raw
+/// values in a string key — the same idiom Kit/module/widget.swift uses
+/// for widget lists. The structural cap (at most two elements) is
+/// enforced only at the write boundary: the menu bar item is one or two
+/// segments wide, and the stacked layout renders one segment per line.
+/// Reads migrate read-through: a non-empty elements key wins, even when
+/// every member is unknown (unknown members are skipped, which can yield
+/// an empty set); an empty stored value falls through to the MEN-1
+/// preset key, below that to the legacy watts boolean, and defaults to
+/// the empty set.
+enum MenuReadoutElements {
+    static let storeKey = "unified_menu_readout_elements"
+
+    /// The MEN-1 presets are exactly the subsets the old composer
+    /// supported; the preset mapping in the migration chain runs through
+    /// this table.
+    static func elements(for preset: MenuReadoutPreset) -> [MenuReadoutElement] {
+        switch preset {
+        case .off: return []
+        case .watts: return [.watts]
+        case .battery: return [.battery]
+        case .wattsBattery: return [.watts, .battery]
+        case .batteryTime: return [.battery, .time]
+        }
+    }
+
+    /// Write boundary: dedup, keep at most the first two, store the
+    /// comma-separated raw values.
+    static func save(_ elements: [MenuReadoutElement]) {
+        var kept: [MenuReadoutElement] = []
+        for element in elements where !kept.contains(element) {
+            kept.append(element)
+            if kept.count == 2 { break }
+        }
+        Store.shared.set(key: self.storeKey, value: kept.map { $0.rawValue }.joined(separator: ","))
+    }
+
+    static func current() -> [MenuReadoutElement] {
+        let stored = Store.shared.string(key: self.storeKey, defaultValue: "")
+        if !stored.isEmpty {
+            return stored.split(separator: ",").compactMap { MenuReadoutElement(rawValue: String($0)) }
+        }
+        return self.elements(for: MenuReadoutSelection.current())
+    }
+}
+
+/// Layout for the composed readout (DIS-1): segments joined on one line,
+/// or stacked one per line. A new capability — no migration; horizontal
+/// is the default and matches the MEN-1 rendering.
+enum MenuReadoutLayout: String {
+    case horizontal
+    case stacked
+}
+
+enum MenuReadoutLayoutSelection {
+    static let storeKey = "unified_menu_readout_layout"
+
+    static func current() -> MenuReadoutLayout {
+        let stored = Store.shared.string(key: self.storeKey, defaultValue: MenuReadoutLayout.horizontal.rawValue)
+        return MenuReadoutLayout(rawValue: stored) ?? .horizontal
+    }
+}
+
+/// Pure composer for the menu-bar readout (MEN-1, generalized by DIS-1):
+/// element subset + live inputs -> title segments, no I/O. The
+/// status-item tick gathers the inputs (watts via MenuPowerReadout;
+/// battery values via Battery.lastKnownUsage — the same sample the
+/// unified panel's Battery row renders) and this struct decides which
+/// segments exist. A segment whose input is missing drops out; the
+/// element order defines the segment order. The subset is structurally
+/// capped at two (MenuReadoutElements.save) — horizontal renders them
+/// " · "-joined on one line, stacked newline-joined on two; no segments
+/// at all renders as the glyph-only item.
 struct MenuReadoutComposer {
     struct Input {
         var watts: Double?
@@ -142,36 +216,62 @@ struct MenuReadoutComposer {
         var isBatteryPowered: Bool
     }
 
-    /// Title segments for the preset. Missing inputs drop their segment.
-    static func segments(preset: MenuReadoutPreset, input: Input) -> [String] {
+    /// Title segments for an element subset. Missing inputs drop their
+    /// segment; the time segment additionally requires battery power
+    /// with a positive estimate (it collapses on AC).
+    static func segments(elements: [MenuReadoutElement], input: Input) -> [String] {
         let percent = input.batteryLevel.map { self.percent($0) }
+        return elements.compactMap { element in
+            switch element {
+            case .watts:
+                return input.watts.map { UnifiedInfoFormatters.menuWatts($0) }
+            case .battery:
+                return percent
+            case .time:
+                guard input.isBatteryPowered, let minutes = input.timeToEmptyMinutes, minutes > 0 else { return nil }
+                return UnifiedInfoFormatters.clock(minutes)
+            }
+        }
+    }
+
+    /// Title segments for a preset — the MEN-1 API, still exercised by
+    /// Settings until DIS-2. Every preset except battery_time composes
+    /// exactly its element subset; battery_time keeps its original
+    /// anchored shape (percent required, otherwise no segments) which
+    /// the generalized rule would relax.
+    static func segments(preset: MenuReadoutPreset, input: Input) -> [String] {
         switch preset {
         case .off:
             return []
-        case .watts:
-            return input.watts.map { [UnifiedInfoFormatters.menuWatts($0)] } ?? []
-        case .battery:
-            return percent.map { [$0] } ?? []
-        case .wattsBattery:
-            var segments: [String] = []
-            if let watts = input.watts {
-                segments.append(UnifiedInfoFormatters.menuWatts(watts))
-            }
-            if let percent {
-                segments.append(percent)
-            }
-            return segments
         case .batteryTime:
-            guard let percent else { return [] }
+            guard let percent = input.batteryLevel.map({ self.percent($0) }) else { return [] }
             var segments = [percent]
             if input.isBatteryPowered, let minutes = input.timeToEmptyMinutes, minutes > 0 {
                 segments.append(UnifiedInfoFormatters.clock(minutes))
             }
             return segments
+        case .watts, .battery, .wattsBattery:
+            return self.segments(elements: MenuReadoutElements.elements(for: preset), input: input)
         }
     }
 
-    /// Joined title; "" when no segment exists.
+    /// Joined title from segments: " · " horizontal, newline stacked;
+    /// "" when no segment exists.
+    static func title(segments: [String], layout: MenuReadoutLayout) -> String {
+        switch layout {
+        case .horizontal:
+            return segments.joined(separator: " · ")
+        case .stacked:
+            return segments.joined(separator: "\n")
+        }
+    }
+
+    /// Joined title for an element subset at a layout.
+    static func title(elements: [MenuReadoutElement], input: Input, layout: MenuReadoutLayout) -> String {
+        self.title(segments: self.segments(elements: elements, input: input), layout: layout)
+    }
+
+    /// Joined title for a preset, horizontal layout — the MEN-1 shape.
     static func title(preset: MenuReadoutPreset, input: Input) -> String {
         self.segments(preset: preset, input: input).joined(separator: " · ")
     }

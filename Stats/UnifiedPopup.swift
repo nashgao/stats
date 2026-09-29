@@ -39,9 +39,11 @@ final class UnifiedPopupController {
     private let menuPower = MenuPowerReadout(probe: LiveMenuPowerProbe())
     private var glyphTimer: Timer?
     private var glyphState: String = ""
-    /// Last formatted value written to the status item title, so the
-    /// 1s tick only rebuilds the attributed string when the number
-    /// actually changed.
+    /// Last layout+title key written to the status item title, so the
+    /// 1s tick only rebuilds the attributed string when the composed
+    /// value — or the layout carrying it — actually changed. The layout
+    /// is part of the key because a layout switch with identical
+    /// segments must repaint (font and paragraph style change).
     private var menuPowerState: String = ""
     /// Whether the readout text currently owns the status item. While
     /// true, the attention glyph is suppressed (menu bar shows the
@@ -392,16 +394,17 @@ final class UnifiedPopupController {
     }
     
     /// Live readout next to the unified status item, evaluated on the same
-    /// ~1s cadence as updateGlyph. The preset (MenuReadoutSelection — off /
-    /// watts / battery / watts_battery / battery_time) picks the segments
-    /// and MenuReadoutComposer composes them; the legacy
-    /// unified_widget_power=true reads through as the watts preset. The
-    /// readout is the menu bar's entire content — the attention glyph is
-    /// suppressed while text shows (button.image cleared below, after
-    /// updateGlyph's pass in the same tick) and restored when the text
-    /// goes away, so an off item never becomes invisible. STATS_QA_MENU_WATTS=1
-    /// forces the watts preset and logs the composed title every tick for
-    /// the smoke test. Watts are read fresh from the SMC each tick, by
+    /// ~1s cadence as updateGlyph. The element set (MenuReadoutElements —
+    /// watts / battery / time, read-through from the MEN-1 preset key and,
+    /// below that, the legacy watts boolean) picks the segments, the layout
+    /// (MenuReadoutLayoutSelection — horizontal / stacked) picks the join,
+    /// and MenuReadoutComposer composes the title. The readout is the menu
+    /// bar's entire content — the attention glyph is suppressed while text
+    /// shows (button.image cleared below, after updateGlyph's pass in the
+    /// same tick) and restored when the text goes away, so an off item
+    /// never becomes invisible. STATS_QA_MENU_WATTS=1 forces the
+    /// watts-only set and logs the composed title every tick for the
+    /// smoke test. Watts are read fresh from the SMC each tick, by
     /// power state (see MenuPowerReadout): battery drain (PPBR) on
     /// battery; total system draw (PDTR) on AC when not charging; SoC
     /// power (si10) on AC while charging, because the adapter sits at
@@ -411,7 +414,8 @@ final class UnifiedPopupController {
     private func updateMenuReadout() {
         guard let item = self.statusItem, let button = item.button else { return }
         let forced = ProcessInfo.processInfo.environment["STATS_QA_MENU_WATTS"] == "1"
-        let preset: MenuReadoutPreset = forced ? .watts : MenuReadoutSelection.current()
+        let elements: [MenuReadoutElement] = forced ? [.watts] : MenuReadoutElements.current()
+        let layout = MenuReadoutLayoutSelection.current()
 
         let draw = self.menuPower.watts()
 
@@ -433,7 +437,10 @@ final class UnifiedPopupController {
             timeToEmptyMinutes: usage?.timeToEmpty,
             isBatteryPowered: usage?.isBatteryPowered ?? false
         )
-        let next = MenuReadoutComposer.title(preset: preset, input: input)
+        let next = MenuReadoutComposer.title(
+            segments: MenuReadoutComposer.segments(elements: elements, input: input),
+            layout: layout
+        )
         if !next.isEmpty {
             PowerDiagnostics.record(watts: next)
         }
@@ -458,13 +465,32 @@ final class UnifiedPopupController {
         // repainted it for an attention change — see the timer order).
         self.textShown = true
         button.image = nil
-        guard next != self.menuPowerState else { return }
-        self.menuPowerState = next
-        button.attributedTitle = NSAttributedString(string: next, attributes: [
-            .font: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .regular)
-        ])
+        // The skip key carries the layout: a layout switch with identical
+        // segments must repaint (font and paragraph style change).
+        let nextKey = "\(layout.rawValue)\u{1F}\(next)"
+        guard nextKey != self.menuPowerState else { return }
+        self.menuPowerState = nextKey
+        button.attributedTitle = NSAttributedString(string: next, attributes: self.menuReadoutAttributes(layout: layout))
         if item.length != NSStatusItem.variableLength {
             item.length = NSStatusItem.variableLength
+        }
+    }
+
+    /// Title attributes for the composed readout. Horizontal is a single
+    /// 12pt line, matching every other menu bar readout; stacked shrinks
+    /// to 9.5pt and centers each line so the two-line block sits evenly
+    /// under the item.
+    private func menuReadoutAttributes(layout: MenuReadoutLayout) -> [NSAttributedString.Key: Any] {
+        switch layout {
+        case .horizontal:
+            return [.font: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .regular)]
+        case .stacked:
+            let style = NSMutableParagraphStyle()
+            style.alignment = .center
+            return [
+                .font: NSFont.monospacedDigitSystemFont(ofSize: 9.5, weight: .regular),
+                .paragraphStyle: style
+            ]
         }
     }
     

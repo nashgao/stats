@@ -286,4 +286,134 @@ final class PanelInfoTests: XCTestCase {
         Store.shared.remove(legacyKey)
         XCTAssertEqual(MenuReadoutSelection.current(), .off)
     }
+
+    // MARK: - menu readout element set
+
+    /// Read-through migration chain for the DIS-1 element set: a
+    /// non-empty elements key wins (unknown members skipped, which can
+    /// yield an empty set); an empty stored value falls through to the
+    /// MEN-1 preset mapping; below that the legacy watts boolean;
+    /// default is the empty set.
+    func testMenuReadoutElementsMigration() {
+        let key = MenuReadoutElements.storeKey
+        let presetKey = MenuReadoutSelection.storeKey
+        let legacyKey = MenuReadoutSelection.legacyPowerKey
+        let hadElements = Store.shared.exist(key: key)
+        let oldElements = Store.shared.string(key: key, defaultValue: "")
+        let hadPreset = Store.shared.exist(key: presetKey)
+        let oldPreset = Store.shared.string(key: presetKey, defaultValue: "")
+        let hadLegacy = Store.shared.exist(key: legacyKey)
+        let oldLegacy = Store.shared.bool(key: legacyKey, defaultValue: false)
+        defer {
+            if hadElements { Store.shared.set(key: key, value: oldElements) } else { Store.shared.remove(key) }
+            if hadPreset { Store.shared.set(key: presetKey, value: oldPreset) } else { Store.shared.remove(presetKey) }
+            if hadLegacy { Store.shared.set(key: legacyKey, value: oldLegacy) } else { Store.shared.remove(legacyKey) }
+        }
+
+        // default: nothing set -> empty set
+        Store.shared.remove(key)
+        Store.shared.remove(presetKey)
+        Store.shared.remove(legacyKey)
+        XCTAssertEqual(MenuReadoutElements.current(), [])
+
+        // legacy boolean on, nothing else -> watts
+        Store.shared.set(key: legacyKey, value: true)
+        XCTAssertEqual(MenuReadoutElements.current(), [.watts])
+
+        // every preset maps to its element subset
+        Store.shared.set(key: presetKey, value: "off")
+        XCTAssertEqual(MenuReadoutElements.current(), [])
+        Store.shared.set(key: presetKey, value: "watts")
+        XCTAssertEqual(MenuReadoutElements.current(), [.watts])
+        Store.shared.set(key: presetKey, value: "battery")
+        XCTAssertEqual(MenuReadoutElements.current(), [.battery])
+        Store.shared.set(key: presetKey, value: "watts_battery")
+        XCTAssertEqual(MenuReadoutElements.current(), [.watts, .battery])
+        Store.shared.set(key: presetKey, value: "battery_time")
+        XCTAssertEqual(MenuReadoutElements.current(), [.battery, .time])
+
+        // a non-empty elements key wins over the preset key and legacy bool
+        Store.shared.set(key: key, value: "battery,time")
+        XCTAssertEqual(MenuReadoutElements.current(), [.battery, .time])
+
+        // unknown members are skipped, not fatal
+        Store.shared.set(key: key, value: "watts,bogus,battery")
+        XCTAssertEqual(MenuReadoutElements.current(), [.watts, .battery])
+
+        // an all-unknown non-empty value is an empty set — it does NOT
+        // fall through to the preset key
+        Store.shared.set(key: key, value: "bogus")
+        XCTAssertEqual(MenuReadoutElements.current(), [])
+
+        // an empty stored value falls through, NOT an empty set
+        Store.shared.set(key: key, value: "")
+        Store.shared.set(key: presetKey, value: "battery")
+        XCTAssertEqual(MenuReadoutElements.current(), [.battery])
+    }
+
+    /// The structural cap lives at the write boundary: more than two
+    /// elements are truncated, duplicates collapse without consuming a
+    /// slot, and the stored form is the comma-separated raw values.
+    func testMenuReadoutElementsCap() {
+        let key = MenuReadoutElements.storeKey
+        let hadElements = Store.shared.exist(key: key)
+        let oldElements = Store.shared.string(key: key, defaultValue: "")
+        defer {
+            if hadElements { Store.shared.set(key: key, value: oldElements) } else { Store.shared.remove(key) }
+        }
+
+        MenuReadoutElements.save([.watts, .battery, .time])
+        XCTAssertEqual(Store.shared.string(key: key, defaultValue: ""), "watts,battery")
+        XCTAssertEqual(MenuReadoutElements.current(), [.watts, .battery])
+
+        // duplicates collapse without consuming a slot
+        MenuReadoutElements.save([.battery, .battery, .time])
+        XCTAssertEqual(Store.shared.string(key: key, defaultValue: ""), "battery,time")
+        XCTAssertEqual(MenuReadoutElements.current(), [.battery, .time])
+
+        // a single element round-trips
+        MenuReadoutElements.save([.time])
+        XCTAssertEqual(Store.shared.string(key: key, defaultValue: ""), "time")
+        XCTAssertEqual(MenuReadoutElements.current(), [.time])
+
+        // the empty set persists as "" — which reads back as fall-through
+        MenuReadoutElements.save([])
+        XCTAssertEqual(Store.shared.string(key: key, defaultValue: "unset"), "")
+    }
+
+    /// Layout only changes the separator: " · " horizontal, newline
+    /// stacked. AC-collapse and nil-omission hold per segment in both
+    /// layouts, and single-element sets render identically.
+    func testMenuReadoutComposerLayout() {
+        let full = self.readoutInput()
+
+        let wattsBattery = MenuReadoutComposer.segments(elements: [.watts, .battery], input: full)
+        XCTAssertEqual(MenuReadoutComposer.title(segments: wattsBattery, layout: .horizontal), "49W · 67%")
+        XCTAssertEqual(MenuReadoutComposer.title(segments: wattsBattery, layout: .stacked), "49W\n67%")
+
+        let batteryTime = MenuReadoutComposer.segments(elements: [.battery, .time], input: full)
+        XCTAssertEqual(MenuReadoutComposer.title(segments: batteryTime, layout: .horizontal), "67% · 2:32")
+        XCTAssertEqual(MenuReadoutComposer.title(segments: batteryTime, layout: .stacked), "67%\n2:32")
+
+        // single-element sets render identically in both layouts
+        let wattsOnly = MenuReadoutComposer.segments(elements: [.watts], input: full)
+        XCTAssertEqual(MenuReadoutComposer.title(segments: wattsOnly, layout: .horizontal), "49W")
+        XCTAssertEqual(MenuReadoutComposer.title(segments: wattsOnly, layout: .stacked), "49W")
+
+        // AC-collapse: the time segment drops on AC in both layouts
+        let onAC = MenuReadoutComposer.segments(elements: [.battery, .time], input: self.readoutInput(onBattery: false))
+        XCTAssertEqual(MenuReadoutComposer.title(segments: onAC, layout: .horizontal), "67%")
+        XCTAssertEqual(MenuReadoutComposer.title(segments: onAC, layout: .stacked), "67%")
+
+        // nil-omission per segment: missing watts drops only its segment
+        let noWatts = MenuReadoutComposer.segments(elements: [.watts, .battery], input: self.readoutInput(watts: nil))
+        XCTAssertEqual(MenuReadoutComposer.title(segments: noWatts, layout: .horizontal), "67%")
+        XCTAssertEqual(MenuReadoutComposer.title(segments: noWatts, layout: .stacked), "67%")
+
+        // the elements+layout convenience wrapper agrees
+        XCTAssertEqual(
+            MenuReadoutComposer.title(elements: [.watts, .battery], input: full, layout: .stacked),
+            "49W\n67%"
+        )
+    }
 }
