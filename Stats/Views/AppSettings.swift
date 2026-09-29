@@ -558,8 +558,11 @@ class ApplicationSettings: NSStackView {
     /// more than two elements are checked is refused — the popup reverts
     /// to Horizontal — so the "stacked ⇒ ≤2 elements" invariant can
     /// never be stored via this UI.
-    @objc private func toggleMenuReadoutLayout(_ sender: NSMenuItem) {
-        guard let raw = sender.representedObject as? String,
+    @objc private func toggleMenuReadoutLayout(_ sender: NSPopUpButton) {
+        // selectView sets the action on the button, so the sender is the
+        // NSPopUpButton, not the menu item — the value lives on the
+        // selected item's representedObject.
+        guard let raw = sender.selectedItem?.representedObject as? String,
               let layout = MenuReadoutLayout(rawValue: raw) else { return }
         if layout == .stacked {
             let checked = self.menuReadoutElementSwitches.filter({ $0.state == .on }).count

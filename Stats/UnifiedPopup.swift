@@ -505,6 +505,7 @@ final class UnifiedPopupController {
         case .stacked:
             let style = NSMutableParagraphStyle()
             style.alignment = .center
+            style.lineBreakMode = .byWordWrapping
             return [
                 .font: NSFont.monospacedDigitSystemFont(ofSize: 9.5, weight: .regular),
                 .paragraphStyle: style
