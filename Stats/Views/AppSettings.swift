@@ -72,6 +72,7 @@ class ApplicationSettings: NSStackView {
     private var opensAtLoginBtn: NSSwitch?
     private var menuReadoutElementSwitches: [NSSwitch] = []
     private var menuReadoutElementCapLabel: NSTextField?
+    private var menuReadoutLayoutSelector: NSPopUpButton?
     
     private var updateWindow: UpdateWindow?
     private let moduleSelector: ModuleSelectorView = ModuleSelectorView()
@@ -112,6 +113,14 @@ class ApplicationSettings: NSStackView {
             items: AppUpdateIntervals,
             selected: self.updateIntervalValue
         )
+        self.menuReadoutLayoutSelector = selectView(
+            action: #selector(self.toggleMenuReadoutLayout),
+            items: [
+                KeyValue_t(key: MenuReadoutLayout.horizontal.rawValue, value: "Horizontal"),
+                KeyValue_t(key: MenuReadoutLayout.stacked.rawValue, value: "Stacked")
+            ],
+            selected: MenuReadoutLayoutSelection.current().rawValue
+        )
         
         scrollView.stackView.addArrangedSubview(PreferencesSection([
             PreferencesRow(localizedString("Menu bar preset"), component: self.menuBarPresetSelector!),
@@ -138,14 +147,7 @@ class ApplicationSettings: NSStackView {
                 state: Store.shared.bool(key: AttentionNotifier.settingKey, defaultValue: true)
             )),
             PreferencesRow(localizedString("Menu bar readout"), component: self.menuReadoutElementsComponent()),
-            PreferencesRow(localizedString("Readout layout"), component: selectView(
-                action: #selector(self.toggleMenuReadoutLayout),
-                items: [
-                    KeyValue_t(key: MenuReadoutLayout.horizontal.rawValue, value: "Horizontal"),
-                    KeyValue_t(key: MenuReadoutLayout.stacked.rawValue, value: "Stacked")
-                ],
-                selected: MenuReadoutLayoutSelection.current().rawValue
-            ))
+            PreferencesRow(localizedString("Readout layout"), component: self.menuReadoutLayoutSelector!)
         ]))
         
         // Fused onboarding: helper health and login-item in one place,
@@ -462,14 +464,18 @@ class ApplicationSettings: NSStackView {
         }
     }
     
-    /// Element picker for the unified menu bar readout (DIS-2): three
-    /// labeled switches gathered in the fixed watts→battery→time order
-    /// and saved through MenuReadoutElements, whose write boundary caps
-    /// the set at two. The unified controller re-reads the key on its
-    /// 1s tick, so toggles take effect without a restart.
+    /// Element picker for the unified menu bar readout (DIS-2, DIS-5):
+    /// four labeled switches gathered in the fixed
+    /// watts→battery→temperature→time order and saved through
+    /// MenuReadoutElements. The layout-aware cap lives in
+    /// menuReadoutCap(): the write boundary truncates at three, but the
+    /// stacked layout only fits two lines, so the UI refuses beyond the
+    /// active cap instead of storing a set it cannot render. The unified
+    /// controller re-reads the keys on its 1s tick, so changes take
+    /// effect without a restart.
     private func menuReadoutElementsComponent() -> NSView {
-        let elements: [MenuReadoutElement] = [.watts, .battery, .time]
-        let labels = ["Watts", "Battery %", "Time remaining"]
+        let elements: [MenuReadoutElement] = [.watts, .battery, .temperature, .time]
+        let labels = ["Watts", "Battery %", "Temperature", "Time remaining"]
         let selected = Set(MenuReadoutElements.current())
 
         let toggles = NSStackView()
@@ -498,7 +504,7 @@ class ApplicationSettings: NSStackView {
         component.alignment = .trailing
         component.spacing = 2
         component.addArrangedSubview(toggles)
-        let cap = textView(localizedString("Maximum 2 readouts"))
+        let cap = textView(localizedString("Maximum 3 readouts"))
         cap.font = NSFont.systemFont(ofSize: 11, weight: .regular)
         cap.textColor = .secondaryLabelColor
         cap.isHidden = true
@@ -507,19 +513,38 @@ class ApplicationSettings: NSStackView {
         return component
     }
 
+    /// The active element cap depends on the layout: stacked renders one
+    /// segment per line and three lines do not fit the menu bar at a
+    /// readable size, so it allows at most two; horizontal allows three.
+    private func menuReadoutCap() -> Int {
+        MenuReadoutLayoutSelection.current() == .stacked ? 2 : 3
+    }
+
+    /// Reveal the caption with the copy matching the refusal reason —
+    /// "Maximum 3 readouts" for the horizontal element cap, "Stacked
+    /// fits 2 readouts" for the stacked cap (whether the refusal came
+    /// from a checkbox or from choosing Stacked with too many checked).
+    private func showReadoutCapCaption(stacked: Bool) {
+        guard let cap = self.menuReadoutElementCapLabel else { return }
+        cap.stringValue = stacked
+            ? localizedString("Stacked fits 2 readouts")
+            : localizedString("Maximum 3 readouts")
+        cap.isHidden = false
+    }
+
     /// The just-toggled switch is reverted when the change would exceed
-    /// the two-element cap (the write boundary would otherwise truncate
-    /// silently, leaving the checkboxes and the stored set disagreeing);
-    /// the caption under the switches explains the refusal and hides
-    /// again on the next accepted toggle.
+    /// the active layout cap (the write boundary would otherwise accept
+    /// a set the chosen layout cannot render, leaving the UI and the
+    /// stored set disagreeing); the caption under the switches explains
+    /// the refusal and hides again on the next accepted toggle.
     @objc private func toggleMenuReadoutElement(_ sender: NSSwitch) {
-        let elements: [MenuReadoutElement] = [.watts, .battery, .time]
+        let elements: [MenuReadoutElement] = [.watts, .battery, .temperature, .time]
         let selected = self.menuReadoutElementSwitches.enumerated().compactMap { pair in
             pair.element.state == .on ? elements[pair.offset] : nil
         }
-        guard selected.count <= 2 else {
+        guard selected.count <= self.menuReadoutCap() else {
             sender.state = .off
-            self.menuReadoutElementCapLabel?.isHidden = false
+            self.showReadoutCapCaption(stacked: MenuReadoutLayoutSelection.current() == .stacked)
             return
         }
         self.menuReadoutElementCapLabel?.isHidden = true
@@ -529,10 +554,25 @@ class ApplicationSettings: NSStackView {
     /// Layout for the composed readout: horizontal joins the segments
     /// " · " on one line; stacked renders one segment per line. A single
     /// selected element renders identically in both, so there is no
-    /// special handling for one-element sets.
+    /// special handling for one-element sets. Choosing Stacked while
+    /// more than two elements are checked is refused — the popup reverts
+    /// to Horizontal — so the "stacked ⇒ ≤2 elements" invariant can
+    /// never be stored via this UI.
     @objc private func toggleMenuReadoutLayout(_ sender: NSMenuItem) {
         guard let raw = sender.representedObject as? String,
               let layout = MenuReadoutLayout(rawValue: raw) else { return }
+        if layout == .stacked {
+            let checked = self.menuReadoutElementSwitches.filter({ $0.state == .on }).count
+            guard checked <= 2 else {
+                if let horizontal = self.menuReadoutLayoutSelector?.menu?.items.first(where: {
+                    ($0.representedObject as? String) == MenuReadoutLayout.horizontal.rawValue
+                }) {
+                    self.menuReadoutLayoutSelector?.select(horizontal)
+                }
+                self.showReadoutCapCaption(stacked: true)
+                return
+            }
+        }
         Store.shared.set(key: MenuReadoutLayoutSelection.storeKey, value: layout.rawValue)
     }
     
