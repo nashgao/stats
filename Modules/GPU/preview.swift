@@ -75,10 +75,23 @@ internal class Preview: PreviewWrapper {
         self.addArrangedSubview(firstSplitView)
         self.addArrangedSubview(secondSplitView)
         self.addArrangedSubview(PreferencesSection(title: localizedString("FPS history"), [fpsHistoryView]))
+
+        if ProcessInfo.processInfo.environment["STATS_CAPTURE_FIXTURE"] == "1" {
+            NotificationCenter.default.addObserver(self, selector: #selector(self.handleCaptureSample), name: .unifiedPanelSample, object: nil)
+        }
     }
     
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self, name: .unifiedPanelSample, object: nil)
+    }
+
+    @objc private func handleCaptureSample(_ notification: Notification) {
+        guard let value = notification.object as? GPU_Info else { return }
+        self.loadCallback(value)
     }
     
     private func quickView() -> NSView {

@@ -20,6 +20,7 @@ public extension NSToolbarItem.Identifier {
 class SettingsWindow: NSWindow, NSWindowDelegate, NSToolbarDelegate {
     private static let size: CGSize = Constants.Design.settingsDefaultSize
     private static let frameAutosaveName = "eu.exelban.Stats.Settings.WindowFrame"
+    private let captureFixture = ProcessInfo.processInfo.environment["STATS_CAPTURE_FIXTURE"] == "1"
     
     internal var onClose: (() -> Void)?
     
@@ -80,7 +81,7 @@ class SettingsWindow: NSWindow, NSWindowDelegate, NSToolbarDelegate {
         
         let newToolbar = NSToolbar(identifier: "eu.exelban.Stats.Settings.Toolbar")
         newToolbar.allowsUserCustomization = false
-        newToolbar.autosavesConfiguration = true
+        newToolbar.autosavesConfiguration = !self.captureFixture
         newToolbar.displayMode = .default
         newToolbar.showsBaselineSeparator = true
         newToolbar.delegate = self
@@ -97,12 +98,16 @@ class SettingsWindow: NSWindow, NSWindowDelegate, NSToolbarDelegate {
         if #unavailable(macOS 26.0) {
             self.backgroundColor = .clear
         }
-        self.isRestorable = true
+        self.isRestorable = !self.captureFixture
         self.isReleasedWhenClosed = false
         self.delegate = self
-        self.setFrameAutosaveName(SettingsWindow.frameAutosaveName)
-        if !self.setFrameUsingName(SettingsWindow.frameAutosaveName) {
+        if self.captureFixture {
             self.positionCenter()
+        } else {
+            self.setFrameAutosaveName(SettingsWindow.frameAutosaveName)
+            if !self.setFrameUsingName(SettingsWindow.frameAutosaveName) {
+                self.positionCenter()
+            }
         }
         self.setIsVisible(false)
         self.minSize = Constants.Design.settingsMinimumSize
@@ -123,7 +128,7 @@ class SettingsWindow: NSWindow, NSWindowDelegate, NSToolbarDelegate {
         
         self.sidebarView.setModules(modules)
         let storedDestination = ProcessInfo.processInfo.environment["STATS_SETTINGS_DESTINATION"]
-            ?? Store.shared.string(key: "settings_selected_destination", defaultValue: "Dashboard")
+            ?? (self.captureFixture ? "Dashboard" : Store.shared.string(key: "settings_selected_destination", defaultValue: "Dashboard"))
         let knownDestination = storedDestination == "Dashboard" || storedDestination == "Settings" || modules.contains(where: { $0.config.name == storedDestination })
         self.sidebarView.openMenu(knownDestination ? storedDestination : "Dashboard")
         self.contentView?.layoutSubtreeIfNeeded()
@@ -219,17 +224,34 @@ class SettingsWindow: NSWindow, NSWindowDelegate, NSToolbarDelegate {
     }
     
     internal func open(module: String? = nil) {
-        if !self.isVisible {
-            self.setIsVisible(true)
-            self.makeKeyAndOrderFront(nil)
-        }
-        if !self.isKeyWindow {
-            self.orderFrontRegardless()
-        }
-        
         if var name = module {
             if name == "Combined modules" { name = "Dashboard" }
             self.sidebarView.openMenu(name)
+        }
+        if self.isMiniaturized {
+            self.deminiaturize(nil)
+        }
+        self.makeKeyAndOrderFront(nil)
+        if #available(macOS 14, *) {
+            NSApp.activate()
+        } else {
+            NSApp.activate(ignoringOtherApps: true)
+        }
+        if self.captureFixture, ProcessInfo.processInfo.environment["STATS_CAPTURE_SCROLL_TO"] == "bottom" {
+            self.contentView?.layoutSubtreeIfNeeded()
+            var pending: [NSView] = [self.mainView]
+            while let view = pending.popLast() {
+                guard !view.isHidden else { continue }
+                if let scroll = view as? NSScrollView, let document = scroll.documentView {
+                    let y = document.isFlipped
+                        ? max(document.bounds.minY, document.bounds.maxY - scroll.contentView.bounds.height)
+                        : document.bounds.minY
+                    document.scroll(NSPoint(x: document.bounds.minX, y: y))
+                    scroll.reflectScrolledClipView(scroll.contentView)
+                    break
+                }
+                pending.append(contentsOf: view.subviews)
+            }
         }
     }
     
@@ -244,22 +266,29 @@ class SettingsWindow: NSWindow, NSWindowDelegate, NSToolbarDelegate {
                 toggleNSControlState(self.toggleButton, state: detectedModule.enabled ? .on : .off)
                 self.toggleButton?.isHidden = false
                 self.settingsPreviewButton?.isHidden = !detectedModule.config.hasPreview
-                NotificationCenter.default.post(name: .openWindow, object: nil, userInfo: ["module": detectedModule.config.name, "state": true])
+                if !self.captureFixture {
+                    NotificationCenter.default.post(name: .openWindow, object: nil, userInfo: ["module": detectedModule.config.name, "state": true])
+                }
             } else if title == "Dashboard" {
                 view = self.dashboard
                 self.toggleButton?.isHidden = true
                 self.settingsPreviewButton?.isHidden = true
-                NotificationCenter.default.post(name: .openWindow, object: nil, userInfo: ["state": false])
+                if !self.captureFixture {
+                    NotificationCenter.default.post(name: .openWindow, object: nil, userInfo: ["state": false])
+                }
             } else if title == "Settings" {
                 self.settings.viewWillAppear()
                 view = self.settings
                 self.toggleButton?.isHidden = true
                 self.settingsPreviewButton?.isHidden = true
-                NotificationCenter.default.post(name: .openWindow, object: nil, userInfo: ["state": false])
+                if !self.captureFixture {
+                    NotificationCenter.default.post(name: .openWindow, object: nil, userInfo: ["state": false])
+                }
             }
             
             self.title = localizedString(title)
-            if ProcessInfo.processInfo.environment["STATS_SETTINGS_DESTINATION"] == nil,
+            if !self.captureFixture,
+               ProcessInfo.processInfo.environment["STATS_SETTINGS_DESTINATION"] == nil,
                ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil {
                 Store.shared.set(key: "settings_selected_destination", value: title)
             }

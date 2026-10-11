@@ -161,7 +161,9 @@ extension UnifiedPanelContent {
             self.batteryRow.spark.add(abs(battery.level) * 100)
             self.batteryCyclesField?.stringValue = "\(battery.cycles)"
             self.batteryHealthField?.stringValue = "\(UnifiedInfoFormatters.batteryPercent(battery.maxCapacity, of: battery.designedCapacity))% of design"
-            self.batteryFullChargeField?.stringValue = "\(battery.fullChargeCapacity.formatted(.number.grouping(.automatic))) mAh · \(UnifiedInfoFormatters.batteryPercent(battery.fullChargeCapacity, of: battery.designedCapacity))% of design"
+            self.batteryFullChargeField?.stringValue =
+                "\(battery.fullChargeCapacity.formatted(.number.grouping(.automatic))) mAh · " +
+                "\(UnifiedInfoFormatters.batteryPercent(battery.fullChargeCapacity, of: battery.designedCapacity))% of design"
             self.batteryConditionField?.stringValue = localizedString(UnifiedInfoFormatters.batteryCondition(battery.health))
             self.batteryPowerField?.stringValue = UnifiedInfoFormatters.batteryPowerText(
                 batteryPower: battery.batteryPower,

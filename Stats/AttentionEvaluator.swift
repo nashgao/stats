@@ -93,8 +93,10 @@ final class AttentionEvaluator {
                     next.isEmpty ? "quiet" : next.map({ "\($0.label) [\($0.level == .critical ? "critical" : "attention")]" }).joined(separator: " · "),
                     Date().timeIntervalSince1970
                 )
-                let enabled: Set<TelemetryMetric> = AttentionNotifier.alertsEnabled ? Set([.fan, .temperature, .memory, .gpu, .battery, .cpu]) : []
-                AttentionNotifier.shared.post(AttentionAlerter.notifications(previous: previous, current: next, enabled: enabled))
+                if ProcessInfo.processInfo.environment["STATS_CAPTURE_FIXTURE"] != "1" {
+                    let enabled: Set<TelemetryMetric> = AttentionNotifier.alertsEnabled ? Set([.fan, .temperature, .memory, .gpu, .battery, .cpu]) : []
+                    AttentionNotifier.shared.post(AttentionAlerter.notifications(previous: previous, current: next, enabled: enabled))
+                }
             }
         }
     }

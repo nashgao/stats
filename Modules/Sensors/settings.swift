@@ -204,3 +204,106 @@ internal class Settings: NSStackView, Settings_v {
         self.selectedHandler(self.selectedSensor)
     }
 }
+
+internal class ModeSwitch: NSStackView {
+    public var autoCallback: (() -> Void)?
+    public var manualCallback: (() -> Void)?
+
+    private var autoBtn: NSButton = {
+        let button: NSButton = NSButton(title: localizedString("Automatic"), target: nil, action: #selector(autoMode))
+        button.setButtonType(.toggle)
+        button.isBordered = false
+        button.wantsLayer = true
+        button.layer?.cornerRadius = Constants.Popup.radius
+        button.layer?.backgroundColor = NSColor.clear.cgColor
+        button.attributedTitle = NSAttributedString(string: localizedString("Automatic"), attributes: [
+            .foregroundColor: NSColor.secondaryLabelColor,
+            .font: NSFont.systemFont(ofSize: 11, weight: .semibold)
+        ])
+        return button
+    }()
+
+    private var manualBtn: NSButton = {
+        let button: NSButton = NSButton(title: localizedString("Manual"), target: nil, action: #selector(manualMode))
+        button.setButtonType(.toggle)
+        button.isBordered = false
+        button.wantsLayer = true
+        button.layer?.cornerRadius = Constants.Popup.radius
+        button.layer?.backgroundColor = NSColor.clear.cgColor
+        button.attributedTitle = NSAttributedString(string: localizedString("Manual"), attributes: [
+            .foregroundColor: NSColor.secondaryLabelColor,
+            .font: NSFont.systemFont(ofSize: 11, weight: .semibold)
+        ])
+        return button
+    }()
+
+    private var selectedColor: CGColor {
+        (isDarkMode ? Constants.Design.surfaceGroup : .textBackgroundColor).cgColor
+    }
+
+    init(_ mode: FanMode) {
+        super.init(frame: .zero)
+
+        self.orientation = .horizontal
+        self.alignment = .centerY
+        self.distribution = .fillEqually
+        self.wantsLayer = true
+        self.layer?.cornerRadius = Constants.Popup.radius
+        self.spacing = 0
+        self.edgeInsets = .init(top: 2, left: 2, bottom: 2, right: 2)
+
+        self.autoBtn.target = self
+        self.autoBtn.state = mode.isAutomatic ? .on : .off
+        self.autoBtn.layer?.backgroundColor = mode.isAutomatic ? self.selectedColor : NSColor.clear.cgColor
+
+        self.manualBtn.target = self
+        self.manualBtn.state = mode == .forced ? .on : .off
+        self.manualBtn.layer?.backgroundColor = mode == .forced ? self.selectedColor : NSColor.clear.cgColor
+
+        self.addArrangedSubview(self.autoBtn)
+        self.addArrangedSubview(self.manualBtn)
+
+        NSLayoutConstraint.activate([
+            self.autoBtn.heightAnchor.constraint(equalTo: self.heightAnchor, constant: -4),
+            self.manualBtn.heightAnchor.constraint(equalTo: self.heightAnchor, constant: -4)
+        ])
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func updateLayer() {
+        self.layer?.backgroundColor = Constants.Design.surfaceSecondary.cgColor
+        self.autoBtn.layer?.backgroundColor = self.autoBtn.state == .on ? self.selectedColor : NSColor.clear.cgColor
+        self.manualBtn.layer?.backgroundColor = self.manualBtn.state == .on ? self.selectedColor : NSColor.clear.cgColor
+    }
+
+    public func change(auto: Bool = false, manual: Bool = false) {
+        self.autoBtn.state = auto ? .on : .off
+        self.manualBtn.state = manual ? .on : .off
+
+        self.autoBtn.layer?.backgroundColor = auto ? self.selectedColor : NSColor.clear.cgColor
+        self.manualBtn.layer?.backgroundColor = manual ? self.selectedColor : NSColor.clear.cgColor
+    }
+
+    @objc private func autoMode() {
+        self.autoBtn.state = .on
+        self.manualBtn.state = .off
+
+        self.autoBtn.layer?.backgroundColor = self.selectedColor
+        self.manualBtn.layer?.backgroundColor = NSColor.clear.cgColor
+
+        self.autoCallback?()
+    }
+
+    @objc private func manualMode() {
+        self.autoBtn.state = .off
+        self.manualBtn.state = .on
+
+        self.autoBtn.layer?.backgroundColor = NSColor.clear.cgColor
+        self.manualBtn.layer?.backgroundColor = self.selectedColor
+
+        self.manualCallback?()
+    }
+}

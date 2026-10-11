@@ -21,12 +21,52 @@ import Sensors
 import Battery
 import IOKit.ps
 
-private func withoutImplicitAnimation(_ block: () -> Void) {
+func withoutImplicitAnimation(_ block: () -> Void) {
     NSAnimationContext.runAnimationGroup { context in
         context.allowsImplicitAnimation = false
         context.duration = 0
         block()
     }
+}
+
+/// NSStatusBarButton's native multiline title is vertically offset beyond
+/// its bounds. A template image keeps both rows inside the existing button,
+/// including native highlighting, appearance adaptation and mouse handling.
+private func applyMenuReadoutTitle(_ title: String, layout: MenuReadoutLayout, to item: NSStatusItem) {
+    guard let button = item.button else { return }
+    let rows = title.components(separatedBy: "\n")
+    button.setAccessibilityLabel(title.replacingOccurrences(of: "\n", with: ", "))
+    if layout == .stacked && rows.count == 2 {
+        let rowHeight: CGFloat = 11
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .regular),
+            .foregroundColor: NSColor.black
+        ]
+        let strings = rows.map { NSAttributedString(string: $0, attributes: attributes) }
+        let widths = strings.map { ceil($0.size().width) }
+        let size = NSSize(width: widths.max() ?? 0, height: rowHeight * 2)
+        let image = NSImage(size: size, flipped: false) { bounds in
+            for (index, string) in strings.enumerated() {
+                string.draw(in: NSRect(
+                    x: (bounds.width - widths[index]) / 2,
+                    y: rowHeight * CGFloat(1 - index),
+                    width: widths[index],
+                    height: rowHeight
+                ))
+            }
+            return true
+        }
+        image.isTemplate = true
+        button.attributedTitle = NSAttributedString()
+        button.imageScaling = .scaleNone
+        button.image = image
+    } else {
+        button.image = nil
+        button.attributedTitle = NSAttributedString(string: title, attributes: [
+            .font: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .regular)
+        ])
+    }
+    item.length = NSStatusItem.variableLength
 }
 
 final class UnifiedPopupController {
@@ -39,17 +79,18 @@ final class UnifiedPopupController {
     private let menuPower = MenuPowerReadout(probe: LiveMenuPowerProbe())
     private var glyphTimer: Timer?
     private var glyphState: String = ""
-    /// Last layout+title key written to the status item title, so the
-    /// 1s tick only rebuilds the attributed string when the composed
-    /// value — or the layout carrying it — actually changed. The layout
-    /// is part of the key because a layout switch with identical
-    /// segments must repaint (font and paragraph style change).
+    /// Last layout+title rendered, so the 1s tick only rebuilds the title
+    /// or stacked image when its content or layout actually changes.
     private var menuPowerState: String = ""
     /// Whether the readout text currently owns the status item. While
     /// true, the attention glyph is suppressed (menu bar shows the
     /// composed title only); when the text goes away, the glyph returns
     /// so the item stays visible.
     private var textShown = false
+    /// Launch-only rendering exercise; never writes shared preferences.
+    private static let qaMenuReadoutEnabled = ProcessInfo.processInfo.environment["STATS_QA_MENU_READOUT"] == "1"
+    private var qaMenuReadoutTick = 0
+    private var qaMenuReadoutPhase = -1
     
     /// QA fan-cycle state (STATS_QA_FAN_CYCLE=1): latest real specs and
     /// speed of fan 0 from the sensors reader, captured off
@@ -181,6 +222,8 @@ final class UnifiedPopupController {
     private var outsideClickMonitors: [Any] = []
     
     private func installOutsideClickDismissal() {
+        // The isolated producer must not react to clicks in the user's desktop.
+        guard ProcessInfo.processInfo.environment["STATS_CAPTURE_FIXTURE"] != "1" else { return }
         let global = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
             self?.dismissForOutsideClick(event: nil)
         }
@@ -297,6 +340,22 @@ final class UnifiedPopupController {
         button.sendAction(on: [.leftMouseDown, .rightMouseDown])
         button.toolTip = localizedString("Open unified popup")
         self.statusItem = item
+        if ProcessInfo.processInfo.environment["STATS_CAPTURE_FIXTURE"] == "1" {
+            // Original button/composer, without live polling, wake reconnect
+            // or helper activation. Capture data is supplied below.
+            button.window?.identifier = NSUserInterfaceItemIdentifier(rawValue: "StatsCaptureStatusItem")
+            button.setAccessibilityIdentifier("StatsCaptureStatusItem")
+            self.updateGlyph()
+            self.updateMenuReadout()
+            NSLog("[CaptureFixture] status root=%@ window=%@ number=%ld frame=%@",
+                  button.window?.contentView.map { String(describing: type(of: $0)) } ?? "unavailable",
+                  button.window?.identifier?.rawValue ?? "unavailable",
+                  button.window?.windowNumber ?? 0, NSStringFromRect(button.window?.frame ?? .zero))
+            if ProcessInfo.processInfo.environment["STATS_CAPTURE_SURFACE"] == "context-menu" {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self.showStatusMenu() }
+            }
+            return
+        }
         // Post-sleep refresh of the menu readout: SMC.shared opens its
         // AppleSMC connection once at launch and sleep/wake can leave it
         // stale (reads against the old port, watts frozen on the
@@ -367,6 +426,7 @@ final class UnifiedPopupController {
         let key = attention.map { "\($0.kind.rawValue)-\($0.level.rawValue)" } ?? "default"
         guard key != self.glyphState else { return }
         self.glyphState = key
+        guard !self.textShown else { return }
         
         if let attention {
             let image: NSImage
@@ -391,126 +451,6 @@ final class UnifiedPopupController {
             button.image = image
         }
         button.contentTintColor = nil
-    }
-    
-    /// Live readout next to the unified status item, evaluated on the same
-    /// ~1s cadence as updateGlyph. The element set (MenuReadoutElements —
-    /// watts / battery / time, read-through from the MEN-1 preset key and,
-    /// below that, the legacy watts boolean) picks the segments, the layout
-    /// (MenuReadoutLayoutSelection — horizontal / stacked) picks the join,
-    /// and MenuReadoutComposer composes the title. The readout is the menu
-    /// bar's entire content — the attention glyph is suppressed while text
-    /// shows (button.image cleared below, after updateGlyph's pass in the
-    /// same tick) and restored when the text goes away, so an off item
-    /// never becomes invisible. STATS_QA_MENU_WATTS=1 forces the
-    /// watts-only set and logs the composed title every tick for the
-    /// smoke test. Watts are read fresh from the SMC each tick, by
-    /// power state (see MenuPowerReadout): battery drain (PPBR) on
-    /// battery; total system draw (PDTR) on AC when not charging; SoC
-    /// power (si10) on AC while charging, because the adapter sits at
-    /// its delivery limit then and PDTR pins at a constant. Battery
-    /// values come from Battery.lastKnownUsage — the same sample the
-    /// unified panel's Battery row renders (see UnifiedPanelContent);
-    /// temperature comes from Sensors.lastKnownList via
-    /// hottestTemperatureText — the same hottest value the panel's
-    /// Sensors row renders.
-    private func updateMenuReadout() {
-        guard let item = self.statusItem, let button = item.button else { return }
-        let forced = ProcessInfo.processInfo.environment["STATS_QA_MENU_WATTS"] == "1"
-        let elements: [MenuReadoutElement] = forced ? [.watts] : MenuReadoutElements.current()
-        let layout = MenuReadoutLayoutSelection.current()
-
-        let draw = self.menuPower.watts()
-
-        if forced {
-            NSLog("[QA] menu watts: %@", draw.map { UnifiedInfoFormatters.menuWatts($0) } ?? "n/a")
-            let rawPPBR = Kit.SMC.shared.getValue("PPBR")
-            let rawPDTR = Kit.SMC.shared.getValue("PDTR")
-            let rawSI10 = Kit.SMC.shared.getValue("si10")
-            NSLog("[QA] watts raw: PPBR=%@ PDTR=%@ SI10=%@",
-                  rawPPBR.map { String($0) } ?? "n/a",
-                  rawPDTR.map { String($0) } ?? "n/a",
-                  rawSI10.map { String($0) } ?? "n/a")
-        }
-
-        let usage = (modules.first(where: { $0 is Battery }) as? Battery)?.lastKnownUsage
-        let sensorsList = (modules.first(where: { $0 is Sensors }) as? Sensors)?.lastKnownList
-        let input = MenuReadoutComposer.Input(
-            watts: draw,
-            batteryLevel: usage?.level,
-            temperatureText: Self.hottestTemperatureText(sensorsList?.sensors ?? []),
-            timeToEmptyMinutes: usage?.timeToEmpty,
-            isBatteryPowered: usage?.isBatteryPowered ?? false
-        )
-        let next = MenuReadoutComposer.title(
-            segments: MenuReadoutComposer.segments(elements: elements, input: input),
-            layout: layout
-        )
-        if !next.isEmpty {
-            PowerDiagnostics.record(watts: next)
-        }
-        if next.isEmpty {
-            button.attributedTitle = NSAttributedString()
-            if item.length != NSStatusItem.squareLength {
-                item.length = NSStatusItem.squareLength
-            }
-            if self.textShown {
-                self.textShown = false
-                // glyphState is keyed on the attention state, which never
-                // changed while the glyph was suppressed — clear it so
-                // updateGlyph repaints the glyph now.
-                self.glyphState = ""
-                self.updateGlyph()
-            }
-            self.menuPowerState = ""
-            return
-        }
-        // Text owns the item: keep the glyph suppressed even on ticks
-        // where the title did not change (updateGlyph may just have
-        // repainted it for an attention change — see the timer order).
-        self.textShown = true
-        button.image = nil
-        // The skip key carries the layout: a layout switch with identical
-        // segments must repaint (font and paragraph style change).
-        let nextKey = "\(layout.rawValue)\u{1F}\(next)"
-        guard nextKey != self.menuPowerState else { return }
-        self.menuPowerState = nextKey
-        button.attributedTitle = NSAttributedString(string: next, attributes: self.menuReadoutAttributes(layout: layout))
-        if item.length != NSStatusItem.variableLength {
-            item.length = NSStatusItem.variableLength
-        }
-    }
-
-    /// Hottest popup-visible temperature, formatted exactly as the
-    /// unified panel's Sensors row renders it — Stats/UnifiedPanelSamples
-    /// .swift:147-153 is the reference copy of this filter. Kept beside
-    /// the tick so the menu readout and the panel cannot drift; when
-    /// UnifiedPanelSamples is next touched it should call this instead
-    /// of repeating the filter inline.
-    private static func hottestTemperatureText(_ sensors: [Sensor_p]) -> String? {
-        sensors
-            .filter({ $0.type == .temperature && $0.popupState && $0.value.isFinite })
-            .max(by: { $0.value < $1.value })?
-            .formattedValue
-    }
-
-    /// Title attributes for the composed readout. Horizontal is a single
-    /// 12pt line, matching every other menu bar readout; stacked shrinks
-    /// to 9.5pt and centers each line so the multi-line block sits
-    /// evenly under the item.
-    private func menuReadoutAttributes(layout: MenuReadoutLayout) -> [NSAttributedString.Key: Any] {
-        switch layout {
-        case .horizontal:
-            return [.font: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .regular)]
-        case .stacked:
-            let style = NSMutableParagraphStyle()
-            style.alignment = .center
-            style.lineBreakMode = .byWordWrapping
-            return [
-                .font: NSFont.monospacedDigitSystemFont(ofSize: 9.5, weight: .regular),
-                .paragraphStyle: style
-            ]
-        }
     }
     
     /// Primary SFSymbol with a macOS 12-safe fallback for symbols newer
@@ -578,7 +518,10 @@ final class UnifiedPopupController {
         quit.target = self
         menu.addItem(quit)
         
-        menu.popUp(positioning: nil, at: NSPoint(x: button.bounds.minX, y: button.bounds.maxY + 2), in: button)
+        let capturing = ProcessInfo.processInfo.environment["STATS_CAPTURE_FIXTURE"] == "1"
+        if capturing { NSApp.activate(ignoringOtherApps: true) }
+        let shown = menu.popUp(positioning: nil, at: NSPoint(x: button.bounds.minX, y: button.bounds.maxY + 2), in: button)
+        if capturing { NSLog("[CaptureFixture] context menu shown=%d", shown ? 1 : 0) }
     }
     
     @objc private func menuOpen() {
@@ -586,7 +529,7 @@ final class UnifiedPopupController {
     }
     
     @objc private func menuSettings() {
-        NotificationCenter.default.post(name: .toggleSettings, object: nil, userInfo: ["module": "Dashboard"])
+        NotificationCenter.default.post(name: .toggleSettings, object: nil, userInfo: ["module": "Settings"])
     }
     
     @objc private func menuQuit() {
@@ -640,7 +583,7 @@ final class UnifiedPopupController {
         NSLog("[UnifiedPanelTrace] hide() visible=%d", self.panel.isVisible ? 1 : 0)
         guard self.panel.isVisible else { return }
         self.panelPresented = false
-        SensorsAllPopover.shared.close()
+        SensorsAllPopover.closeIfShown()
         self.panel.animateExit { [weak self] in
             self?.panel.orderOut(nil)
         }
@@ -652,13 +595,15 @@ final class UnifiedPopupController {
         // covers the app having launched before the helper was
         // registered/approved. Kept off the first-paint path — the panel
         // renders now, the helper state catches up a beat later.
-        DispatchQueue.main.async {
-            SMCHelper.shared.checkForUpdate()
-            SMCHelper.shared.refreshReachability()
-            NSLog("[UnifiedPopup] helper active=%d installed=%d signed=%d",
-                  SMCHelper.shared.isActive() ? 1 : 0,
-                  SMCHelper.shared.isInstalled ? 1 : 0,
-                  SMCHelper.shared.isProperlySigned ? 1 : 0)
+        if ProcessInfo.processInfo.environment["STATS_CAPTURE_FIXTURE"] != "1" {
+            DispatchQueue.main.async {
+                SMCHelper.shared.checkForUpdate()
+                SMCHelper.shared.refreshReachability()
+                NSLog("[UnifiedPopup] helper active=%d installed=%d signed=%d",
+                      SMCHelper.shared.isActive() ? 1 : 0,
+                      SMCHelper.shared.isInstalled ? 1 : 0,
+                      SMCHelper.shared.isProperlySigned ? 1 : 0)
+            }
         }
         let t0 = CFAbsoluteTimeGetCurrent()
         self.panel.refreshContent()
@@ -1002,6 +947,13 @@ final class UnifiedPopupController {
                 self.panel.scrollToOffset(offset)
             }
         }
+        if ProcessInfo.processInfo.environment["STATS_CAPTURE_FIXTURE"] == "1",
+           ProcessInfo.processInfo.environment["STATS_CAPTURE_SURFACE"] == "sensors" {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) { [weak self] in
+                self?.panel.scrollToSection("Sensors")
+                self?.panel.openAllSensorsForQA()
+            }
+        }
         if ProcessInfo.processInfo.environment["STATS_POPUP_DEBUG_PAINT"] == "1" {
             DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
                 self?.panel.debugFrames()
@@ -1016,546 +968,180 @@ final class UnifiedPopupController {
     }
 }
 
-/// Standard system popover material with the mock's 16pt radius and
-/// 1pt panel border (white 14% dark / black 7% light).
-///
-/// Top-origin coordinates for its chrome (scroll container, footer):
-/// the panel is anchored at the menu bar and grows DOWNWARD, so the
-/// band layout is expressed from the top.
-private final class UnifiedPanelMaterialView: NSVisualEffectView {
-    override var isFlipped: Bool { true }
-    
-    override func updateLayer() {
-        super.updateLayer() // NSVisualEffectView draws the material here
-        self.effectiveAppearance.performAsCurrentDrawingAppearance {
-            self.layer?.borderColor = UnifiedTokens.panelBorder.cgColor
-        }
-    }
-}
-
-/// Manual clip container in place of NSScrollView: the panel window hugs
-/// the menu bar and AppKit applies a variable safe-area content inset to
-/// scroll views there, which no reset reliably defeats. Full control over
-/// the offset also makes harness scroll knobs exact.
-private final class UnifiedPopupScrollContainer: NSView {
-    private weak var document: NSView?
-    var offset: CGFloat = 0
-    
-    override var isFlipped: Bool { true }
-    
-    func host(_ document: NSView) {
-        self.document = document
-        self.addSubview(document)
-    }
-    
-    var maxOffset: CGFloat {
-        max((self.document?.frame.height ?? 0) - self.bounds.height, 0)
-    }
-    
-    func scrollTo(_ value: CGFloat) {
-        self.offset = min(max(value, 0), self.maxOffset)
-        self.layoutContent()
-    }
-    
-    func layoutContent() {
-        guard let document = self.document else { return }
-        document.frame = NSRect(x: 0, y: -self.offset, width: self.bounds.width, height: document.frame.height)
-    }
-    
-    override func scrollWheel(with event: NSEvent) {
-        self.scrollTo(self.offset + event.scrollingDeltaY)
-    }
-}
-
-private final class UnifiedPopupPanel: NSPanel, NSWindowDelegate {
-    static let panelWidth: CGFloat = 380
-    
-    private let effectView = UnifiedPanelMaterialView()
-    private let scrollContainer = UnifiedPopupScrollContainer()
-    private let content = UnifiedPanelContent(width: panelWidth)
-    private let footerBar = NSView()
-    
-    var contentHeight: CGFloat {
-        self.content.frame.height
-    }
-    
-    override var canBecomeKey: Bool { true }
-    
-    /// Every path that makes the panel vanish ends here. The compact
-    /// caller stack (first non-system frames) names which one — the
-    /// [UnifiedPanelTrace] lines around it (toggle decision, key/main and
-    /// active transitions) pin down the real status-item click flow.
-    override func orderOut(_ sender: Any?) {
-        let appFrames = Thread.callStackSymbols
-            .filter { frame in
-                !frame.contains("AppKit") && !frame.contains("Foundation") &&
-                !frame.contains("CoreFoundation") && !frame.contains("libswiftCore") &&
-                !frame.contains("libsystem") && !frame.contains("HIToolbox") &&
-                !frame.contains("SwiftUI") && !frame.contains("UIKitMacHelper")
+private extension UnifiedPopupController {
+    /// Live readout next to the unified status item, evaluated on the same
+    /// ~1s cadence as updateGlyph. The element set (MenuReadoutElements —
+    /// watts / battery / temperature / time, read-through from the MEN-1 preset key and,
+    /// below that, the legacy watts boolean) picks the segments, the layout
+    /// (MenuReadoutLayoutSelection — horizontal / stacked) picks the join,
+    /// and MenuReadoutComposer composes the title. The readout is the menu
+    /// bar's entire content — either a native title or a stacked template
+    /// image. The attention glyph stays suppressed while readouts show
+    /// and is restored when they disappear, so an off item
+    /// never becomes invisible. STATS_QA_MENU_WATTS=1 forces the
+    /// watts-only set and logs the composed title every tick for the
+    /// smoke test. Watts are read fresh from the SMC each tick, by
+    /// power state (see MenuPowerReadout): battery drain (PPBR) on
+    /// battery; total system draw (PDTR) on AC when not charging; SoC
+    /// power (si10) on AC while charging, because the adapter sits at
+    /// its delivery limit then and PDTR pins at a constant. Battery
+    /// values come from Battery.lastKnownUsage — the same sample the
+    /// unified panel's Battery row renders (see UnifiedPanelContent);
+    /// temperature comes from Sensors.lastKnownList via
+    /// hottestTemperatureText — the same hottest value the panel's
+    /// Sensors row renders.
+    private func updateMenuReadout() {
+        guard let item = self.statusItem, let button = item.button else { return }
+        let environment = ProcessInfo.processInfo.environment
+        let captureFixture = environment["STATS_CAPTURE_FIXTURE"] == "1"
+        let forced = !captureFixture && environment["STATS_QA_MENU_WATTS"] == "1"
+        var elements: [MenuReadoutElement] = forced ? [.watts] : MenuReadoutElements.current()
+        var layout = MenuReadoutLayoutSelection.current()
+        if captureFixture {
+            let rawElements = environment["STATS_CAPTURE_MENU_ELEMENTS"] ?? "off"
+            let requested = rawElements == "off" ? [] : rawElements.split(separator: ",").map(String.init)
+            guard requested.allSatisfy({ MenuReadoutElement(rawValue: $0) != nil }),
+                  let requestedLayout = MenuReadoutLayout(rawValue: environment["STATS_CAPTURE_MENU_LAYOUT"] ?? "horizontal") else {
+                NSLog("[CaptureFixture] invalid menu elements or layout")
+                exit(1)
             }
-            .prefix(6)
-        NSLog("[UnifiedPanelTrace] panel orderOut (was visible=%d) callers: %@",
-              self.isVisible ? 1 : 0,
-              appFrames.joined(separator: " <- "))
-        super.orderOut(sender)
-    }
-    
-    // MARK: - NSWindowDelegate (traced)
-    
-    func windowDidBecomeKey(_ notification: Notification) {
-        NSLog("[UnifiedPanelTrace] panel didBecomeKey visible=%d", self.isVisible ? 1 : 0)
-    }
-    
-    func windowDidResignKey(_ notification: Notification) {
-        NSLog("[UnifiedPanelTrace] panel didResignKey visible=%d", self.isVisible ? 1 : 0)
-    }
-    
-    func windowDidBecomeMain(_ notification: Notification) {
-        NSLog("[UnifiedPanelTrace] panel didBecomeMain visible=%d", self.isVisible ? 1 : 0)
-    }
-    
-    func windowDidResignMain(_ notification: Notification) {
-        NSLog("[UnifiedPanelTrace] panel didResignMain visible=%d", self.isVisible ? 1 : 0)
-    }
-    
-    override init(contentRect: NSRect, styleMask: NSWindow.StyleMask, backing: NSWindow.BackingStoreType, defer flag: Bool) {
-        super.init(contentRect: contentRect, styleMask: styleMask, backing: backing, defer: flag)
-        
-        // Status-item popups live at NSStatusWindowLevel, not .normal:
-        // the opening click activates Stats and the system bounces a
-        // deactivate back (traced), and the moment Stats deactivates,
-        // other apps' regular windows restack ABOVE a .normal-level
-        // panel and bury it — the open-then-vanish flash. At .statusBar
-        // the panel floats above app windows even while Stats is
-        // inactive (same as the Wi-Fi/Battery popups). Activation on
-        // open stays: it is what dismisses another app's open dropdown.
-        self.level = .statusBar
-        self.collectionBehavior = .moveToActiveSpace
-        self.backgroundColor = .clear
-        // NSPanel's default is true; with activation-on-open (show())
-        // the menu-bar click flow bounces a deactivate right after the
-        // opening click, and AppKit would order this panel out on it —
-        // the open-then-instantly-vanish flash. Outside clicks close the
-        // panel through explicit monitors in UnifiedPopupController
-        // instead, which are immune to that transient bounce.
-        self.hidesOnDeactivate = false
-        // opaque + behindWindow material (the classic popup recipe): a
-        // non-opaque panel inherits the desktop safe area and the scroll
-        // view gets a variable top content inset that hides the header
-        self.isOpaque = true
-        self.hasShadow = true
-        self.delegate = self
-        
-        let chrome = UnifiedPopupContentView(frame: NSRect(x: 0, y: 0, width: contentRect.width, height: contentRect.height))
-        if ProcessInfo.processInfo.environment["STATS_POPUP_DEBUG_PAINT"] == "1" {
-            chrome.wantsLayer = true
-            chrome.layer?.backgroundColor = NSColor.systemPurple.cgColor
+            elements = requested.compactMap(MenuReadoutElement.init(rawValue:))
+            layout = requestedLayout
         }
-        chrome.onEscape = { [weak self] in
-            guard let self else { return }
-            self.orderOut(nil)
+
+        let draw = captureFixture ? 17.1 : self.menuPower.watts()
+
+        if forced {
+            NSLog("[QA] menu watts: %@", draw.map { UnifiedInfoFormatters.menuWatts($0) } ?? "n/a")
+            let rawPPBR = Kit.SMC.shared.getValue("PPBR")
+            let rawPDTR = Kit.SMC.shared.getValue("PDTR")
+            let rawSI10 = Kit.SMC.shared.getValue("si10")
+            NSLog("[QA] watts raw: PPBR=%@ PDTR=%@ SI10=%@",
+                  rawPPBR.map { String($0) } ?? "n/a",
+                  rawPDTR.map { String($0) } ?? "n/a",
+                  rawSI10.map { String($0) } ?? "n/a")
         }
-        self.contentView = chrome
-        
-        self.effectView.material = .popover
-        self.effectView.blendingMode = .behindWindow
-        self.effectView.state = .active
-        self.effectView.wantsLayer = true
-        self.effectView.layer?.cornerRadius = UnifiedTokens.panelRadius
-        self.effectView.layer?.borderWidth = 1
-        self.effectView.layer?.masksToBounds = true
-        self.effectView.frame = content.bounds
-        self.effectView.autoresizingMask = [.width, .height]
-        
-        self.scrollContainer.wantsLayer = true
-        self.scrollContainer.layer?.masksToBounds = true
-        self.scrollContainer.frame = NSRect(x: 0, y: 0, width: contentRect.width, height: max(contentRect.height - 28, 60))
-        self.scrollContainer.autoresizingMask = []
-        self.scrollContainer.host(self.content)
-        self.effectView.addSubview(self.scrollContainer)
-        
-        self.footerBar.frame = NSRect(x: 0, y: 0, width: contentRect.width, height: 28)
-        self.footerBar.autoresizingMask = [.width]
-        
-        let separator = NSView(frame: NSRect(x: 12, y: 27, width: contentRect.width - 24, height: 1))
-        separator.autoresizingMask = [.width]
-        separator.wantsLayer = true
-        separator.layer?.backgroundColor = NSColor.separatorColor.withAlphaComponent(0.3).cgColor
-        self.footerBar.addSubview(separator)
-        
-        let activity = NSButton()
-        activity.isBordered = false
-        activity.attributedTitle = NSAttributedString(string: localizedString("Open Activity Monitor"), attributes: [
-            .font: NSFont.systemFont(ofSize: 12, weight: .medium),
-            .foregroundColor: NSColor.controlAccentColor
-        ])
-        activity.target = self
-        activity.action = #selector(self.openActivityMonitor)
-        activity.sizeToFit()
-        activity.frame = NSRect(x: 12, y: 3, width: activity.frame.width, height: 20)
-        self.footerBar.addSubview(activity)
-        
-        let settings = NSButton()
-        settings.isBordered = false
-        settings.attributedTitle = NSAttributedString(string: localizedString("Settings"), attributes: [
-            .font: NSFont.systemFont(ofSize: 12, weight: .medium),
-            .foregroundColor: NSColor.controlAccentColor
-        ])
-        settings.target = self
-        settings.action = #selector(self.openSettings)
-        settings.sizeToFit()
-        
-        // Quit is the destructive action and sits rightmost, red per macOS
-        // convention; it terminates the app gracefully.
-        let quit = NSButton()
-        quit.isBordered = false
-        quit.attributedTitle = NSAttributedString(string: localizedString("Quit Stats"), attributes: [
-            .font: NSFont.systemFont(ofSize: 12, weight: .medium),
-            .foregroundColor: NSColor.systemRed
-        ])
-        quit.target = self
-        quit.action = #selector(self.quitApp)
-        quit.sizeToFit()
-        quit.frame = NSRect(x: contentRect.width - 12 - quit.frame.width, y: 3, width: quit.frame.width, height: 20)
-        quit.autoresizingMask = [.minXMargin]
-        self.footerBar.addSubview(quit)
-        
-        settings.frame = NSRect(x: quit.frame.origin.x - 8 - settings.frame.width, y: 3, width: settings.frame.width, height: 20)
-        settings.autoresizingMask = [.minXMargin]
-        self.footerBar.addSubview(settings)
-        
-        self.effectView.addSubview(self.footerBar)
-        
-        chrome.addSubview(self.effectView)
-        
-        // Content-layout changes (section expand, fan rebuild)
-        // must resize the window immediately — previously this hook was
-        // never assigned, so an expand rendered partially for up to a
-        // second until the glyph timer happened to run syncSize.
-        self.content.onLayoutChange = { [weak self] in
-            guard let self, self.isVisible else { return }
-            withoutImplicitAnimation {
-                self.refreshContent()
-                self.syncSize()
+
+        let usage = captureFixture ? nil : (modules.first(where: { $0 is Battery }) as? Battery)?.lastKnownUsage
+        let sensorsList = captureFixture ? nil : (modules.first(where: { $0 is Sensors }) as? Sensors)?.lastKnownList
+        var input = MenuReadoutComposer.Input(
+            watts: draw,
+            batteryLevel: usage?.level,
+            temperatureText: Self.hottestTemperatureText(sensorsList?.sensors ?? []),
+            timeToEmptyMinutes: usage?.timeToEmpty,
+            isBatteryPowered: usage?.isBatteryPowered ?? false
+        )
+        if captureFixture {
+            input = MenuReadoutComposer.Input(
+                watts: 17.1, batteryLevel: 0.73, temperatureText: "53.8°C",
+                timeToEmptyMinutes: 312, isBatteryPowered: true
+            )
+        }
+        if Self.qaMenuReadoutEnabled {
+            let phase = min(self.qaMenuReadoutTick / 4, 9)
+            self.qaMenuReadoutTick += 1
+            layout = (phase % 5 == 1 || phase % 5 == 2) ? .stacked : .horizontal
+            switch phase % 5 {
+            case 0: elements = [.watts, .battery, .temperature]
+            case 1: elements = [.watts, .temperature]
+            case 2: elements = [.temperature]
+            case 3: elements = [.watts, .temperature]
+            default: elements = []
             }
-        }
-    }
-    
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-    
-    /// Total content size the panel needs: document + footer.
-    var requiredContentSize: NSSize {
-        NSSize(width: Self.panelWidth, height: self.content.frame.height + 28)
-    }
-    
-    /// Resize the window so the document and footer fit without
-    /// scrolling; the top edge stays put.
-    func syncSize() {
-        let needed = self.requiredContentSize
-        let current = self.contentView?.frame.size ?? .zero
-        let heightDelta = abs(needed.height - current.height)
-        self.pendingContentHeight = needed.height
-        guard needed.width != current.width || heightDelta >= 1.5 else {
-            self.layoutChrome()
-            return
-        }
-        if UnifiedMotion.enabled, self.anchorTopY != nil {
-            // The spring drives the WINDOW FRAME ONLY, self-timed, with
-            // every frame anchored to anchorTopY (the menu-bar anchor).
-            // AppKit's own frame animation does not keep the visual top
-            // fixed mid-flight on this window class, which broke the
-            // panel invariant (content above the expansion point must
-            // keep identical screen coordinates at every frame).
-            self.frameAnimationFrom = current.height
-            self.frameAnimationTo = needed.height
-            self.frameAnimationStart = Date()
-            if self.frameAnimator == nil {
-                self.frameAnimator = Timer.scheduledTimer(withTimeInterval: 1.0 / 90, repeats: true) { [weak self] _ in
-                    self?.stepFrameAnimation()
+            input = MenuReadoutComposer.Input(
+                watts: 49, batteryLevel: 1, temperatureText: "86°C",
+                timeToEmptyMinutes: nil, isBatteryPowered: false
+            )
+            button.appearance = NSAppearance(named: phase < 5 ? .aqua : .darkAqua)
+            if phase != self.qaMenuReadoutPhase {
+                self.qaMenuReadoutPhase = phase
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+                    self?.captureMenuReadout(phase: phase, layout: layout)
                 }
             }
-            self.layoutChrome()
+        }
+        // Stored/legacy selections can exceed the current layout's UI cap.
+        let cap = layout == .stacked ? 2 : 3
+        if elements.count > cap { elements = Array(elements.prefix(cap)) }
+        let next = MenuReadoutComposer.title(
+            segments: MenuReadoutComposer.segments(elements: elements, input: input),
+            layout: layout
+        )
+        if !next.isEmpty {
+            PowerDiagnostics.record(watts: next)
+        }
+        if next.isEmpty {
+            button.attributedTitle = NSAttributedString()
+            button.setAccessibilityLabel(localizedString("Open unified popup"))
+            if item.length != NSStatusItem.squareLength {
+                item.length = NSStatusItem.squareLength
+            }
+            if self.textShown {
+                self.textShown = false
+                // glyphState is keyed on the attention state, which never
+                // changed while the glyph was suppressed — clear it so
+                // updateGlyph repaints the glyph now.
+                self.glyphState = ""
+                self.updateGlyph()
+            }
+            self.menuPowerState = ""
             return
         }
-        if UnifiedPerf.enabled {
-            UnifiedPerf.frameSet("syncResize")
-            NSLog("[UnifiedPerf] syncResize %.1f -> %.1f", current.height, needed.height)
-        }
-        let top = self.anchorTopY ?? self.frame.maxY
-        self.setContentSize(needed)
-        var frame = self.frame
-        frame.origin.y = top - frame.height
-        self.setFrameOrigin(frame.origin)
-        // Re-pin against the FINAL height in the same pass — pinning
-        // against the pre-resize height leaves the chrome mis-placed for
-        // one visible frame (the "appears in the wrong spot, then jumps"
-        // defect).
-        self.layoutChrome()
+        self.textShown = true
+        let nextKey = "\(layout.rawValue)\u{1F}\(next)"
+        guard nextKey != self.menuPowerState else { return }
+        self.menuPowerState = nextKey
+        applyMenuReadoutTitle(next, layout: layout, to: item)
     }
-    
-    /// Self-driven window-frame spring: each tick re-frames the window
-    /// anchored to the menu-bar top, so the visual top NEVER moves while
-    /// the bottom eases out with a slight overshoot.
-    private var frameAnimator: Timer?
-    private var frameAnimationStart: Date?
-    private var frameAnimationFrom: CGFloat = 0
-    private var frameAnimationTo: CGFloat = 0
-    
-    private func stepFrameAnimation() {
-        guard let start = self.frameAnimationStart else { return }
-        let progress = min(Date().timeIntervalSince(start) / 0.28, 1)
-        let eased = Self.easeOutBack(progress)
-        let height = self.frameAnimationFrom + (self.frameAnimationTo - self.frameAnimationFrom) * eased
-        let top = self.anchorTopY ?? self.frame.maxY
-        var frame = self.frame
-        frame.origin.y = top - height
-        frame.size.height = height
-        self.setFrame(frame, display: true)
-        if progress >= 1 {
-            self.frameAnimator?.invalidate()
-            self.frameAnimator = nil
-            var finalFrame = self.frame
-            finalFrame.origin.y = top - self.frameAnimationTo
-            finalFrame.size.height = self.frameAnimationTo
-            self.setFrame(finalFrame, display: true)
-        }
-    }
-    
-    /// Ease-out-back (~280ms, slight overshoot) — the AppKit spring feel.
-    private static func easeOutBack(_ x: Double) -> Double {
-        let c1 = 1.25
-        let c3 = c1 + 1
-        let t = x - 1
-        return 1 + c3 * t * t * t + c1 * t * t
-    }
-    
-    /// Entrance: contentView layer transform scale 0.92→1.0 (anchored at
-    /// the top-center, i.e. the menu bar icon) + alpha 0→1, ~200ms
-    /// ease-out. Applied AFTER makeKeyAndOrderFront; skipped entirely
-    /// when any QA/capture knob is active.
-    func playEntrance() {
-        guard UnifiedMotion.enabled, let view = self.contentView, let layer = view.layer else { return }
-        view.wantsLayer = true
-        var frame = layer.frame
-        layer.anchorPoint = CGPoint(x: 0.5, y: 1)
-        layer.position = CGPoint(x: frame.midX, y: frame.maxY)
-        layer.transform = CATransform3DMakeScale(0.92, 0.92, 1)
-        view.alphaValue = 0
-        NSAnimationContext.runAnimationGroup({ context in
-            context.duration = 0.2
-            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            view.animator().alphaValue = 1
-        })
-        let animation = CABasicAnimation(keyPath: "transform")
-        animation.fromValue = CATransform3DMakeScale(0.92, 0.92, 1)
-        animation.toValue = CATransform3DIdentity
-        animation.duration = 0.2
-        animation.timingFunction = CAMediaTimingFunction(name: .easeOut)
-        layer.add(animation, forKey: "entrance")
-        layer.transform = CATransform3DIdentity
-    }
-    
-    /// Exit: reverse of the entrance, snappier (~140ms); orderOut runs in
-    /// the completion. Skipped when motion is gated (instant orderOut).
-    func animateExit(completion: @escaping () -> Void) {
-        guard UnifiedMotion.enabled, let view = self.contentView, let layer = view.layer else {
-            completion()
-            return
-        }
-        NSAnimationContext.runAnimationGroup({ context in
-            context.duration = 0.14
-            context.timingFunction = CAMediaTimingFunction(name: .easeIn)
-            view.animator().alphaValue = 0
-        }, completionHandler: {
-            view.alphaValue = 1
-            layer.transform = CATransform3DIdentity
-            completion()
-        })
-        let animation = CABasicAnimation(keyPath: "transform")
-        animation.fromValue = CATransform3DIdentity
-        animation.toValue = CATransform3DMakeScale(0.94, 0.94, 1)
-        animation.duration = 0.14
-        animation.timingFunction = CAMediaTimingFunction(name: .easeIn)
-        layer.add(animation, forKey: "exit")
-        layer.transform = CATransform3DMakeScale(0.94, 0.94, 1)
-    }
-    
-    func debugFrames() {
-        NSLog("[UnifiedPopup] window=%@ contentView=%@ effect=%@ container=%@",
-              NSStringFromRect(self.frame),
-              NSStringFromRect(self.contentView?.frame ?? .zero),
-              NSStringFromRect(self.effectView.frame),
-              NSStringFromRect(self.scrollContainer.frame))
-    }
-    
-    func refreshContent() {
-        // the window's content rect can carry system insets that autoresizing
-        // does not track; pin the material to the full content view explicitly
-        if let bounds = self.contentView?.bounds, self.effectView.frame != bounds {
-            UnifiedPerf.frameSet("effect")
-            self.effectView.frame = bounds
-        }
-        self.content.relayout()
-        self.layoutChrome()
-        self.scrollContainer.layoutContent()
-    }
-    
-    /// The panel's anchor top (screen maxY), captured at show(). The
-    /// window grows DOWNWARD from the menu bar, so every resize —
-    /// immediate or animated — must be anchored to THIS value, not to
-    /// self.frame.maxY (the model frame can differ from the on-screen
-    /// presentation mid-animation, which moved the visual top).
-    private var anchorTopY: CGFloat? = nil
-    func setAnchorTop(_ value: CGFloat) { self.anchorTopY = value }
-    
-    /// Target content height for the scroll container/footer geometry.
-    /// syncSize/show set this BEFORE the frame reaches it, so chrome
-    /// settles at final geometry in the same pass while the spring
-    /// animates the window frame (the scroll container's top edge is
-    /// constant — only its height follows content; see layoutChrome).
-    private var pendingContentHeight: CGFloat? = nil
-    
-    /// Panel geometry invariant: the window is anchored at the menu bar
-    /// and grows DOWNWARD (syncSize preserves maxY in both the immediate
-    /// and the spring paths). Therefore at EVERY frame of any resize —
-    /// including the expand spring — the content above the expanding
-    /// section (brand header and everything before the expansion point)
-    /// keeps IDENTICAL screen coordinates; only content at or below the
-    /// expansion point translates. Consequences:
-    ///  - the scroll container's TOP edge is constant — only its HEIGHT
-    ///    follows content;
-    ///  - the footer is bottom-anchored (moves with the bottom edge).
-    /// `height` is the TARGET content height (pendingContentHeight) so
-    /// the scroll/footer settle at final geometry in the same pass.
-    func layoutChrome() {
-        let height = self.pendingContentHeight ?? self.contentView?.frame.height ?? 0
-        let containerFrame = NSRect(x: 0, y: 0, width: Self.panelWidth, height: max(height - 28, 60))
-        if self.scrollContainer.frame != containerFrame {
-            UnifiedPerf.frameSet("container")
-            self.scrollContainer.frame = containerFrame
-        }
-        let footerFrame = NSRect(x: 0, y: height - 28, width: Self.panelWidth, height: 28)
-        if self.footerBar.frame != footerFrame {
-            self.footerBar.frame = footerFrame
-        }
-    }
-    
-    /// show() sizes the window itself — record its target so chrome
-    /// pinning never reads a stale or animating frame.
-    func setPendingContentHeight(_ value: CGFloat) { self.pendingContentHeight = value }
-    /// QA hook: drive a section header tap (same path as the gesture).
-    func simulateHeaderTap(_ module: String) { self.content.simulateHeaderTap(module) }
-    var expandedSectionForQA: String? { self.content.expandedSectionForQA }
-    /// QA hook: open the all-sensors popover (same path as the row tap).
-    func openAllSensorsForQA() { self.content.openAllSensorsForQA() }
-    /// QA hook: collapsed states "name=1" pairs for the restore probe.
-    var collapsedStatesForQA: String { self.content.collapsedStatesForQA }
-    
-    func expandSection(_ module: String) {
-        self.content.expandSection(module)
-    }
-    
-    func sectionOffset(for module: String) -> CGFloat? {
-        self.content.sectionOffset(for: module)
-    }
-    
-    func scrollToSection(_ module: String) {
-        guard let offset = self.sectionOffset(for: module) else { return }
-        self.scrollToOffset(offset)
-    }
-    
-    func scrollToTop() {
-        self.scrollContainer.scrollTo(0)
-    }
-    
-    func scrollToBottom() {
-        self.scrollContainer.scrollTo(self.content.frame.height)
-    }
-    
-    func scrollToOffset(_ offset: Double) {
-        self.scrollContainer.scrollTo(offset)
-    }
-    
-    @objc private func openActivityMonitor() {
-        guard let app = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.ActivityMonitor") else { return }
-        NSWorkspace.shared.open([], withApplicationAt: app, configuration: NSWorkspace.OpenConfiguration())
-    }
-    
-    @objc private func openSettings() {
-        NotificationCenter.default.post(name: .toggleSettings, object: nil, userInfo: ["module": "Dashboard"])
-    }
-    
-    @objc private func quitApp() {
-        NSApp.terminate(nil)
-    }
-    
-    /// Harness QA (STATS_POPUP_CAPTURE=1): renders the panel content into a
-    /// PNG on disk, so captures work even when the console is locked.
-    /// STATS_POPUP_CAPTURE_CHROME=1 additionally renders the footer bar
-    /// next to the content capture as "<path>-footer.png" — the footer
-    /// lives in the panel chrome, outside the content view.
-    func writeSelfCapture() {
-        let content = self.content
-        content.relayout()
-        let size = content.bounds.size
-        guard size.width > 0, size.height > 0,
-              let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(size.width * 2), pixelsHigh: Int(size.height * 2), bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0) else { return }
-        rep.size = size
-        self.effectiveAppearance.performAsCurrentDrawingAppearance {
-            // A plain setNeedsDisplay + cacheDisplay composites from layer
-            // caches: views that never had a display pass (freshly built
-            // rows, NSScrollView document content) come out blank. A
-            // synchronous display() pass first makes captures faithful.
-            content.display()
-            content.cacheDisplay(in: content.bounds, to: rep)
-        }
-        guard let png = rep.representation(using: NSBitmapImageRep.FileType.png, properties: [:]) else { return }
-        let path = ProcessInfo.processInfo.environment["STATS_POPUP_CAPTURE_PATH"] ?? "/tmp/unified-panel-selfcapture.png"
-        try? png.write(to: URL(fileURLWithPath: path))
-        NSLog("[UnifiedPopup] self capture written to %@", path)
-        if ProcessInfo.processInfo.environment["STATS_POPUP_CAPTURE_CHROME"] == "1" {
-            self.writeChromeCapture(self.footerBar, path: "\(path)-footer.png")
-        }
-    }
-    
-    /// Renders one chrome view (footer) into its own PNG. Skips hidden
-    /// views.
-    private func writeChromeCapture(_ view: NSView, path: String) {
-        let size = view.bounds.size
-        guard !view.isHidden, size.width > 0, size.height > 0,
-              let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(size.width * 2), pixelsHigh: Int(size.height * 2), bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0) else { return }
-        rep.size = size
-        self.effectiveAppearance.performAsCurrentDrawingAppearance {
-            view.display()
-            view.cacheDisplay(in: view.bounds, to: rep)
-        }
-        guard let png = rep.representation(using: NSBitmapImageRep.FileType.png, properties: [:]) else { return }
-        try? png.write(to: URL(fileURLWithPath: path))
-        NSLog("[UnifiedPopup] chrome capture written to %@", path)
-    }
-}
 
-private extension NSView {
-    func setNeedsDisplayRecursively() {
-        self.setNeedsDisplay(self.bounds)
-        for subview in self.subviews {
-            subview.setNeedsDisplayRecursively()
-        }
+    /// Hottest popup-visible temperature, formatted exactly as the
+    /// unified panel's Sensors row renders it — Stats/UnifiedPanelSamples
+    /// .swift:147-153 is the reference copy of this filter. Kept beside
+    /// the tick so the menu readout and the panel cannot drift; when
+    /// UnifiedPanelSamples is next touched it should call this instead
+    /// of repeating the filter inline.
+    private static func hottestTemperatureText(_ sensors: [Sensor_p]) -> String? {
+        sensors
+            .filter({ $0.type == .temperature && $0.popupState && $0.value.isFinite })
+            .max(by: { $0.value < $1.value })?
+            .formattedValue
     }
-}
 
-private final class UnifiedPopupContentView: NSView {
-    var onEscape: (() -> Void)?
-    
-    override var acceptsFirstResponder: Bool { true }
-    
-    override func keyDown(with event: NSEvent) {
-        if event.keyCode == 53 {
-            self.onEscape?()
-            return
+    /// Captures the installed button, not a reconstruction of its title.
+    /// With STATS_QA_MENU_CAPTURE_DIR set, phase-0...phase-9.png cover
+    /// horizontal three/two, stacked two/one and glyph in light/dark.
+    private func captureMenuReadout(phase: Int, layout: MenuReadoutLayout) {
+        guard let button = self.statusItem?.button else { return }
+        button.layoutSubtreeIfNeeded()
+        button.needsDisplay = true
+        button.displayIfNeeded()
+        let imageRect = button.cell?.imageRect(forBounds: button.bounds) ?? .zero
+        let title = button.accessibilityLabel() ?? ""
+        let rows = layout == .stacked && phase % 5 == 1 ? 2 : (phase % 5 == 4 ? 0 : 1)
+        NSLog("[QA] menu readout phase=%d layout=%@ title=%@ frame=%@ image=%@ rows=%d glyph=%d action=%@ window=%d",
+              phase, layout.rawValue, title, NSStringFromRect(button.frame),
+              NSStringFromRect(imageRect), rows, self.textShown ? 0 : 1,
+              button.action.map(NSStringFromSelector) ?? "nil", button.window?.windowNumber ?? -1)
+        if rows == 2 {
+            let top = NSRect(x: imageRect.minX, y: imageRect.midY, width: imageRect.width, height: imageRect.height / 2)
+            let bottom = NSRect(x: imageRect.minX, y: imageRect.minY, width: imageRect.width, height: imageRect.height / 2)
+            NSLog("[QA] menu readout row geometry top=%@ bottom=%@ fits=%d",
+                  NSStringFromRect(top), NSStringFromRect(bottom),
+                  button.bounds.contains(imageRect) && imageRect.height >= 22 ? 1 : 0)
         }
-        super.keyDown(with: event)
+        defer { if phase == 9 { NSLog("[QA] menu readout complete") } }
+        guard let directory = ProcessInfo.processInfo.environment["STATS_QA_MENU_CAPTURE_DIR"] else { return }
+        do {
+            let url = URL(fileURLWithPath: directory, isDirectory: true)
+            try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+            guard let bitmap = button.bitmapImageRepForCachingDisplay(in: button.bounds) else { return }
+            button.cacheDisplay(in: button.bounds, to: bitmap)
+            guard let data = bitmap.representation(using: .png, properties: [:]) else { return }
+            try data.write(to: url.appendingPathComponent("phase-\(phase).png"))
+            NSLog("[QA] menu readout captured phase=%d pixels=%dx%d", phase, bitmap.pixelsWide, bitmap.pixelsHigh)
+        } catch {
+            NSLog("[QA] menu readout capture failed: %@", error.localizedDescription)
+        }
     }
+
 }

@@ -18,6 +18,13 @@ private final class FlippedDocumentView: NSView {
 
 final class SensorsAllPopover: NSObject, NSPopoverDelegate {
     static let shared = SensorsAllPopover()
+    private static weak var instance: SensorsAllPopover?
+
+    /// Closing the main panel must not instantiate an unopened popover.
+    static func closeIfShown() {
+        guard let instance = self.instance, instance.isShown else { return }
+        instance.close()
+    }
     
     private let popover = NSPopover()
     private let content = SensorsAllPopoverContent()
@@ -29,13 +36,15 @@ final class SensorsAllPopover: NSObject, NSPopoverDelegate {
         self.popover.behavior = .transient
         self.popover.animates = true
         self.popover.delegate = self
+        Self.instance = self
     }
     
     var isShown: Bool { self.popover.isShown }
     
     func show(relativeTo rect: NSRect, of view: NSView) {
-        self.content.refreshNow()
         self.popover.show(relativeTo: rect, of: view, preferredEdge: .maxY)
+        self.content.isPresented = self.popover.isShown
+        self.content.refresh()
         view.window?.makeFirstResponder(self.content.searchField)
         self.escapeMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard event.keyCode == 53 else { return event }
@@ -48,6 +57,10 @@ final class SensorsAllPopover: NSObject, NSPopoverDelegate {
         self.popover.performClose(nil)
     }
     
+    func popoverWillClose(_ notification: Notification) {
+        self.content.isPresented = false
+    }
+
     func popoverDidClose(_ notification: Notification) {
         if let monitor = self.escapeMonitor {
             NSEvent.removeMonitor(monitor)
@@ -73,12 +86,13 @@ final class SensorsAllPopover: NSObject, NSPopoverDelegate {
 
 final class SensorsAllPopoverContent: NSViewController, NSSearchFieldDelegate {
     fileprivate let searchField = NSSearchField()
+    fileprivate var isPresented = false
     private let scroll = NSScrollView()
     private let document = FlippedDocumentView()
     private let emptyField = NSTextField(labelWithString: "")
     private var latest: [String: Sensor_p] = [:]
     private var keys: [String] = []
-    private var rows: [(key: String, name: NSTextField, value: NSTextField)] = []
+    private var rows: [String: (name: NSTextField, value: NSTextField)] = [:]
     
     private static let rowHeight: CGFloat = 22
     
@@ -129,46 +143,60 @@ final class SensorsAllPopoverContent: NSViewController, NSSearchFieldDelegate {
         }
     }
     
-    /// Re-apply the current filter against the latest samples:
-    /// membership changes rebuild the rows; otherwise values update
-    /// in place — no per-tick reshuffle.
+    /// Hidden popovers cache samples only. Visible rows keep their view
+    /// identity across ranking and filter changes; only their positions
+    /// and readouts change.
     func refresh() {
+        guard self.isPresented, self.isViewLoaded else { return }
         let desired = SensorsAllPopover.filteredKeys(self.latest, query: self.searchField.stringValue)
         if desired != self.keys {
-            self.rebuild(desired)
+            self.layoutRows(desired)
         }
-        for row in self.rows {
-            guard let sensor = self.latest[row.key] else { continue }
-            if row.value.stringValue != sensor.formattedValue {
-                row.value.stringValue = sensor.formattedValue
+        for key in self.keys {
+            guard let sensor = self.latest[key], let row = self.rows[key] else { continue }
+            if row.name.stringValue != sensor.name {
+                row.name.stringValue = sensor.name
+            }
+            let value = sensor.formattedValue
+            if row.value.stringValue != value {
+                row.value.stringValue = value
             }
         }
     }
     
-    func refreshNow() {
-        self.refresh()
-    }
-    
-    private func rebuild(_ desired: [String]) {
-        for row in self.rows {
-            row.name.removeFromSuperview()
-            row.value.removeFromSuperview()
+    private func layoutRows(_ desired: [String]) {
+        let visibleKeys = Set(desired)
+        for (key, row) in self.rows where !visibleKeys.contains(key) && !row.name.isHidden {
+            row.name.isHidden = true
+            row.value.isHidden = true
         }
         var y: CGFloat = 4
-        self.rows = desired.map { key in
-            let sensor = self.latest[key]
-            let name = unifiedLabel(sensor?.name ?? key, font: .systemFont(ofSize: 12, weight: .regular), color: .secondaryLabelColor)
-            let value = unifiedLabel(sensor?.formattedValue ?? "–", font: .monospacedDigitSystemFont(ofSize: 12, weight: .semibold), color: .labelColor, alignment: .right)
-            name.frame = NSRect(x: 12, y: y + 3, width: 260, height: 16)
-            value.frame = NSRect(x: 268, y: y + 3, width: 100, height: 16)
-            self.document.addSubview(name)
-            self.document.addSubview(value)
+        for key in desired {
+            let row: (name: NSTextField, value: NSTextField)
+            if let existing = self.rows[key] {
+                row = existing
+            } else {
+                let name = unifiedLabel(font: .systemFont(ofSize: 12, weight: .regular), color: .secondaryLabelColor)
+                let value = unifiedLabel(font: .monospacedDigitSystemFont(ofSize: 12, weight: .semibold), color: .labelColor, alignment: .right)
+                row = (name, value)
+                self.rows[key] = row
+                self.document.addSubview(name)
+                self.document.addSubview(value)
+            }
+            if row.name.isHidden {
+                row.name.isHidden = false
+                row.value.isHidden = false
+            }
+            let nameFrame = NSRect(x: 12, y: y + 3, width: 260, height: 16)
+            let valueFrame = NSRect(x: 268, y: y + 3, width: 100, height: 16)
+            if row.name.frame != nameFrame { row.name.frame = nameFrame }
+            if row.value.frame != valueFrame { row.value.frame = valueFrame }
             y += Self.rowHeight
-            return (key, name, value)
         }
-        self.document.frame = NSRect(x: 0, y: 0, width: 380, height: max(y, 30))
+        let frame = NSRect(x: 0, y: 0, width: 380, height: max(y, 30))
+        if self.document.frame != frame { self.document.frame = frame }
         self.keys = desired
-        self.emptyField.isHidden = !self.rows.isEmpty
+        self.emptyField.isHidden = !desired.isEmpty
     }
     
     func controlTextDidChange(_ obj: Notification) {

@@ -72,7 +72,99 @@ open -n --env STATS_POPUP_MODULE=CPU /path/to/Stats.app
 open -n --env STATS_SETTINGS_DESTINATION=Settings --env STATS_OPEN_PRESET_MENU=1 /path/to/Stats.app
 ```
 
-Use a disposable `XCTestConfigurationFilePath` environment value when running captures alongside the installed app so chart storage is isolated from the live database.
+Do not run a second Stats instance alongside the installed app: both use the same bundle identifier and fan-helper registration. Use `Scripts/release.sh` for installation, then run QA against `/Applications/Stats.app` with the normal instance stopped.
+
+### All-sensors memory regression
+
+Closing the unified panel does not instantiate an unopened **All sensors**
+popover. Hidden popovers cache the latest readings without rendering. While
+shown, temperature ranking and filter changes reposition or hide existing rows;
+each sensor's text fields are created only once.
+
+Verify the never-opened, visible, and opened-then-closed paths with changing
+temperature rankings. Hidden samples must leave row views untouched; reopening
+must immediately show the latest values. Filtering to no matches and back must
+preserve the row views, and adding a sensor must create only its own row.
+
+For memory verification, compare native `heap` snapshots after 100 and 1,000
+rank-changing samples in an isolated view-only replay. `NSKeyValueDependency`
+and `NSKeyValueDependencyContext` counts must plateau, not grow with each sample.
+This catches the macOS 27 appearance-dependency leak that repeated detached
+text-field rebuilding triggered. Do not use a second Stats app instance for
+this replay or alter the shared preference domain.
+
+### Source-backed Penpot capture
+
+`penpot-capture.json` declares original English light/dark UI states. Capture-only
+adapters select existing views and supply synthetic metrics, an uninstalled helper,
+disabled login items and an unauthorized remote account. Hardware-detail captures
+replace the serial number with `CAPTURE-REFERENCE`. No preference controls, helper
+actions, reader mounting, remote login or alert delivery are exercised.
+
+The five module previews receive the same synthetic samples through their
+original rendering callbacks, without mounting readers or entering module alert
+handlers. CPU preview samples cover the host's core rows; RAM preview samples
+scale to its physical-memory total. Disk preview metadata matches the synthetic
+root volume. Unavailable SMART and connectivity samples remain explicit no-data
+fields rather than fabricated measurements.
+
+Build the capture executable without installing or launching it directly:
+
+```bash
+xcodebuild -project Stats.xcodeproj -scheme Stats -configuration Debug \
+  -derivedDataPath build/dd -destination 'platform=macOS,arch=arm64' \
+  CODE_SIGNING_ALLOWED=NO ENABLE_DEBUG_DYLIB=NO build
+
+# The output must be a new directory. Requires the installed penpot-sync skill.
+uv run --no-project --no-config ~/.agents/skills/penpot-sync/sync.py extract \
+  --source "$PWD" --spec penpot-capture.json --output penpot-capture-reference
+```
+
+Only the native producer may launch this capture build: it stages a separate
+bundle identity, supplies a synthetic HOME, denies real-home access and networking,
+and freezes the original executable, resources, frameworks and declared sources.
+This is not an install path; installation remains `Scripts/release.sh`.
+
+All adapters below require `STATS_CAPTURE_FIXTURE=1` and leave normal launches
+unchanged:
+
+| Launch control | Original view/state selected |
+|---|---|
+| `STATS_CAPTURE_SURFACE` | `panel`, `settings`, `setup`, `support`, `update`, `sensors`, `menu`, `context-menu` |
+| `STATS_SETTINGS_DESTINATION` | `Dashboard`, `Settings` or the module's configured name |
+| `STATS_CAPTURE_TAB` | Available `module`, `widgets`, `popup`, `notifications` or `preview` tab; unavailable requests fail |
+| `STATS_CAPTURE_SETUP_PAGE` | Setup page `0`–`4`, without clicking setup actions |
+| `STATS_CAPTURE_SEVERITY` | `normal`, `attention` or `critical` synthetic temperature state |
+| `STATS_CAPTURE_SCROLL_TO=bottom` | Bottom of the active settings content |
+| `STATS_CAPTURE_DASHBOARD_HARDWARE=1` | Original hardware-details disclosure |
+| `STATS_CAPTURE_UPDATE_STATE` | `available` or `current`; the update window is dormant in normal custom builds |
+| `STATS_CAPTURE_MENU_ELEMENTS` | `off` or comma-separated `watts`, `battery`, `temperature`, `time` |
+| `STATS_CAPTURE_MENU_LAYOUT` | Original `horizontal` or `stacked` menu readout |
+
+Panel expansion and scrolling use the existing `STATS_POPUP_EXPAND` and
+`STATS_POPUP_SCROLL_TO` controls. The all-sensors fixture supplies enough
+temperatures to expose its original affordance. Legacy module popups remain
+quarantined; this inventory does not imply coverage of every translation.
+
+Capture fixtures ignore foreign desktop clicks so the All sensors source popover
+remains open without changing normal dismissal behavior. Context-menu captures
+select the observed native `NSGlassEffectView` root while menu tracking is active.
+Menu-readout captures bind the original status button's public Accessibility
+identifier, `StatsCaptureStatusItem`, to its actual source-process-owned physical
+frame. They require an unlocked, on-console session and pre-existing Accessibility
+access: macOS can expose a virtual status window with zero height and no usable
+WindowServer capture ID. The menu controls remain explicitly non-editable original
+native paint; no replacement control, fake layer tree or relaxed fidelity gate is used.
+
+The approved native-appearance reference can contain outlined glyphs, bounded
+native-control paint and measured materials; these are not editable text or live
+controls. An extracted capture is not a verified sync. Producer blockers and
+source/target mismatches must remain explicit; never omit failed states, replay
+old target approvals or relax fidelity checks.
+
+`.penpot-sync/goal.json` is the canonical inventory, capture-evidence and blocker
+record. Check it before planning target changes; a valid subset bundle does not
+reduce the agreed scope or authorize an unverified import.
 
 ### Verification rig
 
@@ -80,9 +172,11 @@ The automated checks that gate shipping. Run order: tests, release,
 smoke, perf.
 
 ```bash
-# 1. Unit tests (attention thresholds, Kit, RAM) - must be green
-xcodebuild test -project Stats.xcodeproj -scheme Stats \
-  -destination 'platform=macOS' -derivedDataPath /tmp/stats-test
+# 1. Unit tests with the normal installed instance stopped.
+#    Release needs testability enabled for the suite's @testable imports.
+xcodebuild test -project Stats.xcodeproj -scheme Stats -configuration Release \
+  -destination 'platform=macOS,arch=arm64' -derivedDataPath /tmp/stats-test \
+  CODE_SIGNING_ALLOWED=NO ENABLE_TESTABILITY=YES
 
 # 2. Release: build, helper contract, de-dup Spotlight apps, install to
 #    /Applications, relaunch, smoke test. The ONLY supported install path.
@@ -106,6 +200,32 @@ replies for a fan auto→manual→RPM target→auto cycle
 the helper contract holds. QA builds live under
 `/tmp` (`-derivedDataPath /tmp/stats-build`); the installed app is
 always Release.
+
+For Settings navigation changes, also exercise the installed UI with **Show icon
+in dock** enabled: open Settings from the panel footer, the menu-bar item's
+right-click menu, and the window sidebar. The footer and context-menu actions
+must select the **Settings** page (not Dashboard) and dismiss the floating panel.
+Repeat with the main window closed and minimized; the Settings window must
+appear or restore without changing the Dock preference.
+
+### Menu readouts and fan controls
+
+Settings → **Menu bar readout** selects watts, battery percentage, temperature,
+and time remaining. Horizontal fits up to three selected readouts; Stacked fits
+two centered rows in the same clickable status item. A single available value
+uses the normal full-size text, and no available values restores the status
+glyph. Temperature uses the same hottest curated sensor as the Sensors section.
+
+Expanded Sensors controls size each fan independently: selecting Manual reserves
+space for its slider and min/current/max RPM row immediately. Switching back
+reclaims that space; live sensor updates retain the current layout.
+
+The release smoke includes `STATS_QA_MENU_READOUT=1`, which cycles horizontal,
+stacked, single-value and glyph presentations in light and dark appearances
+without writing preferences. `STATS_QA_MENU_CAPTURE_DIR=/tmp/stats-menu-captures`
+saves `phase-0.png` through `phase-9.png` from the real status button. The smoke
+output reports its unique capture directory for visual inspection; title-string
+checks alone cannot detect clipped text.
 
 ## Fan control & code signing
 

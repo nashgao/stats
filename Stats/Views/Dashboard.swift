@@ -405,6 +405,11 @@ class Dashboard: NSStackView {
         self.addArrangedSubview(scrollView)
         scrollView.widthAnchor.constraint(equalTo: self.widthAnchor).isActive = true
         self.updateUptime()
+        if ProcessInfo.processInfo.environment["STATS_CAPTURE_FIXTURE"] == "1",
+           ProcessInfo.processInfo.environment["STATS_CAPTURE_DASHBOARD_HARDWARE"] == "1" {
+            self.detailsButton.state = .on
+            self.toggleHardwareDetails()
+        }
 
         NotificationCenter.default.addObserver(
             self,
@@ -623,7 +628,8 @@ class Dashboard: NSStackView {
             ),
             PreferencesRow(
                 localizedString("Serial number"),
-                component: textView(SystemKit.shared.device.serialNumber ?? localizedString("Unknown"))
+                component: textView(ProcessInfo.processInfo.environment["STATS_CAPTURE_FIXTURE"] == "1"
+                    ? "CAPTURE-REFERENCE" : (SystemKit.shared.device.serialNumber ?? localizedString("Unknown")))
             ),
             PreferencesRow(localizedString("Uptime"), component: self.uptimeField)
         ]))

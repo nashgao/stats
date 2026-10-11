@@ -116,6 +116,8 @@ open class Window: NSStackView {
         self.segmentedControl?.widthAnchor.constraint(equalTo: self.widthAnchor, constant: -(Constants.Settings.margin*2)).isActive = true
         self.widgetSelector?.widthAnchor.constraint(equalTo: self.widthAnchor, constant: -(Constants.Settings.margin*2)).isActive = true
         self.moduleSettings?.widthAnchor.constraint(equalTo: self.widthAnchor, constant: -(Constants.Settings.margin*2)).isActive = true
+
+        self.selectCaptureView()
     }
     
     deinit {
@@ -127,6 +129,44 @@ open class Window: NSStackView {
         fatalError("init(coder:) has not been implemented")
     }
     
+    private func selectCaptureView() {
+        let environment = ProcessInfo.processInfo.environment
+        guard environment["STATS_CAPTURE_FIXTURE"] == "1",
+              environment["STATS_SETTINGS_DESTINATION"]?.trimmingCharacters(in: .whitespacesAndNewlines) == self.config.name,
+              let requestedTab = environment["STATS_CAPTURE_TAB"] else { return }
+
+        let tab = requestedTab.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        var availableTabs: [String] = []
+        if self.tabView != nil {
+            availableTabs = ["module", "widgets"]
+            if self.isPopupSettingsAvailable { availableTabs.append("popup") }
+            if self.isNotificationsSettingsAvailable { availableTabs.append("notifications") }
+        }
+        if self.isPreviewAvailable, self.previewView != nil { availableTabs.append("preview") }
+
+        guard availableTabs.contains(tab) else {
+            NSLog("Stats capture: unavailable tab '%@' for %@; available tabs: %@", requestedTab, self.config.name, availableTabs.joined(separator: ", "))
+            exit(1)
+        }
+
+        if tab == "preview" {
+            if self.previewView?.isHidden == true { self.toggleView() }
+            return
+        }
+
+        guard let index = availableTabs.firstIndex(of: tab),
+              let segmentedControl = self.segmentedControl,
+              let tabView = self.tabView,
+              index < segmentedControl.segmentCount,
+              index < tabView.numberOfTabViewItems else {
+            NSLog("Stats capture: tab '%@' is not constructed for %@", requestedTab, self.config.name)
+            exit(1)
+        }
+        if self.previewView?.isHidden == false { self.toggleView() }
+        segmentedControl.selectedSegment = index
+        self.switchTabs(sender: segmentedControl)
+    }
+
     public func setState(_ newState: Bool) {
         toggleNSControlState(self.enableControl, state: newState ? .on : .off)
     }

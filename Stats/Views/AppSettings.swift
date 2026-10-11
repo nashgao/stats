@@ -13,6 +13,7 @@ import Cocoa
 import Kit
 
 class ApplicationSettings: NSStackView {
+    private let captureFixture = ProcessInfo.processInfo.environment["STATS_CAPTURE_FIXTURE"] == "1"
     private var diagnosticsButton: NSButton?
     
     private var updateIntervalValue: String {
@@ -164,7 +165,7 @@ class ApplicationSettings: NSStackView {
         fanHelperComponent.addArrangedSubview(self.fanSetupInstallButton!)
         self.opensAtLoginBtn = switchView(
             action: #selector(self.toggleLaunchAtLogin),
-            state: LaunchAtLogin.isEnabled
+            state: self.captureFixture ? false : LaunchAtLogin.isEnabled
         )
         self.fanSetupView = PreferencesSection(title: localizedString("Fan control setup"), [
             PreferencesRow(localizedString("Fan helper"), component: fanHelperComponent),
@@ -201,20 +202,20 @@ class ApplicationSettings: NSStackView {
         
         self.remoteControlBtn = switchView(
             action: #selector(self.toggleRemoteControlState),
-            state: SystemStats.shared.control
+            state: self.captureFixture ? false : SystemStats.shared.control
         )
         self.remoteUpdatesBtn = switchView(
             action: #selector(self.toggleRemoteUpdateState),
-            state: SystemStats.shared.update
+            state: self.captureFixture ? false : SystemStats.shared.update
         )
-        self.planField = textView(SystemStats.shared.plan?.rawValue.capitalized ?? "Free")
+        self.planField = textView(self.captureFixture ? "Free" : (SystemStats.shared.plan?.rawValue.capitalized ?? "Free"))
         self.remoteView = PreferencesSection(title: localizedString("System Stats"), [
             PreferencesRow(localizedString("Authorization"), component: buttonView(#selector(self.loginToRemote), text: localizedString("Login"))),
-            PreferencesRow(localizedString("Identificator"), component: textView(SystemStats.shared.id.uuidString)),
+            PreferencesRow(localizedString("Identificator"), component: textView(self.captureFixture ? "00000000-0000-0000-0000-000000000000" : SystemStats.shared.id.uuidString)),
             PreferencesRow(localizedString("Plan"), component: self.planField!),
             PreferencesRow(localizedString("Monitoring"), component: switchView(
                 action: #selector(self.toggleRemoteMonitoringState),
-                state: SystemStats.shared.monitoring
+                state: self.captureFixture ? false : SystemStats.shared.monitoring
             )),
             PreferencesRow(localizedString("Control"), component: self.remoteControlBtn!),
             PreferencesRow(localizedString("Update"), component: self.remoteUpdatesBtn!),
@@ -252,6 +253,9 @@ class ApplicationSettings: NSStackView {
             )
         ])
         scrollView.stackView.addArrangedSubview(self.fanHelperView!)
+        if self.captureFixture {
+            self.fanHelperView?.isHidden = true
+        }
         
         self.addArrangedSubview(scrollView)
         
@@ -275,8 +279,10 @@ class ApplicationSettings: NSStackView {
         scrollView.stackView.addArrangedSubview(PreferencesSection(title: localizedString("Stress tests"), tests))
         #endif
         
-        NotificationCenter.default.addObserver(self, selector: #selector(self.toggleUninstallHelperButton), name: .fanHelperState, object: nil)
-        NotificationCenter.default.addObserver(self, selector: #selector(self.handleRemoteState), name: .remoteState, object: nil)
+        if !self.captureFixture {
+            NotificationCenter.default.addObserver(self, selector: #selector(self.toggleUninstallHelperButton), name: .fanHelperState, object: nil)
+            NotificationCenter.default.addObserver(self, selector: #selector(self.handleRemoteState), name: .remoteState, object: nil)
+        }
     }
     
     required init?(coder: NSCoder) {
@@ -288,12 +294,21 @@ class ApplicationSettings: NSStackView {
     }
     
     internal func viewWillAppear() {
-        self.opensAtLoginBtn?.state = LaunchAtLogin.isEnabled ? .on : .off
         self.refreshFanSetup()
-        self.remoteControlBtn?.state = SystemStats.shared.control ? .on : .off
-        
-        self.planField?.stringValue = SystemStats.shared.plan?.rawValue.capitalized ?? "Free"
-        self.setRemoteSettings(SystemStats.shared.isAuthorized)
+        if self.captureFixture {
+            // Synthetic capture state, supplied to the original controls without
+            // constructing the helper, login-item service or remote client.
+            self.opensAtLoginBtn?.state = .off
+            self.remoteControlBtn?.state = .off
+            self.remoteUpdatesBtn?.state = .off
+            self.planField?.stringValue = "Free"
+            self.setRemoteSettings(false)
+        } else {
+            self.opensAtLoginBtn?.state = LaunchAtLogin.isEnabled ? .on : .off
+            self.remoteControlBtn?.state = SystemStats.shared.control ? .on : .off
+            self.planField?.stringValue = SystemStats.shared.plan?.rawValue.capitalized ?? "Free"
+            self.setRemoteSettings(SystemStats.shared.isAuthorized)
+        }
         
         var idx = self.updateSelector?.indexOfSelectedItem ?? 0
         if let items = self.updateSelector?.menu?.items {
@@ -447,6 +462,7 @@ class ApplicationSettings: NSStackView {
     }
     
     @objc private func toggleLaunchAtLogin(_ sender: NSButton) {
+        guard !self.captureFixture else { return }
         LaunchAtLogin.isEnabled = sender.state == NSControl.StateValue.on
         if !Store.shared.exist(key: "runAtLoginInitialized") {
             Store.shared.set(key: "runAtLoginInitialized", value: true)
@@ -585,6 +601,10 @@ class ApplicationSettings: NSStackView {
     /// button label, or nil when the helper is healthy and no action
     /// is offered.
     private func fanSetupStatus() -> (text: String, action: String?) {
+        if self.captureFixture {
+            // Explicitly synthetic: never probe helper registration/reachability.
+            return (localizedString("Not installed"), localizedString("Install"))
+        }
         let helper = SMCHelper.shared
         if helper.fansControllable {
             return (localizedString("Installed and responding"), nil)
@@ -606,6 +626,7 @@ class ApplicationSettings: NSStackView {
     }
     
     @objc private func installFanHelper() {
+        guard !self.captureFixture else { return }
         self.fanSetupInstallButton?.isEnabled = false
         SMCHelper.shared.install { [weak self] state in
             DispatchQueue.main.async {
@@ -701,6 +722,7 @@ class ApplicationSettings: NSStackView {
     }
     
     @objc private func toggleUninstallHelperButton(_ notification: Notification) {
+        guard !self.captureFixture else { return }
         guard let state = notification.userInfo?["state"] as? Bool, let v = self.fanHelperView else {
             return
         }
@@ -709,6 +731,7 @@ class ApplicationSettings: NSStackView {
     }
     
     @objc private func uninstallHelper() {
+        guard !self.captureFixture else { return }
         SMCHelper.shared.uninstall()
     }
     
@@ -745,9 +768,11 @@ class ApplicationSettings: NSStackView {
     }
     
     @objc private func toggleRemoteMonitoringState(_ sender: NSButton) {
+        guard !self.captureFixture else { return }
         SystemStats.shared.monitoring = sender.state == NSControl.StateValue.on
     }
     @objc private func toggleRemoteControlState(_ sender: NSButton) {
+        guard !self.captureFixture else { return }
         if sender.state == .on {
             let alert = NSAlert()
             alert.messageText = localizedString("Warning")
@@ -766,23 +791,28 @@ class ApplicationSettings: NSStackView {
         }
     }
     @objc private func toggleRemoteUpdateState(_ sender: NSButton) {
+        guard !self.captureFixture else { return }
         SystemStats.shared.update = sender.state == NSControl.StateValue.on
     }
     
     @objc private func handleRemoteState(_ notification: Notification) {
+        guard !self.captureFixture else { return }
         guard let auth = notification.userInfo?["auth"] as? Bool else { return }
         self.setRemoteSettings(auth)
     }
     
     @objc private func loginToRemote() {
+        guard !self.captureFixture else { return }
         SystemStats.shared.login()
     }
     
     @objc private func logoutFromRemote() {
+        guard !self.captureFixture else { return }
         SystemStats.shared.logout()
     }
     
     @objc private func deregisterFromRemote() {
+        guard !self.captureFixture else { return }
         let alert = NSAlert()
         alert.messageText = localizedString("Deregister")
         alert.informativeText = localizedString("Deregister text")

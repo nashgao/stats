@@ -57,7 +57,7 @@ struct SMCKeyData_t {
     var status: UInt8 = 0
     var data8: UInt8 = 0
     var data32: UInt32 = 0
-    var bytes: SMCBytes_t = (0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0)
+    var bytes: SMCBytes_t = (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
 }
 
 struct SMCVal_t {

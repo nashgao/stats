@@ -14,3 +14,15 @@ SMC/smc
 
 Cartfile.resolved
 web
+
+# Native capture outputs and per-run target caches remain local.
+/penpot-*/
+/penpot-menu-frozen*.json
+/.penpot-sync/*
+!/.penpot-sync/config.json
+!/.penpot-sync/goal.json
+!/.penpot-sync/manifest.json
+
+# Local design proposals are not distributed.
+/brand-spec.md
+/stats-unified-redesign.html
