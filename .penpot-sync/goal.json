@@ -77,7 +77,25 @@
         "nativeDylibCompile": "PASS",
         "statsReleaseBuild": "BUILD SUCCEEDED; unsigned commit-validation build, not installed",
         "statsSwiftLint": "0 violations, 0 serious in 133 files",
-        "unrelatedChanges": "Other-session producer runbooks and the unrelated Stats weak-binding rename remain outside the commit."
+        "unrelatedChanges": "Other-session producer runbooks and the unrelated Stats weak-binding rename remain outside the commit.",
+        "exactStatsIndexLint": "PASS for all 23 staged Swift files; included formatting-only corrections required by strict lint, unrelated weak-binding rename excluded."
+      },
+      "postPushPrerequisites": {
+        "nativeCaptureSession": {
+          "locked": true,
+          "onConsole": true
+        },
+        "penpot": {
+          "pinnedWorkspaceLoginGate": true,
+          "accessTokenPresent": false,
+          "sessionTokenPresent": false,
+          "authenticatedRelayConnected": false
+        },
+        "sourceCaptureQualityBlocked": [
+          "menu-horizontal-three-light-en",
+          "menu-horizontal-three-dark-en"
+        ],
+        "targetExports": 0
       }
     },
     "remaining": [
@@ -86,7 +104,7 @@
       "Establish authenticated, MCP-connected access to the pinned lowercase stats file; inspect actual ownership and obtain approval of exact scoped operations.",
       "Apply/export/verify all 146 target states before recording full sync or Guardian goal achievement."
     ],
-    "targetAccess": "BLOCKED: authenticated pinned-file MCP connection unavailable; target binding and managed manifest remain untouched.",
+    "targetAccess": "Current post-push access check: pinned workspace renders WORK EMAIL/PASSWORD login gate; access/session token environment absent; omp browser relay extension did not connect. No authenticated MCP target inspection or mutation performed.",
     "publication": {
       "producer": {
         "repository": "https://github.com/Space-Platform-Official/claude-code-enhancer",
@@ -98,7 +116,10 @@
         "repository": "https://github.com/nashgao/stats",
         "branch": "feature/native-capture-fixtures",
         "scope": "Completed capture adapters, native readout/navigation and sensor/popover lifecycle fixes; exact maintained 146-state specification and blocked sync checkpoint.",
-        "rawCapturesCommitted": false
+        "rawCapturesCommitted": false,
+        "commit": "550698b504a2c678aa79eebd2c957e0e6c4a4645",
+        "remoteVerified": true,
+        "status": "CODE_PUSHED"
       }
     }
   },
@@ -1309,11 +1330,11 @@
     },
     {
       "id": "unlocked-on-console-session",
-      "evidence": "Latest CGSessionCopyCurrentDictionary reports locked=1, onConsole=1. The same-frozen-build longer-settle recapture launched both original source processes and measured their AX frames, then screencapture -R failed. No timing fix is retained."
+      "evidence": "Post-push CGSession check still reports locked=1, onConsole=1. Physical region recapture and live source visibility diagnosis remain unavailable; source crops with chevrons are not accepted."
     },
     {
       "id": "live-mcp",
-      "evidence": "Pinned automation reached auth/login; PENPOT_ACCESS_TOKEN and PENPOT_SESSION_TOKEN are absent, and the browser relay extension did not connect. No authenticated pinned-file ownership snapshot, target mutation, or target export exists for this run."
+      "evidence": "Post-push browser readback of the pinned workspace shows WORK EMAIL/PASSWORD login gate; both Penpot credential environment variables are absent and the authenticated browser relay extension did not connect. No target ownership snapshot, mutation, or export verification occurred."
     }
   ],
   "remoteMutationsThisRun": 0,
