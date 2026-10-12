@@ -3,7 +3,7 @@
   "goal": "Synchronize the implemented Stats UI as a source-backed as-is native-appearance reference in the pinned remote lowercase stats project; preserve separate uppercase Stats proposals.",
   "status": "BLOCKED",
   "executionCheckpoint": {
-    "phase": "source-reference-quality-and-target-access",
+    "phase": "target-access-and-full-fidelity-verification",
     "status": "BLOCKED_EXTERNAL",
     "scope": "All 146 maintained English light/dark states remain required; no target mutation or successful sync is claimed.",
     "sourceRepository": "/Users/nashgao/Desktop/claude/claude-code/instruction",
@@ -31,18 +31,15 @@
         "Original native context menu selected by its observed NSGlassEffectView root during menu tracking"
       ],
       "remoteControlRecovery": "penpot-remote-control-recovered/bundle.json: VALID; actual previously captured control pixels + context-menu state, same frozen build; not merged with output16",
-      "fullSourceAttempt": "penpot-capture-output18/bundle.json: 146 assembled, unsupported=[], VALID source/provenance; bundleHash=6ec56411789e793491d69efe21328364a166c3cfb4f38cccb5c8d9f27b48ee8e. Two horizontal-three references are capture-quality blocked; native/target fidelity is not verified.",
+      "fullSourceAttempt": "penpot-capture-output19/bundle.json: all 146 states assembled, unsupported=[], standalone validation VALID; bundleHash=c38f98244981f52ec04f823df0d1113d9ed0e98457c71239a5f5f0c67bc991fa. All twelve original remote menu variants visually accepted; no target exports verified.",
       "fullDistributionSuite": "FINAL PASS: 13 files, 439 tests; tsc --noEmit passed after clean installed-command cutover, retired helper removal, documentation updates, and manifest/release-reference refresh. No real global install performed.",
       "remoteControlVariants": {
         "declared": 12,
         "captured": 12,
         "structuralProvenanceValidated": 12,
-        "sourcePixelsVisuallyAccepted": 10,
-        "sourceCaptureQualityBlocked": [
-          "menu-horizontal-three-light-en",
-          "menu-horizontal-three-dark-en"
-        ],
-        "evidence": "Every retained menu reference was inspected. Glyph, horizontal-two, stacked-two, stacked-one and battery/time show original native paint and expected fixture values in both declared appearances. Both horizontal-three crops instead show chevrons."
+        "sourcePixelsVisuallyAccepted": 12,
+        "sourceCaptureQualityBlocked": [],
+        "evidence": "Both previously rejected horizontal-three variants were recaptured from the original frozen executable/framework build after user unlock. They show the expected 17W · 73% · 53.8°C native readout, and both were visually inspected. The other ten accepted variants retain identical source bytes."
       },
       "installedCliSmoke": "PASS in temporary HOME: actual source-checkout user install, help, global-only shared-skill sync, both consumers current, dry-run foreign-data preservation, project-argument rejection, canonical producer-byte check, scoped uninstall preserving synced consumer skills; temporary installation removed. No real global installation or release performed.",
       "shellSyntax": "bash -n passed for install.sh, claude-flow and all three supported installed helper scripts.",
@@ -96,15 +93,46 @@
           "menu-horizontal-three-dark-en"
         ],
         "targetExports": 0
+      },
+      "sourceReplacementScope": {
+        "sameFrozenBuild": true,
+        "sourceRevisionUnchanged": true,
+        "totalStates": 146,
+        "unchangedSourceCaptureHashes": 144,
+        "replacedOnly": [
+          "menu-horizontal-three-light-en",
+          "menu-horizontal-three-dark-en"
+        ],
+        "replacementBundle": "penpot-menu-unlocked16-wide/bundle.json",
+        "applicationChangesNeeded": false,
+        "rendererChangesNeeded": false
+      },
+      "postUnlockPrerequisites": {
+        "userReportedUnlocked": true,
+        "originalPhysicalCapturesSucceeded": true,
+        "sourcePixelsVisuallyAccepted": true,
+        "authenticatedRelay": "BLOCKED_SESSION_VERSION",
+        "accessTokenPresent": false,
+        "sessionTokenPresent": false
+      },
+      "browserRecovery": {
+        "originalToolExecutable": "/opt/homebrew/Cellar/omp/18.8.6/bin/omp",
+        "originalExecutableUnavailable": true,
+        "freshToolExecutable": "/opt/homebrew/Cellar/omp/18.10.0/bin/omp",
+        "onlySessionOwnedRelayRestarted": true,
+        "persistentResult": "BROWSER_RELAY_OUTDATED",
+        "recoveryRelayStopped": true,
+        "userStatsProcessesTouched": false,
+        "targetMutations": 0
       }
     },
     "remaining": [
-      "Unlock the Mac and keep the display unlocked; diagnose actual visibility/geometry of both original horizontal-three status controls, then recapture accepted pixels against the retained output16 executable/framework build. Do not replace the native control or accept chevrons as the readout.",
-      "Reconvert the complete 146-state source reference with those same-build replacement captures, then revalidate and accept source capture quality.",
-      "Establish authenticated, MCP-connected access to the pinned lowercase stats file; inspect actual ownership and obtain approval of exact scoped operations.",
-      "Apply/export/verify all 146 target states before recording full sync or Guardian goal achievement."
+      "Restart this coding session under the installed OMP version, then establish authenticated access to the pinned lowercase stats file and connect File → MCP Server → Connect. Keep the tab open; no new source capture is needed.",
+      "Inspect the actual pinned-file ownership and derive exact operations from penpot-capture-output19/bundle.json plus the retained sync manifest. Obtain approval for that immutable operation set.",
+      "Apply/export/verify every one of the 146 maintained target states, preserving unrelated uppercase Stats proposals.",
+      "Record goal achievement and lastSuccessfulSync only after full target scene/pixel acceptance."
     ],
-    "targetAccess": "Current post-push access check: pinned workspace renders WORK EMAIL/PASSWORD login gate; access/session token environment absent; omp browser relay extension did not connect. No authenticated MCP target inspection or mutation performed.",
+    "targetAccess": "BLOCKED: persistent BROWSER_RELAY_OUTDATED after fresh tool-kernel and matching relay restart; no authenticated pinned-file MCP transport. Restart the coding session under the installed OMP version, authenticate/connect the pinned file, then resume from the validated output19 reference.",
     "publication": {
       "producer": {
         "repository": "https://github.com/Space-Platform-Official/claude-code-enhancer",
@@ -154,1024 +182,1022 @@
       "name": "Unified popup / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-000/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-000/source.png"
     },
     {
       "key": "panel-cpu-expanded-light-en",
       "name": "Unified popup / CPU expanded / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-001/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-001/source.png"
     },
     {
       "key": "panel-gpu-expanded-light-en",
       "name": "Unified popup / GPU expanded / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-002/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-002/source.png"
     },
     {
       "key": "panel-ram-expanded-light-en",
       "name": "Unified popup / RAM expanded / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-003/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-003/source.png"
     },
     {
       "key": "panel-disk-expanded-light-en",
       "name": "Unified popup / Disk expanded / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-004/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-004/source.png"
     },
     {
       "key": "panel-network-expanded-light-en",
       "name": "Unified popup / Network expanded / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-005/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-005/source.png"
     },
     {
       "key": "panel-sensors-expanded-light-en",
       "name": "Unified popup / Sensors expanded / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-006/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-006/source.png"
     },
     {
       "key": "panel-thermal-expanded-light-en",
       "name": "Unified popup / Thermal expanded / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-007/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-007/source.png"
     },
     {
       "key": "panel-battery-expanded-light-en",
       "name": "Unified popup / Battery expanded / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-008/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-008/source.png"
     },
     {
       "key": "panel-bottom-light-en",
       "name": "Unified popup / Sensors expanded, bottom / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-009/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-009/source.png"
     },
     {
       "key": "panel-attention-light-en",
       "name": "Unified popup / temperature attention / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-010/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-010/source.png"
     },
     {
       "key": "panel-critical-light-en",
       "name": "Unified popup / temperature critical / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-011/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-011/source.png"
     },
     {
       "key": "sensors-all-light-en",
       "name": "All sensors / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-012/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-012/source.png"
     },
     {
       "key": "settings-dashboard-light-en",
       "name": "Settings / Dashboard / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-013/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-013/source.png"
     },
     {
       "key": "settings-dashboard-bottom-light-en",
       "name": "Settings / Dashboard bottom / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-014/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-014/source.png"
     },
     {
       "key": "settings-settings-light-en",
       "name": "Settings / Settings / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-015/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-015/source.png"
     },
     {
       "key": "settings-settings-bottom-light-en",
       "name": "Settings / Settings bottom / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-016/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-016/source.png"
     },
     {
       "key": "settings-sidebar-collapsed-light-en",
       "name": "Settings / sidebar collapsed / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-017/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-017/source.png"
     },
     {
       "key": "settings-cpu-module-light-en",
       "name": "Settings / CPU / module / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-018/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-018/source.png"
     },
     {
       "key": "settings-cpu-widgets-light-en",
       "name": "Settings / CPU / widgets / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-019/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-019/source.png"
     },
     {
       "key": "settings-cpu-popup-light-en",
       "name": "Settings / CPU / popup / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-020/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-020/source.png"
     },
     {
       "key": "settings-cpu-notifications-light-en",
       "name": "Settings / CPU / notifications / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-021/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-021/source.png"
     },
     {
       "key": "settings-cpu-preview-light-en",
       "name": "Settings / CPU / preview / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-022/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-022/source.png"
     },
     {
       "key": "settings-gpu-module-light-en",
       "name": "Settings / GPU / module / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-023/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-023/source.png"
     },
     {
       "key": "settings-gpu-widgets-light-en",
       "name": "Settings / GPU / widgets / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-024/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-024/source.png"
     },
     {
       "key": "settings-gpu-popup-light-en",
       "name": "Settings / GPU / popup / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-025/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-025/source.png"
     },
     {
       "key": "settings-gpu-notifications-light-en",
       "name": "Settings / GPU / notifications / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-026/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-026/source.png"
     },
     {
       "key": "settings-gpu-preview-light-en",
       "name": "Settings / GPU / preview / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-027/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-027/source.png"
     },
     {
       "key": "settings-ram-module-light-en",
       "name": "Settings / RAM / module / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-028/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-028/source.png"
     },
     {
       "key": "settings-ram-widgets-light-en",
       "name": "Settings / RAM / widgets / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-029/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-029/source.png"
     },
     {
       "key": "settings-ram-popup-light-en",
       "name": "Settings / RAM / popup / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-030/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-030/source.png"
     },
     {
       "key": "settings-ram-notifications-light-en",
       "name": "Settings / RAM / notifications / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-031/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-031/source.png"
     },
     {
       "key": "settings-ram-preview-light-en",
       "name": "Settings / RAM / preview / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-032/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-032/source.png"
     },
     {
       "key": "settings-disk-module-light-en",
       "name": "Settings / Disk / module / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-033/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-033/source.png"
     },
     {
       "key": "settings-disk-widgets-light-en",
       "name": "Settings / Disk / widgets / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-034/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-034/source.png"
     },
     {
       "key": "settings-disk-popup-light-en",
       "name": "Settings / Disk / popup / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-035/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-035/source.png"
     },
     {
       "key": "settings-disk-notifications-light-en",
       "name": "Settings / Disk / notifications / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-036/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-036/source.png"
     },
     {
       "key": "settings-disk-preview-light-en",
       "name": "Settings / Disk / preview / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-037/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-037/source.png"
     },
     {
       "key": "settings-network-module-light-en",
       "name": "Settings / Network / module / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-038/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-038/source.png"
     },
     {
       "key": "settings-network-widgets-light-en",
       "name": "Settings / Network / widgets / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-039/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-039/source.png"
     },
     {
       "key": "settings-network-popup-light-en",
       "name": "Settings / Network / popup / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-040/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-040/source.png"
     },
     {
       "key": "settings-network-notifications-light-en",
       "name": "Settings / Network / notifications / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-041/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-041/source.png"
     },
     {
       "key": "settings-network-preview-light-en",
       "name": "Settings / Network / preview / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-042/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-042/source.png"
     },
     {
       "key": "settings-sensors-module-light-en",
       "name": "Settings / Sensors / module / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-043/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-043/source.png"
     },
     {
       "key": "settings-sensors-widgets-light-en",
       "name": "Settings / Sensors / widgets / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-044/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-044/source.png"
     },
     {
       "key": "settings-sensors-popup-light-en",
       "name": "Settings / Sensors / popup / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-045/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-045/source.png"
     },
     {
       "key": "settings-sensors-notifications-light-en",
       "name": "Settings / Sensors / notifications / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-046/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-046/source.png"
     },
     {
       "key": "settings-battery-module-light-en",
       "name": "Settings / Battery / module / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-047/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-047/source.png"
     },
     {
       "key": "settings-battery-widgets-light-en",
       "name": "Settings / Battery / widgets / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-048/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-048/source.png"
     },
     {
       "key": "settings-battery-popup-light-en",
       "name": "Settings / Battery / popup / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-049/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-049/source.png"
     },
     {
       "key": "settings-battery-notifications-light-en",
       "name": "Settings / Battery / notifications / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-050/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-050/source.png"
     },
     {
       "key": "settings-bluetooth-module-light-en",
       "name": "Settings / Bluetooth / module / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-051/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-051/source.png"
     },
     {
       "key": "settings-bluetooth-widgets-light-en",
       "name": "Settings / Bluetooth / widgets / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-052/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-052/source.png"
     },
     {
       "key": "settings-bluetooth-notifications-light-en",
       "name": "Settings / Bluetooth / notifications / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-053/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-053/source.png"
     },
     {
       "key": "settings-clock-module-light-en",
       "name": "Settings / Clock / module / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-054/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-054/source.png"
     },
     {
       "key": "settings-clock-widgets-light-en",
       "name": "Settings / Clock / widgets / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-055/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-055/source.png"
     },
     {
       "key": "settings-clock-popup-light-en",
       "name": "Settings / Clock / popup / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-056/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-056/source.png"
     },
     {
       "key": "settings-remote-default-light-en",
       "name": "Settings / Remote / default / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-057/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-057/source.png"
     },
     {
       "key": "setup-page-0-light-en",
       "name": "Setup / page 0 / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-058/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-058/source.png"
     },
     {
       "key": "setup-page-1-light-en",
       "name": "Setup / page 1 / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-059/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-059/source.png"
     },
     {
       "key": "setup-page-2-light-en",
       "name": "Setup / page 2 / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-060/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-060/source.png"
     },
     {
       "key": "setup-page-3-light-en",
       "name": "Setup / page 3 / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-061/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-061/source.png"
     },
     {
       "key": "setup-page-4-light-en",
       "name": "Setup / page 4 / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-062/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-062/source.png"
     },
     {
       "key": "support-light-en",
       "name": "Support upstream / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-063/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-063/source.png"
     },
     {
       "key": "update-available-light-en",
       "name": "Update (dormant custom-build surface) / available / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-064/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-064/source.png"
     },
     {
       "key": "update-current-light-en",
       "name": "Update (dormant custom-build surface) / current / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-065/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-065/source.png"
     },
     {
       "key": "menu-glyph-light-en",
       "name": "Menu bar / glyph / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-066/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-066/source.png"
     },
     {
       "key": "menu-horizontal-three-light-en",
       "name": "Menu bar / horizontal-three / light",
-      "status": "BLOCKED_CAPTURE_QUALITY",
+      "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-067/source.png",
-      "captureQualityBlocker": "Physical source-PID-bound AX crop shows chevrons rather than the expected original watts/battery/temperature readout; cause not established and pixels not accepted."
+      "sourceCapture": "penpot-capture-output19/capture-067/source.png"
     },
     {
       "key": "menu-horizontal-two-light-en",
       "name": "Menu bar / horizontal-two / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-068/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-068/source.png"
     },
     {
       "key": "menu-stacked-two-light-en",
       "name": "Menu bar / stacked-two / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-069/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-069/source.png"
     },
     {
       "key": "menu-stacked-one-light-en",
       "name": "Menu bar / stacked-one / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-070/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-070/source.png"
     },
     {
       "key": "menu-battery-time-light-en",
       "name": "Menu bar / battery-time / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-071/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-071/source.png"
     },
     {
       "key": "context-menu-light-en",
       "name": "Menu bar / context menu / light",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-072/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-072/source.png"
     },
     {
       "key": "panel-dark-en",
       "name": "Unified popup / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-073/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-073/source.png"
     },
     {
       "key": "panel-cpu-expanded-dark-en",
       "name": "Unified popup / CPU expanded / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-074/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-074/source.png"
     },
     {
       "key": "panel-gpu-expanded-dark-en",
       "name": "Unified popup / GPU expanded / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-075/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-075/source.png"
     },
     {
       "key": "panel-ram-expanded-dark-en",
       "name": "Unified popup / RAM expanded / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-076/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-076/source.png"
     },
     {
       "key": "panel-disk-expanded-dark-en",
       "name": "Unified popup / Disk expanded / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-077/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-077/source.png"
     },
     {
       "key": "panel-network-expanded-dark-en",
       "name": "Unified popup / Network expanded / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-078/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-078/source.png"
     },
     {
       "key": "panel-sensors-expanded-dark-en",
       "name": "Unified popup / Sensors expanded / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-079/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-079/source.png"
     },
     {
       "key": "panel-thermal-expanded-dark-en",
       "name": "Unified popup / Thermal expanded / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-080/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-080/source.png"
     },
     {
       "key": "panel-battery-expanded-dark-en",
       "name": "Unified popup / Battery expanded / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-081/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-081/source.png"
     },
     {
       "key": "panel-bottom-dark-en",
       "name": "Unified popup / Sensors expanded, bottom / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-082/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-082/source.png"
     },
     {
       "key": "panel-attention-dark-en",
       "name": "Unified popup / temperature attention / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-083/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-083/source.png"
     },
     {
       "key": "panel-critical-dark-en",
       "name": "Unified popup / temperature critical / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-084/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-084/source.png"
     },
     {
       "key": "sensors-all-dark-en",
       "name": "All sensors / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-085/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-085/source.png"
     },
     {
       "key": "settings-dashboard-dark-en",
       "name": "Settings / Dashboard / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-086/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-086/source.png"
     },
     {
       "key": "settings-dashboard-bottom-dark-en",
       "name": "Settings / Dashboard bottom / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-087/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-087/source.png"
     },
     {
       "key": "settings-settings-dark-en",
       "name": "Settings / Settings / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-088/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-088/source.png"
     },
     {
       "key": "settings-settings-bottom-dark-en",
       "name": "Settings / Settings bottom / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-089/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-089/source.png"
     },
     {
       "key": "settings-sidebar-collapsed-dark-en",
       "name": "Settings / sidebar collapsed / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-090/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-090/source.png"
     },
     {
       "key": "settings-cpu-module-dark-en",
       "name": "Settings / CPU / module / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-091/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-091/source.png"
     },
     {
       "key": "settings-cpu-widgets-dark-en",
       "name": "Settings / CPU / widgets / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-092/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-092/source.png"
     },
     {
       "key": "settings-cpu-popup-dark-en",
       "name": "Settings / CPU / popup / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-093/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-093/source.png"
     },
     {
       "key": "settings-cpu-notifications-dark-en",
       "name": "Settings / CPU / notifications / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-094/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-094/source.png"
     },
     {
       "key": "settings-cpu-preview-dark-en",
       "name": "Settings / CPU / preview / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-095/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-095/source.png"
     },
     {
       "key": "settings-gpu-module-dark-en",
       "name": "Settings / GPU / module / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-096/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-096/source.png"
     },
     {
       "key": "settings-gpu-widgets-dark-en",
       "name": "Settings / GPU / widgets / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-097/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-097/source.png"
     },
     {
       "key": "settings-gpu-popup-dark-en",
       "name": "Settings / GPU / popup / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-098/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-098/source.png"
     },
     {
       "key": "settings-gpu-notifications-dark-en",
       "name": "Settings / GPU / notifications / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-099/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-099/source.png"
     },
     {
       "key": "settings-gpu-preview-dark-en",
       "name": "Settings / GPU / preview / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-100/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-100/source.png"
     },
     {
       "key": "settings-ram-module-dark-en",
       "name": "Settings / RAM / module / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-101/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-101/source.png"
     },
     {
       "key": "settings-ram-widgets-dark-en",
       "name": "Settings / RAM / widgets / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-102/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-102/source.png"
     },
     {
       "key": "settings-ram-popup-dark-en",
       "name": "Settings / RAM / popup / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-103/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-103/source.png"
     },
     {
       "key": "settings-ram-notifications-dark-en",
       "name": "Settings / RAM / notifications / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-104/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-104/source.png"
     },
     {
       "key": "settings-ram-preview-dark-en",
       "name": "Settings / RAM / preview / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-105/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-105/source.png"
     },
     {
       "key": "settings-disk-module-dark-en",
       "name": "Settings / Disk / module / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-106/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-106/source.png"
     },
     {
       "key": "settings-disk-widgets-dark-en",
       "name": "Settings / Disk / widgets / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-107/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-107/source.png"
     },
     {
       "key": "settings-disk-popup-dark-en",
       "name": "Settings / Disk / popup / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-108/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-108/source.png"
     },
     {
       "key": "settings-disk-notifications-dark-en",
       "name": "Settings / Disk / notifications / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-109/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-109/source.png"
     },
     {
       "key": "settings-disk-preview-dark-en",
       "name": "Settings / Disk / preview / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-110/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-110/source.png"
     },
     {
       "key": "settings-network-module-dark-en",
       "name": "Settings / Network / module / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-111/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-111/source.png"
     },
     {
       "key": "settings-network-widgets-dark-en",
       "name": "Settings / Network / widgets / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-112/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-112/source.png"
     },
     {
       "key": "settings-network-popup-dark-en",
       "name": "Settings / Network / popup / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-113/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-113/source.png"
     },
     {
       "key": "settings-network-notifications-dark-en",
       "name": "Settings / Network / notifications / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-114/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-114/source.png"
     },
     {
       "key": "settings-network-preview-dark-en",
       "name": "Settings / Network / preview / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-115/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-115/source.png"
     },
     {
       "key": "settings-sensors-module-dark-en",
       "name": "Settings / Sensors / module / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-116/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-116/source.png"
     },
     {
       "key": "settings-sensors-widgets-dark-en",
       "name": "Settings / Sensors / widgets / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-117/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-117/source.png"
     },
     {
       "key": "settings-sensors-popup-dark-en",
       "name": "Settings / Sensors / popup / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-118/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-118/source.png"
     },
     {
       "key": "settings-sensors-notifications-dark-en",
       "name": "Settings / Sensors / notifications / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-119/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-119/source.png"
     },
     {
       "key": "settings-battery-module-dark-en",
       "name": "Settings / Battery / module / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-120/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-120/source.png"
     },
     {
       "key": "settings-battery-widgets-dark-en",
       "name": "Settings / Battery / widgets / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-121/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-121/source.png"
     },
     {
       "key": "settings-battery-popup-dark-en",
       "name": "Settings / Battery / popup / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-122/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-122/source.png"
     },
     {
       "key": "settings-battery-notifications-dark-en",
       "name": "Settings / Battery / notifications / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-123/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-123/source.png"
     },
     {
       "key": "settings-bluetooth-module-dark-en",
       "name": "Settings / Bluetooth / module / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-124/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-124/source.png"
     },
     {
       "key": "settings-bluetooth-widgets-dark-en",
       "name": "Settings / Bluetooth / widgets / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-125/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-125/source.png"
     },
     {
       "key": "settings-bluetooth-notifications-dark-en",
       "name": "Settings / Bluetooth / notifications / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-126/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-126/source.png"
     },
     {
       "key": "settings-clock-module-dark-en",
       "name": "Settings / Clock / module / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-127/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-127/source.png"
     },
     {
       "key": "settings-clock-widgets-dark-en",
       "name": "Settings / Clock / widgets / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-128/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-128/source.png"
     },
     {
       "key": "settings-clock-popup-dark-en",
       "name": "Settings / Clock / popup / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-129/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-129/source.png"
     },
     {
       "key": "settings-remote-default-dark-en",
       "name": "Settings / Remote / default / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-130/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-130/source.png"
     },
     {
       "key": "setup-page-0-dark-en",
       "name": "Setup / page 0 / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-131/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-131/source.png"
     },
     {
       "key": "setup-page-1-dark-en",
       "name": "Setup / page 1 / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-132/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-132/source.png"
     },
     {
       "key": "setup-page-2-dark-en",
       "name": "Setup / page 2 / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-133/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-133/source.png"
     },
     {
       "key": "setup-page-3-dark-en",
       "name": "Setup / page 3 / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-134/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-134/source.png"
     },
     {
       "key": "setup-page-4-dark-en",
       "name": "Setup / page 4 / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-135/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-135/source.png"
     },
     {
       "key": "support-dark-en",
       "name": "Support upstream / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-136/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-136/source.png"
     },
     {
       "key": "update-available-dark-en",
       "name": "Update (dormant custom-build surface) / available / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-137/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-137/source.png"
     },
     {
       "key": "update-current-dark-en",
       "name": "Update (dormant custom-build surface) / current / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-138/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-138/source.png"
     },
     {
       "key": "menu-glyph-dark-en",
       "name": "Menu bar / glyph / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-139/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-139/source.png"
     },
     {
       "key": "menu-horizontal-three-dark-en",
       "name": "Menu bar / horizontal-three / dark",
-      "status": "BLOCKED_CAPTURE_QUALITY",
+      "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-140/source.png",
-      "captureQualityBlocker": "Physical source-PID-bound AX crop shows chevrons rather than the expected original watts/battery/temperature readout; cause not established and pixels not accepted."
+      "sourceCapture": "penpot-capture-output19/capture-140/source.png"
     },
     {
       "key": "menu-horizontal-two-dark-en",
       "name": "Menu bar / horizontal-two / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-141/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-141/source.png"
     },
     {
       "key": "menu-stacked-two-dark-en",
       "name": "Menu bar / stacked-two / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-142/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-142/source.png"
     },
     {
       "key": "menu-stacked-one-dark-en",
       "name": "Menu bar / stacked-one / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-143/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-143/source.png"
     },
     {
       "key": "menu-battery-time-dark-en",
       "name": "Menu bar / battery-time / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-144/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-144/source.png"
     },
     {
       "key": "context-menu-dark-en",
       "name": "Menu bar / context menu / dark",
       "status": "EXTRACTED_UNVERIFIED",
       "producerBlocker": null,
-      "sourceCapture": "penpot-capture-output18/capture-145/source.png"
+      "sourceCapture": "penpot-capture-output19/capture-145/source.png"
     }
   ],
   "coverageExclusions": {
@@ -1308,6 +1334,27 @@
       "declaredStates": 2,
       "extractedStates": 0,
       "purpose": "Longer-settle capture hypothesis tested against original frozen controls; both region screenshots failed under the re-locked display. Timing experiment rolled back and temporary input spec removed."
+    },
+    {
+      "path": "penpot-menu-unlocked16-wide/bundle.json",
+      "status": "EXTRACTED",
+      "declaredStates": 2,
+      "extractedStates": 2,
+      "unsupportedStates": 0,
+      "purpose": "Both prior wide-menu source blockers cleared by actual unlocked, source-PID-bound original control capture. No app or producer code change. Expected fixture readout visually accepted in both declared appearances."
+    },
+    {
+      "path": "penpot-capture-output19/bundle.json",
+      "status": "VALID",
+      "declaredStates": 146,
+      "extractedStates": 146,
+      "unsupportedStates": 0,
+      "sourceRevision": "8b7a892cda290ea2832647e98f6fa4eabb2cb339577d7e8fd7da67acdcf744f8",
+      "validation": {
+        "status": "VALID",
+        "bundleHash": "c38f98244981f52ec04f823df0d1113d9ed0e98457c71239a5f5f0c67bc991fa"
+      },
+      "purpose": "Complete same-build reference with both corrected wide-menu captures; 144 source capture hashes unchanged. Source capture blockers cleared; target rendering verification not performed."
     }
   ],
   "isolationEvidence": {
@@ -1321,20 +1368,12 @@
   },
   "blockers": [
     {
-      "id": "source-capture-quality",
-      "keys": [
-        "menu-horizontal-three-light-en",
-        "menu-horizontal-three-dark-en"
-      ],
-      "evidence": "Both horizontal-three source.png references contain chevrons instead of the expected readout. Structural/provenance validation is VALID, not proof of source visibility or accepted visual fidelity. Root cause is not established."
-    },
-    {
-      "id": "unlocked-on-console-session",
-      "evidence": "Post-push CGSession check still reports locked=1, onConsole=1. Physical region recapture and live source visibility diagnosis remain unavailable; source crops with chevrons are not accepted."
+      "id": "browser-session-version",
+      "evidence": "Browser relay still reports out of date after resetting only the tool kernel (now omp/18.10.0) and restarting only the session-owned relay from the installed omp/18.10.0 executable. Recovery relay was stopped cleanly. The original long-running browser host loaded omp/18.8.6 from a binary removed after upgrade; restart the coding session before reconnecting authenticated Penpot access."
     },
     {
       "id": "live-mcp",
-      "evidence": "Post-push browser readback of the pinned workspace shows WORK EMAIL/PASSWORD login gate; both Penpot credential environment variables are absent and the authenticated browser relay extension did not connect. No target ownership snapshot, mutation, or export verification occurred."
+      "evidence": "No authenticated pinned-file MCP transport is available to this session; both Penpot credential environment variables remain absent. Target ownership, mutation and export verification have not been performed."
     }
   ],
   "remoteMutationsThisRun": 0,
@@ -1342,10 +1381,10 @@
   "targetVerification": "NOT_PERFORMED",
   "lastSuccessfulSync": null,
   "nextActions": [
-    "Unlock the Mac and keep the display unlocked; diagnose actual visibility/geometry of both original horizontal-three status controls, then recapture accepted pixels against the retained output16 executable/framework build. Do not replace the native control or accept chevrons as the readout.",
-    "Reconvert the complete 146-state source reference with those same-build replacement captures, then revalidate and accept source capture quality.",
-    "Establish authenticated, MCP-connected access to the pinned lowercase stats file; inspect actual ownership and obtain approval of exact scoped operations.",
-    "Apply/export/verify all 146 target states before recording full sync or Guardian goal achievement."
+    "Restart this coding session under the installed OMP version, then establish authenticated access to the pinned lowercase stats file and connect File → MCP Server → Connect. Keep the tab open; no new source capture is needed.",
+    "Inspect the actual pinned-file ownership and derive exact operations from penpot-capture-output19/bundle.json plus the retained sync manifest. Obtain approval for that immutable operation set.",
+    "Apply/export/verify every one of the 146 maintained target states, preserving unrelated uppercase Stats proposals.",
+    "Record goal achievement and lastSuccessfulSync only after full target scene/pixel acceptance."
   ],
   "sourceAdapterFiles": [
     "Stats/AppDelegate.swift",
@@ -1411,26 +1450,22 @@
     ],
     "targetExportsThisRun": 0,
     "currentSourceCaptureQuality": {
-      "blockedKeys": [
-        "menu-horizontal-three-light-en",
-        "menu-horizontal-three-dark-en"
-      ],
-      "rootCause": "NOT_ESTABLISHED",
-      "acceptedRemoteVariants": 10,
+      "blockedKeys": [],
+      "acceptedRemoteVariants": 12,
       "targetExportsThisRun": 0
     }
   },
   "canonicalGoal": ".penpot-sync/goal.json",
   "obsoleteLocalGoalRemoved": true,
   "sourceBundle": {
-    "path": "penpot-capture-output18/bundle.json",
+    "path": "penpot-capture-output19/bundle.json",
     "inventoryStates": 146,
     "fullGoalStates": 146,
     "status": "VALID",
     "sourceRevision": "8b7a892cda290ea2832647e98f6fa4eabb2cb339577d7e8fd7da67acdcf744f8",
-    "bundleHash": "6ec56411789e793491d69efe21328364a166c3cfb4f38cccb5c8d9f27b48ee8e",
-    "sourceCaptureQuality": "BLOCKED: two horizontal-three references are not accepted",
-    "nativeRenderingFidelity": "UNVERIFIED; all 146 states assembled and source/provenance validated, but two source references fail visual readout expectations and no target export has been verified."
+    "sourceCaptureQuality": "All prior capture blockers cleared; all twelve original menu-control variants visually accepted.",
+    "nativeRenderingFidelity": "UNVERIFIED against target; complete source/provenance validation and accepted menu pixels do not constitute independent target export verification.",
+    "bundleHash": "c38f98244981f52ec04f823df0d1113d9ed0e98457c71239a5f5f0c67bc991fa"
   },
   "captureSpec": {
     "path": "penpot-capture.json",
@@ -1441,10 +1476,10 @@
     "declared": 146,
     "extractedTotal": 146,
     "sourceProvenanceValidated": 146,
-    "extractedUnverified": 144,
+    "extractedUnverified": 146,
     "blockedProducer": 0,
     "blockedEnvironment": 0,
-    "blockedCaptureQuality": 2,
+    "blockedCaptureQuality": 0,
     "targetVerified": 0
   },
   "durableStateCheck": {
@@ -1452,8 +1487,8 @@
     "declaredStates": 146,
     "extractedSourceStates": 146,
     "validatedSourceStates": 146,
-    "sourceCaptureQualityBlockedStates": 2,
-    "recaptureEnvironmentBlockedStates": 2,
+    "sourceCaptureQualityBlockedStates": 0,
+    "recaptureEnvironmentBlockedStates": 0,
     "producerBlockedStates": 0,
     "environmentBlockedStates": 0,
     "targetBindingUnchanged": true,
