@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
   "goal": "Synchronize the implemented Stats UI as a source-backed as-is native-appearance reference in the pinned remote lowercase stats project; preserve separate uppercase Stats proposals.",
-  "status": "BLOCKED",
+  "status": "PARTIALLY_APPLIED_BLOCKED",
   "executionCheckpoint": {
-    "phase": "target-access-and-full-fidelity-verification",
-    "status": "BLOCKED_EXTERNAL",
-    "scope": "All 146 maintained English light/dark states remain required; no target mutation or successful sync is claimed.",
+    "phase": "full-target-apply-and-material-correction",
+    "status": "BLOCKED_NATIVE_EXECUTION_TIMEOUT",
+    "scope": "All 146 maintained English light/dark states remain required. The exact full plan is approved; five creates have durable actual readbacks and receipts, the sixth operation is interrupted and must not be replayed without inspection. No successful sync is claimed.",
     "sourceRepository": "/Users/nashgao/Desktop/claude/claude-code/instruction",
     "sourceSkill": "templates/skills/penpot-sync",
     "approvedRemoteControlAdapter": {
@@ -124,20 +124,110 @@
         "recoveryRelayStopped": true,
         "userStatsProcessesTouched": false,
         "targetMutations": 0
+      },
+      "postRestartAccess": {
+        "userReportedRestarted": true,
+        "oldVersionErrorObservedInDiscovery": false,
+        "relayTargetDiscovery": "timed out after 20000ms",
+        "relayCdpVersion": "HTTP 503",
+        "nativeAdoptablePages": false,
+        "accessTokenPresent": false,
+        "sessionTokenPresent": false,
+        "relayExtensionFilesPrepared": "/Users/nashgao/.omp/profiles/gpt-eco/browser-relay/extension",
+        "extensionLoadedInChrome": "NOT_VERIFIED",
+        "targetMutations": 0
+      },
+      "directNativeMcp": {
+        "configuredClients": [
+          "Claude penpot",
+          "Codex penpot-builtin"
+        ],
+        "serverConnected": true,
+        "protocolInitialized": true,
+        "toolsAvailable": [
+          "execute_code",
+          "high_level_overview",
+          "penpot_api_info",
+          "export_shape"
+        ],
+        "authoritativeOverviewRead": true,
+        "fileIdentityApiRead": true,
+        "fileContext": "EXACT_PINNED_FILE_VERIFIED_BEFORE_APPLY",
+        "actualError": "Current retained-operation execute_code read timed out with MCP error -32001; the last observed desktop session was locked and the pinned tab was in Safari. A causal lock/timeout relationship is not established.",
+        "targetMutations": 5,
+        "credentialsExposed": false,
+        "credentialsPersisted": false
+      },
+      "liveTargetInspection": {
+        "snapshot": ".penpot-sync/target-live.json",
+        "context": ".penpot-sync/target-context-live.json",
+        "fileId": "db577d85-ee4f-809d-8008-bdb18225de8a",
+        "revision": 9,
+        "managedAssets": 2,
+        "conflicts": 0,
+        "missingFonts": 0,
+        "targetMutations": 0
+      },
+      "actualTargetProgress": {
+        "snapshot": ".penpot-sync/target-progress-live.json",
+        "manifest": ".penpot-sync/manifest.json",
+        "planId": "1a3a7c02a32ed66591ee7dbc12c1c2c88330e63d701fe108cb822d66f7144bf9",
+        "completedOperations": 5,
+        "remainingOperations": 141,
+        "managedAssets": 7,
+        "completedKeys": [
+          "context-menu-dark-en",
+          "context-menu-light-en",
+          "menu-battery-time-dark-en",
+          "menu-battery-time-light-en",
+          "menu-glyph-dark-en"
+        ],
+        "interruptedOperation": {
+          "key": "menu-glyph-light-en",
+          "operationId": "326111804997787cbb6ddaef2afd720a0d817223055a3a58a39ff49b2c118d87",
+          "storageKey": "penpot-sync-transfer/71a07fb9-d1de-470d-806c-9aa3a2b3bd2d",
+          "transport": ".penpot-sync/pending-native-transport.json",
+          "status": "UNCONFIRMED_AFTER_TIMEOUT",
+          "replayAllowed": false
+        },
+        "lastRetainedOperationRead": "MCP error -32001: Request timed out",
+        "frontend": "Exact pinned file tab observed in Safari; no Chrome relay dependency",
+        "lastObservedMacLocked": true,
+        "lastSuccessfulSync": null
+      },
+      "glassMaterialCorrection": {
+        "cause": "Filtered compositor ancestor, contents-free signed-distance mask and portal paths were hidden; both context-menu material backdrops were transparent despite structurally valid source scenes.",
+        "producerCommit": "b8d727f",
+        "producerCommitPushed": true,
+        "nativeCompile": "PASS",
+        "realOriginalCapture": "PASS: foreground-hidden rounded glass restored in both original menu states without baked text",
+        "replacementBundle": "penpot-menu-glass-helpers16/bundle.json",
+        "correctedBundle": "penpot-capture-output20/bundle.json",
+        "correctedBundleHash": "bc7d661b86364ad6256c86904e576880ce56fff3fe2c21330cd41762f05fa942",
+        "validation": "VALID: all 146 states, unsupported=[]",
+        "unchangedSourceCaptureHashes": 146,
+        "sourceRevisionUnchanged": true,
+        "fullTestFiles": 13,
+        "fullTestsPassed": 439,
+        "typecheck": "PASS",
+        "whitespaceChecks": "PASS",
+        "targetCorrectionApplied": false,
+        "targetFidelity": "NOT_YET_VERIFIED",
+        "pendingApprovedPlanUsesOriginalBundle": true
       }
     },
     "remaining": [
-      "Restart this coding session under the installed OMP version, then establish authenticated access to the pinned lowercase stats file and connect File → MCP Server → Connect. Keep the tab open; no new source capture is needed.",
-      "Inspect the actual pinned-file ownership and derive exact operations from penpot-capture-output19/bundle.json plus the retained sync manifest. Obtain approval for that immutable operation set.",
-      "Apply/export/verify every one of the 146 maintained target states, preserving unrelated uppercase Stats proposals.",
-      "Record goal achievement and lastSuccessfulSync only after full target scene/pixel acceptance."
+      "Keep the Mac unlocked and the pinned stats-unified-panel Safari tab foreground; inspect the retained menu-glyph-light-en operation before replay or recovery.",
+      "Resume only the original approved plan against immutable output19, persist actual receipts, and complete its 146 operations before releasing the transaction.",
+      "Prepare a new exact correction plan against validated output20 and a fresh actual target snapshot; obtain that plan's approval before mutation.",
+      "Export and verify all 146 final target states, then record goal achievement and successful-sync marker only after every acceptance gate passes."
     ],
-    "targetAccess": "BLOCKED: persistent BROWSER_RELAY_OUTDATED after fresh tool-kernel and matching relay restart; no authenticated pinned-file MCP transport. Restart the coding session under the installed OMP version, authenticate/connect the pinned file, then resume from the validated output19 reference.",
+    "targetAccess": "Exact pinned file and actual mutations were confirmed through native Penpot MCP. Current execute_code calls time out; last observed session locked with the pinned tab in Safari. No Chrome relay/restart is required or requested.",
     "publication": {
       "producer": {
         "repository": "https://github.com/Space-Platform-Official/claude-code-enhancer",
         "branch": "feature/penpot-sync-web-pipeline",
-        "commit": "e08acf67fca9867b2f4affffc2d7082dfe017d0d",
+        "commit": "b8d727f",
         "remoteVerified": true
       },
       "stats": {
@@ -149,6 +239,17 @@
         "remoteVerified": true,
         "status": "CODE_PUSHED"
       }
+    },
+    "fullSyncPlan": {
+      "path": ".penpot-sync/plan-full-live.json",
+      "id": "1a3a7c02a32ed66591ee7dbc12c1c2c88330e63d701fe108cb822d66f7144bf9",
+      "sourceBundleHash": "c38f98244981f52ec04f823df0d1113d9ed0e98457c71239a5f5f0c67bc991fa",
+      "targetSnapshotHash": "02ccf6c8be8d0ff57ff14b671502663d7ca77d37479615a4dad710122b1b0f38",
+      "declaredStates": 146,
+      "creates": 144,
+      "updates": 2,
+      "deletes": 0,
+      "approval": "GRANTED: user selected Apply the full plan; exact authorization retained in .penpot-sync/approval-full-live.json"
     }
   },
   "target": {
@@ -1368,23 +1469,25 @@
   },
   "blockers": [
     {
-      "id": "browser-session-version",
-      "evidence": "Browser relay still reports out of date after resetting only the tool kernel (now omp/18.10.0) and restarting only the session-owned relay from the installed omp/18.10.0 executable. Recovery relay was stopped cleanly. The original long-running browser host loaded omp/18.8.6 from a binary removed after upgrade; restart the coding session before reconnecting authenticated Penpot access."
+      "id": "native-execution-timeout",
+      "evidence": "Native MCP connected and executed five approved operations with durable actual readback. The next operation and a retained-slot read timed out. The pinned Safari tab and a locked console session were observed; lock causality is unproven.",
+      "requiredAction": "Keep the Mac unlocked and the pinned Safari file foreground; inspect the retained sixth operation before continuing. Do not restart connection setup or replay blindly."
     },
     {
-      "id": "live-mcp",
-      "evidence": "No authenticated pinned-file MCP transport is available to this session; both Penpot credential environment variables remain absent. Target ownership, mutation and export verification have not been performed."
+      "id": "full-target-apply-and-fidelity",
+      "planId": "1a3a7c02a32ed66591ee7dbc12c1c2c88330e63d701fe108cb822d66f7144bf9",
+      "evidence": "Five of 146 approved operations are durably recorded; the first independent target PNG was DIFFERENT and exposed missing context-menu glass. Producer/source correction is proved and pushed; target correction and all-state export verification remain required."
     }
   ],
-  "remoteMutationsThisRun": 0,
+  "remoteMutationsThisRun": 5,
   "skillEditsThisRun": 5,
-  "targetVerification": "NOT_PERFORMED",
+  "targetVerification": "INCOMPLETE: one independent target export compared and DIFFERENT; no state accepted as fully verified",
   "lastSuccessfulSync": null,
   "nextActions": [
-    "Restart this coding session under the installed OMP version, then establish authenticated access to the pinned lowercase stats file and connect File → MCP Server → Connect. Keep the tab open; no new source capture is needed.",
-    "Inspect the actual pinned-file ownership and derive exact operations from penpot-capture-output19/bundle.json plus the retained sync manifest. Obtain approval for that immutable operation set.",
-    "Apply/export/verify every one of the 146 maintained target states, preserving unrelated uppercase Stats proposals.",
-    "Record goal achievement and lastSuccessfulSync only after full target scene/pixel acceptance."
+    "Keep the Mac unlocked and the pinned stats-unified-panel Safari tab foreground; inspect retained menu-glyph-light-en without replaying it.",
+    "Finish the original approved 146-operation transaction using immutable output19 and actual durable receipts.",
+    "Derive and approve a separate corrected-source plan from validated output20 and fresh actual target readback.",
+    "Apply approved corrections, independently export and verify all 146 target states, and write success only after every acceptance gate passes."
   ],
   "sourceAdapterFiles": [
     "Stats/AppDelegate.swift",
@@ -1448,11 +1551,26 @@
       "Thermal green source line measured x223..501 vs saved target x223..489; stroke/clip cause not established.",
       "Source has ICC profile; target export lacks it. Color-management contribution not proven."
     ],
-    "targetExportsThisRun": 0,
+    "targetExportsThisRun": 1,
     "currentSourceCaptureQuality": {
       "blockedKeys": [],
       "acceptedRemoteVariants": 12,
-      "targetExportsThisRun": 0
+      "targetExportsThisRun": 1
+    },
+    "firstActualFullSyncTargetExport": {
+      "key": "context-menu-dark-en",
+      "path": ".penpot-sync/full-target-exports/context-menu-dark-en.png",
+      "sha256": "a2611b50725f48165de43e5a0752421c14e838bfd7e61c045f25f75e9c487a1b",
+      "report": ".penpot-sync/compare-full-context-menu-dark-en.json",
+      "status": "DIFFERENT",
+      "differentPixels": 34760,
+      "totalPixels": 35200,
+      "maxDifference": 255,
+      "meanDifference": 87.9583,
+      "cause": "Missing source-encoded native glass backdrop",
+      "sourceCorrection": "Validated output20 restores original foreground-hidden glass; target update/export proof remains required",
+      "toleranceRelaxed": false,
+      "differenceAccepted": false
     }
   },
   "canonicalGoal": ".penpot-sync/goal.json",
@@ -1464,8 +1582,20 @@
     "status": "VALID",
     "sourceRevision": "8b7a892cda290ea2832647e98f6fa4eabb2cb339577d7e8fd7da67acdcf744f8",
     "sourceCaptureQuality": "All prior capture blockers cleared; all twelve original menu-control variants visually accepted.",
-    "nativeRenderingFidelity": "UNVERIFIED against target; complete source/provenance validation and accepted menu pixels do not constitute independent target export verification.",
+    "nativeRenderingFidelity": "NOT_VERIFIED: the original approved bundle is structurally VALID but the first actual context-menu target export exposed missing native glass. Corrected output20 is validated separately; it must not replace the source within this pending approved transaction.",
     "bundleHash": "c38f98244981f52ec04f823df0d1113d9ed0e98457c71239a5f5f0c67bc991fa"
+  },
+  "correctedSourceBundle": {
+    "path": "penpot-capture-output20/bundle.json",
+    "inventoryStates": 146,
+    "status": "VALID",
+    "bundleHash": "bc7d661b86364ad6256c86904e576880ce56fff3fe2c21330cd41762f05fa942",
+    "sourceRevision": "8b7a892cda290ea2832647e98f6fa4eabb2cb339577d7e8fd7da67acdcf744f8",
+    "unchangedSourceCaptureHashes": 146,
+    "scope": "Restore original light/dark context-menu material representation; no source screenshot or application behavior changes",
+    "targetCorrectionApplied": false,
+    "targetRenderingFidelity": "UNVERIFIED",
+    "separateExactPlanApprovalRequired": true
   },
   "captureSpec": {
     "path": "penpot-capture.json",
@@ -1490,7 +1620,7 @@
     "sourceCaptureQualityBlockedStates": 0,
     "recaptureEnvironmentBlockedStates": 0,
     "producerBlockedStates": 0,
-    "environmentBlockedStates": 0,
+    "environmentBlockedStates": 146,
     "targetBindingUnchanged": true,
     "targetVerifiedStates": 0,
     "successfulSyncMarkerWritten": false
