@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
   "goal": "Synchronize the implemented Stats UI as a source-backed as-is native-appearance reference in the pinned remote lowercase stats project; preserve separate uppercase Stats proposals.",
-  "status": "PARTIALLY_APPLIED_BLOCKED",
+  "status": "BLOCKED_NATIVE_CONNECTION",
   "executionCheckpoint": {
-    "phase": "full-target-apply-and-material-correction",
-    "status": "BLOCKED_NATIVE_EXECUTION_TIMEOUT",
-    "scope": "All 146 maintained English light/dark states remain required. The exact full plan is approved; five creates have durable actual readbacks and receipts, the sixth operation is interrupted and must not be replayed without inspection. No successful sync is claimed.",
+    "phase": "visible-native-progress-and-full-sync",
+    "status": "PAUSED_NO_CONNECTED_NATIVE_INSTANCE",
+    "scope": "All 146 maintained states remain required. Forty-eight exact original-plan operations have durable actual receipts; 98 remain. The owned runner was stopped after the user reported repeated page activation without visible changes. Forced Safari activation has been removed, completed-board canvas navigation added, and redundant same-page navigation removed. The live view command reported no connected Penpot instance for the unchanged configured token. No full sync or live visibility success is claimed.",
     "sourceRepository": "/Users/nashgao/Desktop/claude/claude-code/instruction",
     "sourceSkill": "templates/skills/penpot-sync",
     "approvedRemoteControlAdapter": {
@@ -152,9 +152,9 @@
         ],
         "authoritativeOverviewRead": true,
         "fileIdentityApiRead": true,
-        "fileContext": "EXACT_PINNED_FILE_VERIFIED_BEFORE_APPLY",
-        "actualError": "Current retained-operation execute_code read timed out with MCP error -32001; the last observed desktop session was locked and the pinned tab was in Safari. A causal lock/timeout relationship is not established.",
-        "targetMutations": 5,
+        "fileContext": "NO_CURRENT_NATIVE_INSTANCE_CONNECTED",
+        "actualError": "No Penpot instance connected for user token. Please ensure that Penpot is connected and that the MCP client connection is using the correct token.",
+        "targetMutations": 48,
         "credentialsExposed": false,
         "credentialsPersisted": false
       },
@@ -172,27 +172,25 @@
         "snapshot": ".penpot-sync/target-progress-live.json",
         "manifest": ".penpot-sync/manifest.json",
         "planId": "1a3a7c02a32ed66591ee7dbc12c1c2c88330e63d701fe108cb822d66f7144bf9",
-        "completedOperations": 5,
-        "remainingOperations": 141,
-        "managedAssets": 7,
-        "completedKeys": [
-          "context-menu-dark-en",
-          "context-menu-light-en",
-          "menu-battery-time-dark-en",
-          "menu-battery-time-light-en",
-          "menu-glyph-dark-en"
-        ],
+        "completedOperations": 48,
+        "remainingOperations": 98,
+        "managedAssets": 48,
+        "countsAreResumeCheckpoint": true,
+        "currentDurableCountsAuthority": ".penpot-sync/manifest.json",
         "interruptedOperation": {
+          "historical": true,
           "key": "menu-glyph-light-en",
           "operationId": "326111804997787cbb6ddaef2afd720a0d817223055a3a58a39ff49b2c118d87",
           "storageKey": "penpot-sync-transfer/71a07fb9-d1de-470d-806c-9aa3a2b3bd2d",
           "transport": ".penpot-sync/pending-native-transport.json",
-          "status": "UNCONFIRMED_AFTER_TIMEOUT",
-          "replayAllowed": false
+          "status": "PROVED_NOT_STARTED_AND_UNUSED_BUFFER_CLEARED",
+          "replayAllowed": false,
+          "restartApprovedOperationAllowed": true,
+          "recoveryEvidence": ".penpot-sync/retained-operation-recovery.json"
         },
-        "lastRetainedOperationRead": "MCP error -32001: Request timed out",
+        "lastRetainedOperationRead": "Deadline-safe completion was proved on a fresh large panel without replay. Current retained transport is authoritative in pending-native-transport.json; the unstarted-input recovery is historical.",
         "frontend": "Exact pinned file tab observed in Safari; no Chrome relay dependency",
-        "lastObservedMacLocked": true,
+        "lastObservedMacLocked": false,
         "lastSuccessfulSync": null
       },
       "glassMaterialCorrection": {
@@ -207,6 +205,10 @@
         "validation": "VALID: all 146 states, unsupported=[]",
         "unchangedSourceCaptureHashes": 146,
         "sourceRevisionUnchanged": true,
+        "contentNormalizedSceneChanges": [
+          "context-menu-light-en",
+          "context-menu-dark-en"
+        ],
         "fullTestFiles": 13,
         "fullTestsPassed": 439,
         "typecheck": "PASS",
@@ -214,15 +216,92 @@
         "targetCorrectionApplied": false,
         "targetFidelity": "NOT_YET_VERIFIED",
         "pendingApprovedPlanUsesOriginalBundle": true
+      },
+      "nativeDeadlineRecovery": {
+        "serverReachable": true,
+        "consoleLocked": false,
+        "onConsole": true,
+        "observedFailure": "MCP error -32001: Request timed out",
+        "actualOutcome": "Both attention panels and a fresh battery-expanded panel were durably recorded after uncertain RPC deadlines, without replay. The full original plan continued to 42 durable operations at the continuation checkpoint.",
+        "noReplay": true,
+        "runner": "/tmp/stats-penpot-full-base-runner-20261015.mjs",
+        "completionProtocol": "Bounded waits on the same retained receipt, including an uncertain launch acknowledgement; never repeat the mutation after a deadline.",
+        "currentSmoke": "PASS: completed attention-light receipt adopted and fresh battery-expanded-dark mutation completed and durably recorded after a receipt deadline, without replay"
+      },
+      "identitySerializationOptimization": {
+        "scope": "Cache only canonical artifact descriptor bytes within one source_hashes call; all file/hash validation and exact-plan guards remain enabled",
+        "profiledBeforeSeconds": 28.219,
+        "profiledAfterSeconds": 3.045,
+        "profiledSpeedup": 9.27,
+        "originalStatesWithIdenticalHashes": 146,
+        "correctedStatesWithIdenticalHashes": 146,
+        "originalBundleValidated": "c38f98244981f52ec04f823df0d1113d9ed0e98457c71239a5f5f0c67bc991fa",
+        "correctedBundleValidated": "bc7d661b86364ad6256c86904e576880ce56fff3fe2c21330cd41762f05fa942",
+        "fullTestFiles": 13,
+        "fullTestsPassed": 439,
+        "typecheck": "PASS",
+        "globalInstallationPerformed": false,
+        "producerCommit": "b59ef87",
+        "producerCommitPushed": true
+      },
+      "nativePaintValidationOptimization": {
+        "scope": "Per-validation-call reference index and parsed measurement data; all geometry/pixel checks remain, with fresh measurement hashes before every cached use",
+        "profiledBeforeSeconds": 146.729,
+        "profiledAfterSeconds": 43.685,
+        "originalStatesValidated": 146,
+        "originalBundleHashUnchanged": "c38f98244981f52ec04f823df0d1113d9ed0e98457c71239a5f5f0c67bc991fa",
+        "correctedStatesValidated": 146,
+        "correctedBundleHashUnchanged": "bc7d661b86364ad6256c86904e576880ce56fff3fe2c21330cd41762f05fa942",
+        "regressionBefore": "FAIL against b59ef87: same-pass changed measurement bytes were incorrectly accepted as VALID",
+        "regressionAfter": "PASS: stale measurement bytes rejected with STALE_SOURCE",
+        "fullTestFiles": 13,
+        "fullTestsPassed": 440,
+        "typecheck": "PASS",
+        "producerCommit": "f0752be",
+        "producerCommitPushed": true,
+        "globalInstallationPerformed": false
+      },
+      "nativeCoordinateRecovery": {
+        "key": "settings-battery-widgets-dark-en",
+        "originalOperationId": "7d2546ed40bcd115ac015ff309d5d47da4677bedd64ecd1153c8b49a615cadfa",
+        "preservedBoardId": "123eca3f-cd58-80d1-8008-cabd0d67e303",
+        "diagnosis": "One nested local y was 113.000086655 instead of 113; the SDK ignored the tiny corrective translation. Integral placement alone did not repair the existing layer.",
+        "fix": "Integral origins and a measurable intermediate coordinate movement followed by the declared coordinate, verified under the unchanged float32 policy",
+        "recoveryGuard": "Explicit resume-created mode binds the same unfinished original operation to fresh actual board/page/component identities and scene hash; native drift/foreign ownership remain errors",
+        "actualRecovery": "PASS: original board ID preserved and strict actual scene matched; original operation durably recorded as operation 47",
+        "freshCreation": "PASS: settings-battery-widgets-light-en strictly read back and durably recorded as operation 48",
+        "newBoardId": "123eca3f-cd58-80d1-8008-cac6f17f2677",
+        "geometryPolicyRelaxed": false,
+        "pixelToleranceRelaxed": false,
+        "focusedBoundaryTests": "9 passed; typecheck and native codec syntax passed",
+        "fullTestFiles": 13,
+        "fullTestsPassed": 442,
+        "typecheck": "PASS",
+        "producerCommit": "85cd8f3",
+        "producerCommitPushed": true
+      },
+      "nativeProgressVisibility": {
+        "userObservation": "Repeatedly opening Penpot without visible design changes",
+        "ownedRunnerStopped": true,
+        "forcedSafariActivationRemoved": true,
+        "redundantSamePageNavigationRemoved": true,
+        "completedBoardZoomAdded": true,
+        "liveCanvasVerification": "BLOCKED: no connected Penpot instance for the current configured token",
+        "configuredRouteChanged": false,
+        "nativeReconnectRetried": false,
+        "userActionRequired": "Use MCP Connect inside the already-open pinned Stats file; no browser/session restart requested",
+        "actualExportEvidence": ".penpot-sync/full-target-exports/panel-attention-dark-precorrection.png",
+        "ownedNativeClientClosed": true,
+        "ownedSleepInhibitorStopped": true
       }
     },
     "remaining": [
-      "Keep the Mac unlocked and the pinned stats-unified-panel Safari tab foreground; inspect the retained menu-glyph-light-en operation before replay or recovery.",
-      "Resume only the original approved plan against immutable output19, persist actual receipts, and complete its 146 operations before releasing the transaction.",
+      "Reconnect MCP inside the already-open pinned Stats file; then show the actual newest imported board with viewport.zoomIntoView without browser activation or repeated same-page navigation.",
+      "Resume the original approved plan from 48 durable operations using immutable output19; no second native writer or duplicate creation.",
       "Prepare a new exact correction plan against validated output20 and a fresh actual target snapshot; obtain that plan's approval before mutation.",
       "Export and verify all 146 final target states, then record goal achievement and successful-sync marker only after every acceptance gate passes."
     ],
-    "targetAccess": "Exact pinned file and actual mutations were confirmed through native Penpot MCP. Current execute_code calls time out; last observed session locked with the pinned tab in Safari. No Chrome relay/restart is required or requested.",
+    "targetAccess": "BLOCKED: the live viewport call reported no connected Penpot instance for the unchanged configured native token. The owned repeated-focus runner is stopped. Do not reopen the browser/session as a substitute for native connectivity or visible design changes.",
     "publication": {
       "producer": {
         "repository": "https://github.com/Space-Platform-Official/claude-code-enhancer",
@@ -1469,23 +1548,23 @@
   },
   "blockers": [
     {
-      "id": "native-execution-timeout",
-      "evidence": "Native MCP connected and executed five approved operations with durable actual readback. The next operation and a retained-slot read timed out. The pinned Safari tab and a locked console session were observed; lock causality is unproven.",
-      "requiredAction": "Keep the Mac unlocked and the pinned Safari file foreground; inspect the retained sixth operation before continuing. Do not restart connection setup or replay blindly."
+      "id": "no-current-native-instance",
+      "evidence": "The actual viewport command failed with No Penpot instance connected for user token; current configured penpot-builtin route exactly matches the retained route. No live canvas change was observed.",
+      "requiredAction": "Connect MCP inside the already-open pinned Stats file, then verify the actual imported board on canvas before resuming native mutations."
     },
     {
       "id": "full-target-apply-and-fidelity",
       "planId": "1a3a7c02a32ed66591ee7dbc12c1c2c88330e63d701fe108cb822d66f7144bf9",
-      "evidence": "Five of 146 approved operations are durably recorded; the first independent target PNG was DIFFERENT and exposed missing context-menu glass. Producer/source correction is proved and pushed; target correction and all-state export verification remain required."
+      "evidence": "48 original-plan operations have durable actual receipts and stable identities, including repaired widget creation and a fresh new widget state. The runner is paused. 98 original operations, separately approved source20 correction, and all-state scene/PNG fidelity checks remain required."
     }
   ],
-  "remoteMutationsThisRun": 5,
+  "remoteMutationsThisRun": 48,
   "skillEditsThisRun": 5,
-  "targetVerification": "INCOMPLETE: one independent target export compared and DIFFERENT; no state accepted as fully verified",
+  "targetVerification": "INCOMPLETE: two actual independent target exports are DIFFERENT; no state accepted as fully verified",
   "lastSuccessfulSync": null,
   "nextActions": [
-    "Keep the Mac unlocked and the pinned stats-unified-panel Safari tab foreground; inspect retained menu-glyph-light-en without replaying it.",
-    "Finish the original approved 146-operation transaction using immutable output19 and actual durable receipts.",
+    "Connect MCP in the already-open pinned Stats file and verify actual imported content through native viewport navigation, not browser activation.",
+    "Resume the remaining 98 original-plan operations from actual durable receipts; do not start a duplicate writer or replay completed creates.",
     "Derive and approve a separate corrected-source plan from validated output20 and fresh actual target readback.",
     "Apply approved corrections, independently export and verify all 146 target states, and write success only after every acceptance gate passes."
   ],
@@ -1551,11 +1630,11 @@
       "Thermal green source line measured x223..501 vs saved target x223..489; stroke/clip cause not established.",
       "Source has ICC profile; target export lacks it. Color-management contribution not proven."
     ],
-    "targetExportsThisRun": 1,
+    "targetExportsThisRun": 2,
     "currentSourceCaptureQuality": {
       "blockedKeys": [],
       "acceptedRemoteVariants": 12,
-      "targetExportsThisRun": 1
+      "targetExportsThisRun": 2
     },
     "firstActualFullSyncTargetExport": {
       "key": "context-menu-dark-en",
@@ -1571,6 +1650,23 @@
       "sourceCorrection": "Validated output20 restores original foreground-hidden glass; target update/export proof remains required",
       "toleranceRelaxed": false,
       "differenceAccepted": false
+    },
+    "actualFullPanelExport": {
+      "key": "panel-attention-dark-en",
+      "sourceBundle": "penpot-capture-output19/bundle.json",
+      "path": ".penpot-sync/full-target-exports/panel-attention-dark-precorrection.png",
+      "sha256": "6c70899ba1a2b55a3e89798a75104f571e6dd8e819581cc6efb6c8258961be5f",
+      "provenance": ".penpot-sync/early-panel-attention-dark-export.json",
+      "report": ".penpot-sync/compare-panel-attention-dark-precorrection.json",
+      "status": "DIFFERENT",
+      "differentPixels": 375911,
+      "totalPixels": 848160,
+      "maxDifference": 136,
+      "meanDifference": 0.845966562912658,
+      "cause": "Not fully established; actual edge and flat-fill differences remain after canonical ICC normalization",
+      "toleranceRelaxed": false,
+      "differenceAccepted": false,
+      "finalCorrectedStateProof": false
     }
   },
   "canonicalGoal": ".penpot-sync/goal.json",
