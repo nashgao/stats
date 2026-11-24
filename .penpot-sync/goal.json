@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
   "goal": "Synchronize the implemented Stats UI as a source-backed as-is native-appearance reference in the pinned remote lowercase stats project; preserve separate uppercase Stats proposals.",
-  "status": "BLOCKED_NATIVE_CONNECTION",
+  "status": "AWAITING_CONNECTED_EDITOR_CONTEXT",
   "executionCheckpoint": {
     "phase": "visible-native-progress-and-full-sync",
-    "status": "PAUSED_NO_CONNECTED_NATIVE_INSTANCE",
-    "scope": "All 146 maintained states remain required. Forty-eight exact original-plan operations have durable actual receipts; 98 remain. The owned runner was stopped after the user reported repeated page activation without visible changes. Forced Safari activation has been removed, completed-board canvas navigation added, and redundant same-page navigation removed. The live view command reported no connected Penpot instance for the unchanged configured token. No full sync or live visibility success is claimed.",
+    "status": "PAUSED_ASSISTANT_ROUTE_REQUIRES_EDITOR_URL",
+    "scope": "All 146 maintained states remain required; 48 exact original-plan operations have durable actual receipts and 98 remain. The user explicitly reports the editor is and has always been connected; this is authoritative. The assistant-side No Penpot instance error must be diagnosed as request routing/session/instance mapping, not proof of user disconnection. No user reconnect/restart is requested. Forced browser activation remains removed and native mutations remain paused until the correct connected editor context is reached.",
     "sourceRepository": "/Users/nashgao/Desktop/claude/claude-code/instruction",
     "sourceSkill": "templates/skills/penpot-sync",
     "approvedRemoteControlAdapter": {
@@ -152,7 +152,7 @@
         ],
         "authoritativeOverviewRead": true,
         "fileIdentityApiRead": true,
-        "fileContext": "NO_CURRENT_NATIVE_INSTANCE_CONNECTED",
+        "fileContext": "USER_EDITOR_CONNECTED_ASSISTANT_REQUEST_MAPPING_UNRESOLVED",
         "actualError": "No Penpot instance connected for user token. Please ensure that Penpot is connected and that the MCP client connection is using the correct token.",
         "targetMutations": 48,
         "credentialsExposed": false,
@@ -286,22 +286,46 @@
         "forcedSafariActivationRemoved": true,
         "redundantSamePageNavigationRemoved": true,
         "completedBoardZoomAdded": true,
-        "liveCanvasVerification": "BLOCKED: no connected Penpot instance for the current configured token",
+        "liveCanvasVerification": "UNVERIFIED: assistant request returned No Penpot instance; user confirms their editor is connected throughout",
         "configuredRouteChanged": false,
         "nativeReconnectRetried": false,
-        "userActionRequired": "Use MCP Connect inside the already-open pinned Stats file; no browser/session restart requested",
+        "userActionRequired": "Provide only the normal canvas/file URL currently being viewed, not an MCP connection URL or token; no reconnect or restart",
+        "userConnectionGroundTruth": "Connected throughout; do not ask the user to reconnect or restart",
+        "clientConfigurationEvidence": "Current Claude penpot, Codex penpot-builtin, and retained assistant endpoint/userToken are identical; no credential value or digest was exposed",
         "actualExportEvidence": ".penpot-sync/full-target-exports/panel-attention-dark-precorrection.png",
         "ownedNativeClientClosed": true,
         "ownedSleepInhibitorStopped": true
+      },
+      "assistantRouteInvestigation": {
+        "userConnectionGroundTruth": "Editor is and has always been connected; do not reinterpret assistant routing errors as user disconnection",
+        "readOnlyServerAccess": "Existing penpot-tunnel SSH route with ClearAllForwardings=yes; host nashgao-vnic matches 100.124.65.122",
+        "frontendRevision": "2.17.2 / 1d2c37e52c733f74017d90b0fd1ae2d074a5c33d",
+        "mcpImageRevision": "2.17.2 / 1d2c37e52c733f74017d90b0fd1ae2d074a5c33d",
+        "mcpWorkers": 1,
+        "httpUpstream": "http://penpot-mcp:4401/mcp",
+        "websocketUpstream": "http://penpot-mcp:4402",
+        "sameWorkerProxyHypothesis": "Confirmed same container and single process; split HTTP/WebSocket worker hypothesis ruled out for this host",
+        "redisRoutingConfigured": false,
+        "requestTrace": "One persistent client: query present, session header retained, protocol 2025-11-25, HTTP 200, no redirects; execute_code returns no route before editor code runs",
+        "requestTokenContext": "Normalized live logs match the configured token for 230 observed contexts; only equality/counts emitted, no tokens or fingerprints",
+        "socketObservation": "This specific MCP worker had zero established editor-WebSocket connections at the observed read-only snapshot; this does not identify or disprove the user's connected editor elsewhere",
+        "sdkCloseBehavior": "Local abort/close only; no DELETE and no editor unregistration",
+        "remainingUnknown": "Actual server/file URL of the editor the user is viewing, and its association with the assistant's configured client route",
+        "localBrowserInspectionLimit": "Only a task-related Brave HTTPS9001 tab to a different file was visible; that origin fails TLS, and DOM Apple Events are disabled. Managed/CDP browser targets contain no editor pages. Do not assume that tab is the connected editor.",
+        "requestedUserInput": "Normal Penpot canvas URL only; no MCP URL/token, reconnect, or restart",
+        "serverOrEditorChanged": false,
+        "diagnosticClientsStopped": true,
+        "rootCauseProved": false,
+        "source": "https://github.com/penpot/penpot/blob/1d2c37e52c733f74017d90b0fd1ae2d074a5c33d/mcp/packages/server/src/PluginBridge.ts"
       }
     },
     "remaining": [
-      "Reconnect MCP inside the already-open pinned Stats file; then show the actual newest imported board with viewport.zoomIntoView without browser activation or repeated same-page navigation.",
+      "Get the regular canvas URL of the user's already-connected editor, align its server/file context with the assistant route, and then show actual imported content without browser activation.",
       "Resume the original approved plan from 48 durable operations using immutable output19; no second native writer or duplicate creation.",
       "Prepare a new exact correction plan against validated output20 and a fresh actual target snapshot; obtain that plan's approval before mutation.",
       "Export and verify all 146 final target states, then record goal achievement and successful-sync marker only after every acceptance gate passes."
     ],
-    "targetAccess": "BLOCKED: the live viewport call reported no connected Penpot instance for the unchanged configured native token. The owned repeated-focus runner is stopped. Do not reopen the browser/session as a substitute for native connectivity or visible design changes.",
+    "targetAccess": "User editor connection is authoritative. The assistant's configured request carries the expected key/session and reaches the same single MCP worker as this host's WS proxy, but no editor route is available there. Current connected editor URL is not identifiable through available browser metadata/DOM access; request only its regular canvas URL, never reconnection or tokens.",
     "publication": {
       "producer": {
         "repository": "https://github.com/Space-Platform-Official/claude-code-enhancer",
@@ -1548,9 +1572,9 @@
   },
   "blockers": [
     {
-      "id": "no-current-native-instance",
-      "evidence": "The actual viewport command failed with No Penpot instance connected for user token; current configured penpot-builtin route exactly matches the retained route. No live canvas change was observed.",
-      "requiredAction": "Connect MCP inside the already-open pinned Stats file, then verify the actual imported board on canvas before resuming native mutations."
+      "id": "assistant-client-editor-mapping",
+      "evidence": "User confirms the editor has always been connected. Single-worker proxy split, SDK query stripping and client-close unregistration were ruled out. The assistant's configured request still has no matching editor route; the actual viewed editor server/file context remains unknown.",
+      "requiredAction": "Obtain the normal canvas URL currently viewed, not an MCP URL or token; align assistant routing while preserving the user's connection and do not request reconnect/restart."
     },
     {
       "id": "full-target-apply-and-fidelity",
@@ -1563,7 +1587,7 @@
   "targetVerification": "INCOMPLETE: two actual independent target exports are DIFFERENT; no state accepted as fully verified",
   "lastSuccessfulSync": null,
   "nextActions": [
-    "Connect MCP in the already-open pinned Stats file and verify actual imported content through native viewport navigation, not browser activation.",
+    "Obtain the normal canvas/file URL of the already-connected editor, resolve the assistant-side route association, and show actual imported content; no browser activation, MCP token sharing or user reconnection.",
     "Resume the remaining 98 original-plan operations from actual durable receipts; do not start a duplicate writer or replay completed creates.",
     "Derive and approve a separate corrected-source plan from validated output20 and fresh actual target readback.",
     "Apply approved corrections, independently export and verify all 146 target states, and write success only after every acceptance gate passes."
