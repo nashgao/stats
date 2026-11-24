@@ -51,9 +51,11 @@ internal class Settings: NSStackView, Settings_v {
         self.segmentedControl?.widthAnchor.constraint(equalTo: self.widthAnchor).isActive = true
         self.tabView?.widthAnchor.constraint(equalTo: self.widthAnchor).isActive = true
         
-        self.render(authorized: SystemStats.shared.isAuthorized)
-        
-        NotificationCenter.default.addObserver(self, selector: #selector(self.handleRemoteState), name: .remoteState, object: nil)
+        let captureFixture = ProcessInfo.processInfo.environment["STATS_CAPTURE_FIXTURE"] == "1"
+        self.render(authorized: captureFixture ? false : SystemStats.shared.isAuthorized)
+        if !captureFixture {
+            NotificationCenter.default.addObserver(self, selector: #selector(self.handleRemoteState), name: .remoteState, object: nil)
+        }
     }
     
     required init?(coder: NSCoder) {
@@ -78,6 +80,7 @@ internal class Settings: NSStackView, Settings_v {
     }
     
     public func load(widgets: [widget_t]) {
+        guard ProcessInfo.processInfo.environment["STATS_CAPTURE_FIXTURE"] != "1" else { return }
         if SystemStats.shared.isAuthorized {
             self.load()
         }

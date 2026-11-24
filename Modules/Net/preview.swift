@@ -93,10 +93,23 @@ internal class Preview: PreviewWrapper {
         
         self.addArrangedSubview(splitView)
         self.addArrangedSubview(PreferencesSection(title: localizedString("Address"), [self.addressesView()]))
+
+        if ProcessInfo.processInfo.environment["STATS_CAPTURE_FIXTURE"] == "1" {
+            NotificationCenter.default.addObserver(self, selector: #selector(self.captureSample(_:)), name: .unifiedPanelSample, object: nil)
+        }
     }
     
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self, name: .unifiedPanelSample, object: nil)
+    }
+
+    @objc private func captureSample(_ notification: Notification) {
+        guard let value = notification.object as? Network_Usage else { return }
+        self.usageCallback(value)
     }
     
     private func loadColors() {

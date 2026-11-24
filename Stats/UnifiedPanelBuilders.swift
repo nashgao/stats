@@ -183,13 +183,6 @@ extension UnifiedPanelContent {
                 }
                 self.sensorsFansContainer.addSubview(fanView)
             }
-            // Measure synchronously so the expanded height is final in
-            // the same pass — the previous async measure produced a
-            // second layout (and a visible height jump) a beat later.
-            self.sensorsFansContainer.layoutSubtreeIfNeeded()
-            self.fanHeights = self.sensorsFansContainer.subviews
-                .compactMap({ $0 as? FanView })
-                .map({ max(ceil($0.frame.height), 64) })
         } else {
             // Same fan set: forward live values. The reader keeps sensor
             // order stable, so index pairing is exact — without this the
@@ -275,12 +268,13 @@ extension UnifiedPanelContent {
     func layoutFanContainer() {
         let width = max(self.sensorsRow.expandContainer.bounds.width, 100)
         var y: CGFloat = 0
-        var index = 0
         for case let fanView as FanView in self.sensorsFansContainer.subviews {
-            let height = index < self.fanHeights.count ? self.fanHeights[index] : max(ceil(fanView.frame.height), 64)
+            // FanView updates its own height before invoking sizeCallback.
+            // A build-time cache would force manual controls into the old
+            // automatic height, and collapse them again on every sensor tick.
+            let height = max(ceil(fanView.frame.height), 64)
             fanView.frame = NSRect(x: 0, y: y, width: width, height: height)
             y += height + 6
-            index += 1
         }
         for row in self.tempRows {
             row.name.frame = NSRect(x: 0, y: y + 1, width: 220, height: 14)

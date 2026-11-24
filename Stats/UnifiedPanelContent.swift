@@ -461,7 +461,6 @@ final class UnifiedPanelContent: NSView {
     }
     
     var fanKeys: [String] = []
-    var fanHeights: [CGFloat] = []
     /// Option B temperature detail: current visible member keys (hot
     /// first), the latest sample per key, and the live row views. Rows
     /// update values in place; the view order only changes when the

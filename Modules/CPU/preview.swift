@@ -83,10 +83,31 @@ internal class Preview: PreviewWrapper {
         
         self.addArrangedSubview(splitView)
         self.addArrangedSubview(NSView())
+
+        if ProcessInfo.processInfo.environment["STATS_CAPTURE_FIXTURE"] == "1" {
+            NotificationCenter.default.addObserver(self, selector: #selector(self.handleCaptureSample), name: .unifiedPanelSample, object: nil)
+        }
     }
     
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self, name: .unifiedPanelSample, object: nil)
+    }
+
+    @objc private func handleCaptureSample(_ notification: Notification) {
+        switch notification.object {
+        case let value as CPU_Load:
+            self.loadCallback(value)
+        case let value as CPU_Frequency:
+            self.frequencyCallback(value)
+        case let value as CPU_AverageLoad:
+            self.averageCallback(value)
+        default:
+            break
+        }
     }
     
     private func totalView() -> NSView {

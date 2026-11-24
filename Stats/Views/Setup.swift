@@ -175,6 +175,15 @@ private class SetupContainer: NSStackView {
         self.addArrangedSubview(self.footerView())
         
         self.setView(i: 0)
+        let environment = ProcessInfo.processInfo.environment
+        if environment["STATS_CAPTURE_FIXTURE"] == "1", let requestedPage = environment["STATS_CAPTURE_SETUP_PAGE"] {
+            if let page = Int(requestedPage.trimmingCharacters(in: .whitespacesAndNewlines)), self.pages.indices.contains(page) {
+                self.setView(i: page)
+            } else {
+                NSLog("Stats capture: invalid setup page '%@'; available pages: 0...4", requestedPage)
+                exit(1)
+            }
+        }
     }
     
     required init?(coder: NSCoder) {
@@ -248,6 +257,7 @@ private class SetupContainer: NSStackView {
             self.prevBtn.isEnabled = false
             self.nextBtn.isEnabled = true
         } else if i == self.pages.count-1 {
+            self.prevBtn.isEnabled = true
             self.nextBtn.title = localizedString("Finish")
             self.nextBtn.toolTip = localizedString("Finish setup")
         } else {
@@ -499,15 +509,16 @@ private class SetupView_startAtLogin: NSStackView {
     
     private func content() -> NSView {
         let container: NSGridView = NSGridView()
+        let opensAtLogin = ProcessInfo.processInfo.environment["STATS_CAPTURE_FIXTURE"] == "1" ? false : LaunchAtLogin.isEnabled
         
         container.addRow(with: [self.option(
             tag: 1,
-            state: LaunchAtLogin.isEnabled,
+            state: opensAtLogin,
             text: localizedString("Start the application automatically when starting your Mac")
         )])
         container.addRow(with: [self.option(
             tag: 2,
-            state: !LaunchAtLogin.isEnabled,
+            state: !opensAtLogin,
             text: localizedString("Do not start the application automatically when starting your Mac")
         )])
         

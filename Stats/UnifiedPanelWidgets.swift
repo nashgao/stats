@@ -244,7 +244,6 @@ final class UnifiedTopProcesses: NSView {
     }
 }
 
-
 extension UnifiedMiniMetric {
     func set(value: String, fraction: Double) {
         self.valueField.stringValue = value
@@ -799,5 +798,557 @@ final class UnifiedGrammarRow: NSView {
         }
         self.spark.frame = NSRect(x: sparkX, y: 9, width: max(sparkEnd - sparkX, 40), height: 28)
         self.expandContainer.frame = NSRect(x: 8, y: 50, width: w - 16, height: self.detailHeight)
+    }
+}
+
+/// Standard system popover material with the mock's 16pt radius and
+/// 1pt panel border (white 14% dark / black 7% light).
+///
+/// Top-origin coordinates for its chrome (scroll container, footer):
+/// the panel is anchored at the menu bar and grows DOWNWARD, so the
+/// band layout is expressed from the top.
+private final class UnifiedPanelMaterialView: NSVisualEffectView {
+    override var isFlipped: Bool { true }
+
+    override func updateLayer() {
+        super.updateLayer() // NSVisualEffectView draws the material here
+        self.effectiveAppearance.performAsCurrentDrawingAppearance {
+            self.layer?.borderColor = UnifiedTokens.panelBorder.cgColor
+        }
+    }
+}
+
+/// Manual clip container in place of NSScrollView: the panel window hugs
+/// the menu bar and AppKit applies a variable safe-area content inset to
+/// scroll views there, which no reset reliably defeats. Full control over
+/// the offset also makes harness scroll knobs exact.
+private final class UnifiedPopupScrollContainer: NSView {
+    private weak var document: NSView?
+    var offset: CGFloat = 0
+
+    override var isFlipped: Bool { true }
+
+    func host(_ document: NSView) {
+        self.document = document
+        self.addSubview(document)
+    }
+
+    var maxOffset: CGFloat {
+        max((self.document?.frame.height ?? 0) - self.bounds.height, 0)
+    }
+
+    func scrollTo(_ value: CGFloat) {
+        self.offset = min(max(value, 0), self.maxOffset)
+        self.layoutContent()
+    }
+
+    func layoutContent() {
+        guard let document = self.document else { return }
+        document.frame = NSRect(x: 0, y: -self.offset, width: self.bounds.width, height: document.frame.height)
+    }
+
+    override func scrollWheel(with event: NSEvent) {
+        self.scrollTo(self.offset + event.scrollingDeltaY)
+    }
+}
+
+final class UnifiedPopupPanel: NSPanel, NSWindowDelegate {
+    static let panelWidth: CGFloat = 380
+
+    private let effectView = UnifiedPanelMaterialView()
+    private let scrollContainer = UnifiedPopupScrollContainer()
+    private let content = UnifiedPanelContent(width: panelWidth)
+    private let footerBar = NSView()
+
+    var contentHeight: CGFloat {
+        self.content.frame.height
+    }
+
+    override var canBecomeKey: Bool { true }
+
+    /// Every path that makes the panel vanish ends here. The compact
+    /// caller stack (first non-system frames) names which one — the
+    /// [UnifiedPanelTrace] lines around it (toggle decision, key/main and
+    /// active transitions) pin down the real status-item click flow.
+    override func orderOut(_ sender: Any?) {
+        let appFrames = Thread.callStackSymbols
+            .filter { frame in
+                !frame.contains("AppKit") && !frame.contains("Foundation") &&
+                !frame.contains("CoreFoundation") && !frame.contains("libswiftCore") &&
+                !frame.contains("libsystem") && !frame.contains("HIToolbox") &&
+                !frame.contains("SwiftUI") && !frame.contains("UIKitMacHelper")
+            }
+            .prefix(6)
+        NSLog("[UnifiedPanelTrace] panel orderOut (was visible=%d) callers: %@",
+              self.isVisible ? 1 : 0,
+              appFrames.joined(separator: " <- "))
+        super.orderOut(sender)
+    }
+
+    // MARK: - NSWindowDelegate (traced)
+
+    func windowDidBecomeKey(_ notification: Notification) {
+        NSLog("[UnifiedPanelTrace] panel didBecomeKey visible=%d", self.isVisible ? 1 : 0)
+    }
+
+    func windowDidResignKey(_ notification: Notification) {
+        NSLog("[UnifiedPanelTrace] panel didResignKey visible=%d", self.isVisible ? 1 : 0)
+    }
+
+    func windowDidBecomeMain(_ notification: Notification) {
+        NSLog("[UnifiedPanelTrace] panel didBecomeMain visible=%d", self.isVisible ? 1 : 0)
+    }
+
+    func windowDidResignMain(_ notification: Notification) {
+        NSLog("[UnifiedPanelTrace] panel didResignMain visible=%d", self.isVisible ? 1 : 0)
+    }
+
+    override init(contentRect: NSRect, styleMask: NSWindow.StyleMask, backing: NSWindow.BackingStoreType, defer flag: Bool) {
+        super.init(contentRect: contentRect, styleMask: styleMask, backing: backing, defer: flag)
+
+        // Status-item popups live at NSStatusWindowLevel, not .normal:
+        // the opening click activates Stats and the system bounces a
+        // deactivate back (traced), and the moment Stats deactivates,
+        // other apps' regular windows restack ABOVE a .normal-level
+        // panel and bury it — the open-then-vanish flash. At .statusBar
+        // the panel floats above app windows even while Stats is
+        // inactive (same as the Wi-Fi/Battery popups). Activation on
+        // open stays: it is what dismisses another app's open dropdown.
+        self.level = .statusBar
+        self.collectionBehavior = .moveToActiveSpace
+        self.backgroundColor = .clear
+        // NSPanel's default is true; with activation-on-open (show())
+        // the menu-bar click flow bounces a deactivate right after the
+        // opening click, and AppKit would order this panel out on it —
+        // the open-then-instantly-vanish flash. Outside clicks close the
+        // panel through explicit monitors in UnifiedPopupController
+        // instead, which are immune to that transient bounce.
+        self.hidesOnDeactivate = false
+        // opaque + behindWindow material (the classic popup recipe): a
+        // non-opaque panel inherits the desktop safe area and the scroll
+        // view gets a variable top content inset that hides the header
+        self.isOpaque = true
+        self.hasShadow = true
+        self.delegate = self
+
+        let chrome = UnifiedPopupContentView(frame: NSRect(x: 0, y: 0, width: contentRect.width, height: contentRect.height))
+        if ProcessInfo.processInfo.environment["STATS_POPUP_DEBUG_PAINT"] == "1" {
+            chrome.wantsLayer = true
+            chrome.layer?.backgroundColor = NSColor.systemPurple.cgColor
+        }
+        chrome.onEscape = { [weak self] in
+            guard let self else { return }
+            self.orderOut(nil)
+        }
+        self.contentView = chrome
+
+        self.effectView.material = .popover
+        self.effectView.blendingMode = .behindWindow
+        self.effectView.state = .active
+        self.effectView.wantsLayer = true
+        self.effectView.layer?.cornerRadius = UnifiedTokens.panelRadius
+        self.effectView.layer?.borderWidth = 1
+        self.effectView.layer?.masksToBounds = true
+        self.effectView.frame = content.bounds
+        self.effectView.autoresizingMask = [.width, .height]
+
+        self.scrollContainer.wantsLayer = true
+        self.scrollContainer.layer?.masksToBounds = true
+        self.scrollContainer.frame = NSRect(x: 0, y: 0, width: contentRect.width, height: max(contentRect.height - 28, 60))
+        self.scrollContainer.autoresizingMask = []
+        self.scrollContainer.host(self.content)
+        self.effectView.addSubview(self.scrollContainer)
+
+        self.footerBar.frame = NSRect(x: 0, y: 0, width: contentRect.width, height: 28)
+        self.footerBar.autoresizingMask = [.width]
+
+        let separator = NSView(frame: NSRect(x: 12, y: 27, width: contentRect.width - 24, height: 1))
+        separator.autoresizingMask = [.width]
+        separator.wantsLayer = true
+        separator.layer?.backgroundColor = NSColor.separatorColor.withAlphaComponent(0.3).cgColor
+        self.footerBar.addSubview(separator)
+
+        let activity = NSButton()
+        activity.isBordered = false
+        activity.attributedTitle = NSAttributedString(string: localizedString("Open Activity Monitor"), attributes: [
+            .font: NSFont.systemFont(ofSize: 12, weight: .medium),
+            .foregroundColor: NSColor.controlAccentColor
+        ])
+        activity.target = self
+        activity.action = #selector(self.openActivityMonitor)
+        activity.sizeToFit()
+        activity.frame = NSRect(x: 12, y: 3, width: activity.frame.width, height: 20)
+        self.footerBar.addSubview(activity)
+
+        let settings = NSButton()
+        settings.isBordered = false
+        settings.attributedTitle = NSAttributedString(string: localizedString("Settings"), attributes: [
+            .font: NSFont.systemFont(ofSize: 12, weight: .medium),
+            .foregroundColor: NSColor.controlAccentColor
+        ])
+        settings.target = self
+        settings.action = #selector(self.openSettings)
+        settings.sizeToFit()
+
+        // Quit is the destructive action and sits rightmost, red per macOS
+        // convention; it terminates the app gracefully.
+        let quit = NSButton()
+        quit.isBordered = false
+        quit.attributedTitle = NSAttributedString(string: localizedString("Quit Stats"), attributes: [
+            .font: NSFont.systemFont(ofSize: 12, weight: .medium),
+            .foregroundColor: NSColor.systemRed
+        ])
+        quit.target = self
+        quit.action = #selector(self.quitApp)
+        quit.sizeToFit()
+        quit.frame = NSRect(x: contentRect.width - 12 - quit.frame.width, y: 3, width: quit.frame.width, height: 20)
+        quit.autoresizingMask = [.minXMargin]
+        self.footerBar.addSubview(quit)
+
+        settings.frame = NSRect(x: quit.frame.origin.x - 8 - settings.frame.width, y: 3, width: settings.frame.width, height: 20)
+        settings.autoresizingMask = [.minXMargin]
+        self.footerBar.addSubview(settings)
+
+        self.effectView.addSubview(self.footerBar)
+
+        chrome.addSubview(self.effectView)
+
+        // Content-layout changes (section expand, fan rebuild)
+        // must resize the window immediately — previously this hook was
+        // never assigned, so an expand rendered partially for up to a
+        // second until the glyph timer happened to run syncSize.
+        self.content.onLayoutChange = { [weak self] in
+            guard let self, self.isVisible else { return }
+            withoutImplicitAnimation {
+                self.refreshContent()
+                self.syncSize()
+            }
+        }
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    /// Total content size the panel needs: document + footer.
+    var requiredContentSize: NSSize {
+        NSSize(width: Self.panelWidth, height: self.content.frame.height + 28)
+    }
+
+    /// Resize the window so the document and footer fit without
+    /// scrolling; the top edge stays put.
+    func syncSize() {
+        let needed = self.requiredContentSize
+        let current = self.contentView?.frame.size ?? .zero
+        let heightDelta = abs(needed.height - current.height)
+        self.pendingContentHeight = needed.height
+        guard needed.width != current.width || heightDelta >= 1.5 else {
+            self.layoutChrome()
+            return
+        }
+        if UnifiedMotion.enabled, self.anchorTopY != nil {
+            // The spring drives the WINDOW FRAME ONLY, self-timed, with
+            // every frame anchored to anchorTopY (the menu-bar anchor).
+            // AppKit's own frame animation does not keep the visual top
+            // fixed mid-flight on this window class, which broke the
+            // panel invariant (content above the expansion point must
+            // keep identical screen coordinates at every frame).
+            self.frameAnimationFrom = current.height
+            self.frameAnimationTo = needed.height
+            self.frameAnimationStart = Date()
+            if self.frameAnimator == nil {
+                self.frameAnimator = Timer.scheduledTimer(withTimeInterval: 1.0 / 90, repeats: true) { [weak self] _ in
+                    self?.stepFrameAnimation()
+                }
+            }
+            self.layoutChrome()
+            return
+        }
+        if UnifiedPerf.enabled {
+            UnifiedPerf.frameSet("syncResize")
+            NSLog("[UnifiedPerf] syncResize %.1f -> %.1f", current.height, needed.height)
+        }
+        let top = self.anchorTopY ?? self.frame.maxY
+        self.setContentSize(needed)
+        var frame = self.frame
+        frame.origin.y = top - frame.height
+        self.setFrameOrigin(frame.origin)
+        // Re-pin against the FINAL height in the same pass — pinning
+        // against the pre-resize height leaves the chrome mis-placed for
+        // one visible frame (the "appears in the wrong spot, then jumps"
+        // defect).
+        self.layoutChrome()
+    }
+
+    /// Self-driven window-frame spring: each tick re-frames the window
+    /// anchored to the menu-bar top, so the visual top NEVER moves while
+    /// the bottom eases out with a slight overshoot.
+    private var frameAnimator: Timer?
+    private var frameAnimationStart: Date?
+    private var frameAnimationFrom: CGFloat = 0
+    private var frameAnimationTo: CGFloat = 0
+
+    private func stepFrameAnimation() {
+        guard let start = self.frameAnimationStart else { return }
+        let progress = min(Date().timeIntervalSince(start) / 0.28, 1)
+        let eased = Self.easeOutBack(progress)
+        let height = self.frameAnimationFrom + (self.frameAnimationTo - self.frameAnimationFrom) * eased
+        let top = self.anchorTopY ?? self.frame.maxY
+        var frame = self.frame
+        frame.origin.y = top - height
+        frame.size.height = height
+        self.setFrame(frame, display: true)
+        if progress >= 1 {
+            self.frameAnimator?.invalidate()
+            self.frameAnimator = nil
+            var finalFrame = self.frame
+            finalFrame.origin.y = top - self.frameAnimationTo
+            finalFrame.size.height = self.frameAnimationTo
+            self.setFrame(finalFrame, display: true)
+        }
+    }
+
+    /// Ease-out-back (~280ms, slight overshoot) — the AppKit spring feel.
+    private static func easeOutBack(_ x: Double) -> Double {
+        let c1 = 1.25
+        let c3 = c1 + 1
+        let t = x - 1
+        return 1 + c3 * t * t * t + c1 * t * t
+    }
+
+    /// Entrance: contentView layer transform scale 0.92→1.0 (anchored at
+    /// the top-center, i.e. the menu bar icon) + alpha 0→1, ~200ms
+    /// ease-out. Applied AFTER makeKeyAndOrderFront; skipped entirely
+    /// when any QA/capture knob is active.
+    func playEntrance() {
+        guard UnifiedMotion.enabled, let view = self.contentView, let layer = view.layer else { return }
+        view.wantsLayer = true
+        let frame = layer.frame
+        layer.anchorPoint = CGPoint(x: 0.5, y: 1)
+        layer.position = CGPoint(x: frame.midX, y: frame.maxY)
+        layer.transform = CATransform3DMakeScale(0.92, 0.92, 1)
+        view.alphaValue = 0
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = 0.2
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            view.animator().alphaValue = 1
+        })
+        let animation = CABasicAnimation(keyPath: "transform")
+        animation.fromValue = CATransform3DMakeScale(0.92, 0.92, 1)
+        animation.toValue = CATransform3DIdentity
+        animation.duration = 0.2
+        animation.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        layer.add(animation, forKey: "entrance")
+        layer.transform = CATransform3DIdentity
+    }
+
+    /// Exit: reverse of the entrance, snappier (~140ms); orderOut runs in
+    /// the completion. Skipped when motion is gated (instant orderOut).
+    func animateExit(completion: @escaping () -> Void) {
+        guard UnifiedMotion.enabled, let view = self.contentView, let layer = view.layer else {
+            completion()
+            return
+        }
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = 0.14
+            context.timingFunction = CAMediaTimingFunction(name: .easeIn)
+            view.animator().alphaValue = 0
+        }, completionHandler: {
+            view.alphaValue = 1
+            layer.transform = CATransform3DIdentity
+            completion()
+        })
+        let animation = CABasicAnimation(keyPath: "transform")
+        animation.fromValue = CATransform3DIdentity
+        animation.toValue = CATransform3DMakeScale(0.94, 0.94, 1)
+        animation.duration = 0.14
+        animation.timingFunction = CAMediaTimingFunction(name: .easeIn)
+        layer.add(animation, forKey: "exit")
+        layer.transform = CATransform3DMakeScale(0.94, 0.94, 1)
+    }
+
+    func debugFrames() {
+        NSLog("[UnifiedPopup] window=%@ contentView=%@ effect=%@ container=%@",
+              NSStringFromRect(self.frame),
+              NSStringFromRect(self.contentView?.frame ?? .zero),
+              NSStringFromRect(self.effectView.frame),
+              NSStringFromRect(self.scrollContainer.frame))
+    }
+
+    func refreshContent() {
+        // the window's content rect can carry system insets that autoresizing
+        // does not track; pin the material to the full content view explicitly
+        if let bounds = self.contentView?.bounds, self.effectView.frame != bounds {
+            UnifiedPerf.frameSet("effect")
+            self.effectView.frame = bounds
+        }
+        self.content.relayout()
+        self.layoutChrome()
+        self.scrollContainer.layoutContent()
+    }
+
+    /// The panel's anchor top (screen maxY), captured at show(). The
+    /// window grows DOWNWARD from the menu bar, so every resize —
+    /// immediate or animated — must be anchored to THIS value, not to
+    /// self.frame.maxY (the model frame can differ from the on-screen
+    /// presentation mid-animation, which moved the visual top).
+    private var anchorTopY: CGFloat? = nil
+    func setAnchorTop(_ value: CGFloat) { self.anchorTopY = value }
+
+    /// Target content height for the scroll container/footer geometry.
+    /// syncSize/show set this BEFORE the frame reaches it, so chrome
+    /// settles at final geometry in the same pass while the spring
+    /// animates the window frame (the scroll container's top edge is
+    /// constant — only its height follows content; see layoutChrome).
+    private var pendingContentHeight: CGFloat? = nil
+
+    /// Panel geometry invariant: the window is anchored at the menu bar
+    /// and grows DOWNWARD (syncSize preserves maxY in both the immediate
+    /// and the spring paths). Therefore at EVERY frame of any resize —
+    /// including the expand spring — the content above the expanding
+    /// section (brand header and everything before the expansion point)
+    /// keeps IDENTICAL screen coordinates; only content at or below the
+    /// expansion point translates. Consequences:
+    ///  - the scroll container's TOP edge is constant — only its HEIGHT
+    ///    follows content;
+    ///  - the footer is bottom-anchored (moves with the bottom edge).
+    /// `height` is the TARGET content height (pendingContentHeight) so
+    /// the scroll/footer settle at final geometry in the same pass.
+    func layoutChrome() {
+        let height = self.pendingContentHeight ?? self.contentView?.frame.height ?? 0
+        let containerFrame = NSRect(x: 0, y: 0, width: Self.panelWidth, height: max(height - 28, 60))
+        if self.scrollContainer.frame != containerFrame {
+            UnifiedPerf.frameSet("container")
+            self.scrollContainer.frame = containerFrame
+        }
+        let footerFrame = NSRect(x: 0, y: height - 28, width: Self.panelWidth, height: 28)
+        if self.footerBar.frame != footerFrame {
+            self.footerBar.frame = footerFrame
+        }
+    }
+
+    /// show() sizes the window itself — record its target so chrome
+    /// pinning never reads a stale or animating frame.
+    func setPendingContentHeight(_ value: CGFloat) { self.pendingContentHeight = value }
+    /// QA hook: drive a section header tap (same path as the gesture).
+    func simulateHeaderTap(_ module: String) { self.content.simulateHeaderTap(module) }
+    var expandedSectionForQA: String? { self.content.expandedSectionForQA }
+    /// QA hook: open the all-sensors popover (same path as the row tap).
+    func openAllSensorsForQA() { self.content.openAllSensorsForQA() }
+    /// QA hook: collapsed states "name=1" pairs for the restore probe.
+    var collapsedStatesForQA: String { self.content.collapsedStatesForQA }
+
+    func expandSection(_ module: String) {
+        self.content.expandSection(module)
+    }
+
+    func sectionOffset(for module: String) -> CGFloat? {
+        self.content.sectionOffset(for: module)
+    }
+
+    func scrollToSection(_ module: String) {
+        guard let offset = self.sectionOffset(for: module) else { return }
+        self.scrollToOffset(offset)
+    }
+
+    func scrollToTop() {
+        self.scrollContainer.scrollTo(0)
+    }
+
+    func scrollToBottom() {
+        self.scrollContainer.scrollTo(self.content.frame.height)
+    }
+
+    func scrollToOffset(_ offset: Double) {
+        self.scrollContainer.scrollTo(offset)
+    }
+
+    @objc private func openActivityMonitor() {
+        guard let app = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.ActivityMonitor") else { return }
+        NSWorkspace.shared.open([], withApplicationAt: app, configuration: NSWorkspace.OpenConfiguration())
+    }
+
+    @objc private func openSettings() {
+        NotificationCenter.default.post(name: .toggleSettings, object: nil, userInfo: ["module": "Settings"])
+    }
+
+    @objc private func quitApp() {
+        NSApp.terminate(nil)
+    }
+
+    /// Harness QA (STATS_POPUP_CAPTURE=1): renders the panel content into a
+    /// PNG on disk, so captures work even when the console is locked.
+    /// STATS_POPUP_CAPTURE_CHROME=1 additionally renders the footer bar
+    /// next to the content capture as "<path>-footer.png" — the footer
+    /// lives in the panel chrome, outside the content view.
+    func writeSelfCapture() {
+        let content = self.content
+        content.relayout()
+        let size = content.bounds.size
+        guard size.width > 0, size.height > 0,
+              let rep = NSBitmapImageRep(
+                bitmapDataPlanes: nil, pixelsWide: Int(size.width * 2), pixelsHigh: Int(size.height * 2),
+                bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0
+              ) else { return }
+        rep.size = size
+        self.effectiveAppearance.performAsCurrentDrawingAppearance {
+            // A plain setNeedsDisplay + cacheDisplay composites from layer
+            // caches: views that never had a display pass (freshly built
+            // rows, NSScrollView document content) come out blank. A
+            // synchronous display() pass first makes captures faithful.
+            content.display()
+            content.cacheDisplay(in: content.bounds, to: rep)
+        }
+        guard let png = rep.representation(using: NSBitmapImageRep.FileType.png, properties: [:]) else { return }
+        let path = ProcessInfo.processInfo.environment["STATS_POPUP_CAPTURE_PATH"] ?? "/tmp/unified-panel-selfcapture.png"
+        try? png.write(to: URL(fileURLWithPath: path))
+        NSLog("[UnifiedPopup] self capture written to %@", path)
+        if ProcessInfo.processInfo.environment["STATS_POPUP_CAPTURE_CHROME"] == "1" {
+            self.writeChromeCapture(self.footerBar, path: "\(path)-footer.png")
+        }
+    }
+
+    /// Renders one chrome view (footer) into its own PNG. Skips hidden
+    /// views.
+    private func writeChromeCapture(_ view: NSView, path: String) {
+        let size = view.bounds.size
+        guard !view.isHidden, size.width > 0, size.height > 0,
+              let rep = NSBitmapImageRep(
+                bitmapDataPlanes: nil, pixelsWide: Int(size.width * 2), pixelsHigh: Int(size.height * 2),
+                bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0
+              ) else { return }
+        rep.size = size
+        self.effectiveAppearance.performAsCurrentDrawingAppearance {
+            view.display()
+            view.cacheDisplay(in: view.bounds, to: rep)
+        }
+        guard let png = rep.representation(using: NSBitmapImageRep.FileType.png, properties: [:]) else { return }
+        try? png.write(to: URL(fileURLWithPath: path))
+        NSLog("[UnifiedPopup] chrome capture written to %@", path)
+    }
+}
+
+private extension NSView {
+    func setNeedsDisplayRecursively() {
+        self.setNeedsDisplay(self.bounds)
+        for subview in self.subviews {
+            subview.setNeedsDisplayRecursively()
+        }
+    }
+}
+
+private final class UnifiedPopupContentView: NSView {
+    var onEscape: (() -> Void)?
+
+    override var acceptsFirstResponder: Bool { true }
+
+    override func keyDown(with event: NSEvent) {
+        if event.keyCode == 53 {
+            self.onEscape?()
+            return
+        }
+        super.keyDown(with: event)
     }
 }

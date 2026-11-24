@@ -8,6 +8,8 @@
 #   2. expand every section (one-pass render)
 #   3. real helper XPC round trip (fan mode/rpm) + attention alerts
 #   4. layout stability + open-latency budget + sensor liveness under load
+#   5. live menu watts in both power-source branches
+#   6. menu readout layout transitions + actual status-button captures
 # Ends with crash-report checks per phase and the helper contract check.
 #
 # Usage: Scripts/smoke-test.sh [/Applications/Stats.app]
@@ -313,6 +315,32 @@ env STATS_QA_MENU_WATTS=1 STATS_QA_DIAGNOSTICS=1 STATS_QA_WATTS_CHARGING=1 ./Sta
 QA_PID=$!
 watts_liveness_pass "forced charging branch (si10)"
 quit_phase "phase 5 (menu watts)"
+
+# --- phase 6: actual menu-button rendering, without preference writes ---
+echo "-- phase 6: menu readout layouts --"
+MENU_CAPTURES=$(mktemp -d /tmp/stats-menu-readout.XXXXXX)
+if launch_phase STATS_QA_MENU_READOUT=1 STATS_QA_MENU_CAPTURE_DIR="$MENU_CAPTURES"; then
+  pass "panel opened for menu readout exercise"
+else
+  fail "panel did not open for menu readout exercise"
+fi
+wait_for_log "\[QA\] menu readout complete" 55 || fail "menu readout layout exercise did not finish"
+for phase in $(seq 0 9); do
+  [ -s "$MENU_CAPTURES/phase-$phase.png" ] \
+    && pass "menu readout phase $phase captured" \
+    || fail "menu readout phase $phase capture missing"
+done
+FITTED_ROWS=$(grep -c "\[QA\] menu readout row geometry .* fits=1" "$QA_LOG" || true)
+[ "$FITTED_ROWS" = "2" ] \
+  && pass "stacked rows fit inside status button in both appearances" \
+  || fail "stacked readout rows clipped or not rendered"
+for phase in 4 9; do
+  grep -q "\[QA\] menu readout phase=$phase .* rows=0 glyph=1 action=togglePanel" "$QA_LOG" \
+    && pass "menu readout phase $phase restores clickable glyph" \
+    || fail "menu readout phase $phase did not restore glyph/action"
+done
+echo "Menu readout captures: $MENU_CAPTURES"
+quit_phase "phase 6 (menu readout layouts)"
 
 # --- helper contract ---
 "$SCRIPT_DIR/check-helper-contract.sh" "$APP" && pass "helper contract" || fail "helper contract"
